@@ -1,0 +1,97 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-init-users
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: telegram_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: username
+                  type: VARCHAR(64)
+              - column:
+                  name: first_name
+                  type: VARCHAR(128)
+              - column:
+                  name: last_name
+                  type: VARCHAR(128)
+              - column:
+                  name: language_code
+                  type: VARCHAR(8)
+                  defaultValue: 'ru'
+              - column:
+                  name: timezone
+                  type: VARCHAR(64)
+                  defaultValue: 'Europe/Moscow'
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: users
+            indexName: idx_users_telegram_id
+            unique: true
+            columns:
+              - column:
+                  name: telegram_id
+
+  - changeSet:
+      id: 001-init-user-settings
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: user_settings
+            columns:
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+                    foreignKeyName: fk_user_settings_users
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: notifications_enabled
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: default_reminder_minutes
+                  type: INT
+                  defaultValueNumeric: 60
+                  constraints:
+                    nullable: false
+              - column:
+                  name: urgent_extra_reminder
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: preferred_llm
+                  type: VARCHAR(32)
+                  defaultValue: 'groq'
+                  constraints:
+                    nullable: false

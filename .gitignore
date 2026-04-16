@@ -1,0 +1,52 @@
+# AI tooling
+CLAUDE.md
+.claude/
+.cursorrules
+.cursor/
+.aider*
+.continue/
+.github/copilot-*
+*.ai-*
+
+# Java / Gradle
+.gradle/
+build/
+out/
+target/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+!.vscode/settings.json
+
+# Node
+node_modules/
+.next/
+dist/
+.turbo/
+.pnp.*
+
+# Env и секреты
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker-data/
+
+# Kotlin
+.kotlin/
