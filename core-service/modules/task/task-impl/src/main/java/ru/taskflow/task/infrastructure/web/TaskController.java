@@ -6,7 +6,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import ru.taskflow.shared.security.AuthenticatedUser;
 import ru.taskflow.task.api.TaskPriority;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskStatus;
@@ -15,10 +17,8 @@ import ru.taskflow.task.api.dto.TaskFilterRequest;
 import ru.taskflow.task.api.dto.TaskResponse;
 import ru.taskflow.task.api.dto.UpdateTaskRequest;
 
-import java.util.UUID;
-
 @RestController
-@RequestMapping("/api/tasks")
+@RequestMapping("/api/v1/tasks")
 @RequiredArgsConstructor
 public class TaskController {
 
@@ -28,57 +28,56 @@ public class TaskController {
     @ResponseStatus(HttpStatus.CREATED)
     public TaskResponse create(
             @RequestBody @Valid CreateTaskRequest request,
-            // TODO день 3: заменить на @AuthenticationPrincipal UUID userId
-            @RequestHeader("X-User-Id") UUID userId
+            @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        return taskService.create(userId, request);
+        return taskService.create(user.userId(), request);
     }
 
     @GetMapping("/{id}")
     public TaskResponse findById(
-            @PathVariable UUID id,
-            @RequestHeader("X-User-Id") UUID userId
+            @PathVariable java.util.UUID id,
+            @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        return taskService.findById(userId, id);
+        return taskService.findById(user.userId(), id);
     }
 
     @GetMapping
     public Page<TaskResponse> findAll(
-            @RequestHeader("X-User-Id") UUID userId,
-            @RequestParam(required = false) UUID groupId,
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) java.util.UUID groupId,
             @RequestParam(required = false) TaskStatus status,
             @RequestParam(required = false) TaskPriority priority,
             @RequestParam(required = false) String tag,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable
     ) {
         var filter = new TaskFilterRequest(groupId, status, priority, tag);
-        return taskService.findAll(userId, filter, pageable);
+        return taskService.findAll(user.userId(), filter, pageable);
     }
 
     @PatchMapping("/{id}")
     public TaskResponse update(
-            @PathVariable UUID id,
+            @PathVariable java.util.UUID id,
             @RequestBody @Valid UpdateTaskRequest request,
-            @RequestHeader("X-User-Id") UUID userId
+            @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        return taskService.update(userId, id, request);
+        return taskService.update(user.userId(), id, request);
     }
 
     @PostMapping("/{id}/complete")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void complete(
-            @PathVariable UUID id,
-            @RequestHeader("X-User-Id") UUID userId
+            @PathVariable java.util.UUID id,
+            @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        taskService.complete(userId, id);
+        taskService.complete(user.userId(), id);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(
-            @PathVariable UUID id,
-            @RequestHeader("X-User-Id") UUID userId
+            @PathVariable java.util.UUID id,
+            @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        taskService.delete(userId, id);
+        taskService.delete(user.userId(), id);
     }
 }

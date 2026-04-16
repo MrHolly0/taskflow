@@ -1,1 +1,4 @@
-// user module public API: interfaces, DTOs
+dependencies {
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
+}
