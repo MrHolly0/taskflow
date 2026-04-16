@@ -1,0 +1,150 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-init-tasks
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: tasks
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_tasks_users
+                    references: users(id)
+              - column:
+                  name: group_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_tasks_groups
+                    references: groups(id)
+                    deleteCascade: false
+              - column:
+                  name: parent_task_id
+                  type: UUID
+                  constraints:
+                    foreignKeyName: fk_tasks_parent
+                    references: tasks(id)
+              - column:
+                  name: title
+                  type: VARCHAR(512)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: description
+                  type: TEXT
+              - column:
+                  name: priority
+                  type: VARCHAR(16)
+                  defaultValue: MEDIUM
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: VARCHAR(16)
+                  defaultValue: TODO
+                  constraints:
+                    nullable: false
+              - column:
+                  name: deadline
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: estimate_minutes
+                  type: INT
+              - column:
+                  name: is_draft
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: source
+                  type: VARCHAR(32)
+                  defaultValue: MANUAL
+                  constraints:
+                    nullable: false
+              - column:
+                  name: raw_llm_response
+                  type: JSONB
+              - column:
+                  name: is_deleted
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: deleted_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+              - column:
+                  name: completed_at
+                  type: TIMESTAMP WITH TIME ZONE
+        - sql:
+            sql: "ALTER TABLE tasks ADD CONSTRAINT chk_task_priority CHECK (priority IN ('LOW', 'MEDIUM', 'HIGH', 'URGENT'));"
+        - sql:
+            sql: "ALTER TABLE tasks ADD CONSTRAINT chk_task_status CHECK (status IN ('TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED'));"
+        - createIndex:
+            tableName: tasks
+            indexName: idx_tasks_user_status_deadline
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: status
+              - column:
+                  name: deadline
+        - createIndex:
+            tableName: tasks
+            indexName: idx_tasks_user_group
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: group_id
+        - createIndex:
+            tableName: tasks
+            indexName: idx_tasks_user_updated
+            columns:
+              - column:
+                  name: user_id
+              - column:
+                  name: updated_at
+                  descending: true
+
+  - changeSet:
+      id: 003-init-task-tags
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: task_tags
+            columns:
+              - column:
+                  name: task_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_tasktags_tasks
+                    references: tasks(id)
+                    deleteCascade: true
+              - column:
+                  name: tag_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_tasktags_tags
+                    references: tags(id)
+                    deleteCascade: true
+        - addPrimaryKey:
+            tableName: task_tags
+            columnNames: task_id, tag_id
+            constraintName: pk_task_tags

@@ -19,6 +19,19 @@ subprojects {
         mavenCentral()
     }
 
+    val springBom = "org.springframework.boot:spring-boot-dependencies:3.3.5"
+    dependencies {
+        "implementation"(platform(springBom))
+        "annotationProcessor"(platform(springBom))
+        "testImplementation"(platform(springBom))
+        "testAnnotationProcessor"(platform(springBom))
+        "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+    }
+
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
+
     tasks.withType<Test> {
         useJUnitPlatform()
     }

@@ -1,0 +1,97 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-init-reminders
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: reminders
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: task_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_reminders_tasks
+                    references: tasks(id)
+                    deleteCascade: true
+              - column:
+                  name: offset_minutes
+                  type: INT
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 005-init-scheduled-notifications
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: scheduled_notifications
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_notif_users
+                    references: users(id)
+              - column:
+                  name: task_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_notif_tasks
+                    references: tasks(id)
+                    deleteCascade: true
+              - column:
+                  name: telegram_chat_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fire_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload_type
+                  type: VARCHAR(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: JSONB
+              - column:
+                  name: sent
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: sent_at
+                  type: TIMESTAMP WITH TIME ZONE
+              - column:
+                  name: retry_count
+                  type: INT
+                  defaultValueNumeric: 0
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+        - createIndex:
+            tableName: scheduled_notifications
+            indexName: idx_notif_fire_sent
+            columns:
+              - column:
+                  name: fire_at
+              - column:
+                  name: sent

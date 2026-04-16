@@ -1,0 +1,83 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-init-groups
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: groups
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_groups_users
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: name
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: color
+                  type: VARCHAR(16)
+              - column:
+                  name: icon
+                  type: VARCHAR(16)
+              - column:
+                  name: sort_order
+                  type: INT
+                  defaultValueNumeric: 0
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+        - createIndex:
+            tableName: groups
+            indexName: idx_groups_user_id
+            columns:
+              - column:
+                  name: user_id
+
+  - changeSet:
+      id: 002-init-tags
+      author: taskflow
+      changes:
+        - createTable:
+            tableName: tags
+            columns:
+              - column:
+                  name: id
+                  type: UUID
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_tags_users
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: name
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: color
+                  type: VARCHAR(16)
+        - createIndex:
+            tableName: tags
+            indexName: idx_tags_user_id
+            columns:
+              - column:
+                  name: user_id

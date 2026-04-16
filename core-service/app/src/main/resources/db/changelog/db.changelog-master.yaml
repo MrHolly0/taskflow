@@ -1,3 +1,13 @@
 databaseChangeLog:
   - include:
       file: db/changelog/001-init-users.yaml
+  - include:
+      file: db/changelog/002-init-groups-tags.yaml
+  - include:
+      file: db/changelog/003-init-tasks.yaml
+  - include:
+      file: db/changelog/004-init-recurrences.yaml
+  - include:
+      file: db/changelog/005-init-notifications.yaml
+  - include:
+      file: db/changelog/006-init-audit.yaml
