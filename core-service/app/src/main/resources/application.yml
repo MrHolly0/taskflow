@@ -30,6 +30,8 @@ app:
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     auth-date-max-age: ${TELEGRAM_AUTH_MAX_AGE:86400}
+    webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
+    voice-dir: ${TELEGRAM_VOICE_DIR:/tmp/taskflow/voice}
 
 management:
   endpoints:
