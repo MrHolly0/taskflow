@@ -1,5 +1,6 @@
 dependencies {
     implementation(project(":core-service:modules:task:task-api"))
+    implementation(project(":core-service:modules:notify:notify-api"))
     implementation(project(":core-service:shared:common"))
     implementation(project(":core-service:shared:persistence"))
     implementation(project(":core-service:shared:security"))

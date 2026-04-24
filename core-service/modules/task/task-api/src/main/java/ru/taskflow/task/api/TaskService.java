@@ -22,4 +22,8 @@ public interface TaskService {
     void complete(UUID userId, UUID taskId);
 
     void delete(UUID userId, UUID taskId);
+
+    TaskResponse confirmDraft(UUID userId, UUID taskId);
+
+    TaskResponse updateDraftTask(UUID userId, UUID taskId, UpdateTaskRequest request);
 }

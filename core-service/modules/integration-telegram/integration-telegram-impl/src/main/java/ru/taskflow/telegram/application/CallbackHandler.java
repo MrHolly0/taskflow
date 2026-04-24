@@ -35,6 +35,21 @@ public class CallbackHandler {
                 taskService.delete(userId, UUID.fromString(payload));
                 sender.answerCallback(callback.id(), "🗑 Удалено");
             }
+            case "confirm" -> {
+                try {
+                    var task = taskService.confirmDraft(userId, UUID.fromString(payload));
+                    sender.answerCallback(callback.id(), "✅ Задача подтверждена!");
+                    sender.sendMessage(callback.message().chat().id(),
+                        "📌 Задача <b>" + task.title() + "</b> добавлена!");
+                } catch (Exception e) {
+                    sender.answerCallback(callback.id(), "Ошибка при подтверждении");
+                }
+            }
+            case "edit" -> {
+                sender.answerCallback(callback.id(), "✏️ Редактирование");
+                sender.sendMessage(callback.message().chat().id(),
+                    "Для редактирования задачи используйте кнопку в её карточке или команду /update");
+            }
             default -> sender.answerCallback(callback.id(), "Неизвестная команда");
         }
     }

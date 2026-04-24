@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.taskflow.notify.api.NotificationService;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskStatus;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
@@ -29,6 +30,7 @@ public class TaskServiceImpl implements TaskService {
     private final GroupRepository groupRepository;
     private final TagRepository tagRepository;
     private final TaskMapper taskMapper;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -41,6 +43,7 @@ public class TaskServiceImpl implements TaskService {
         task.setDeadline(request.deadline());
         task.setEstimateMinutes(request.estimateMinutes());
         task.setSource(request.source());
+        task.setDraft(true);
 
         if (request.groupId() != null) {
             var group = groupRepository.findByIdAndUserId(request.groupId(), userId)
@@ -52,7 +55,8 @@ public class TaskServiceImpl implements TaskService {
             task.setTags(resolveOrCreateTags(userId, request.tags()));
         }
 
-        return taskMapper.toResponse(taskRepository.save(task));
+        TaskJpaEntity savedTask = taskRepository.save(task);
+        return taskMapper.toResponse(savedTask);
     }
 
     @Override
@@ -80,6 +84,8 @@ public class TaskServiceImpl implements TaskService {
         var task = taskRepository.findByIdAndUserId(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
 
+        boolean deadlineChanged = request.deadline() != null;
+
         if (request.title() != null) task.setTitle(request.title());
         if (request.description() != null) task.setDescription(request.description());
         if (request.priority() != null) task.setPriority(request.priority());
@@ -103,7 +109,14 @@ public class TaskServiceImpl implements TaskService {
             task.setTags(resolveOrCreateTags(userId, request.tags()));
         }
 
-        return taskMapper.toResponse(task);
+        TaskJpaEntity updatedTask = taskRepository.save(task);
+
+        if (deadlineChanged) {
+            notificationService.cancelTaskNotifications(taskId);
+            notificationService.scheduleTaskReminder(userId, taskId, updatedTask.getTitle(), request.deadline());
+        }
+
+        return taskMapper.toResponse(updatedTask);
     }
 
     @Override
@@ -122,6 +135,51 @@ public class TaskServiceImpl implements TaskService {
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         task.setDeleted(true);
         task.setDeletedAt(OffsetDateTime.now());
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse confirmDraft(UUID userId, UUID taskId) {
+        var task = taskRepository.findByIdAndUserId(taskId, userId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId));
+        task.setDraft(false);
+
+        if (task.getDeadline() != null) {
+            notificationService.scheduleTaskReminder(userId, taskId, task.getTitle(), task.getDeadline());
+        }
+
+        TaskJpaEntity savedTask = taskRepository.save(task);
+        return taskMapper.toResponse(savedTask);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse updateDraftTask(UUID userId, UUID taskId, UpdateTaskRequest request) {
+        var task = taskRepository.findByIdAndUserId(taskId, userId)
+                .orElseThrow(() -> new TaskNotFoundException(taskId));
+
+        if (!task.isDraft()) {
+            throw new IllegalStateException("Cannot edit non-draft task");
+        }
+
+        if (request.title() != null) task.setTitle(request.title());
+        if (request.description() != null) task.setDescription(request.description());
+        if (request.priority() != null) task.setPriority(request.priority());
+        if (request.deadline() != null) task.setDeadline(request.deadline());
+        if (request.estimateMinutes() != null) task.setEstimateMinutes(request.estimateMinutes());
+
+        if (request.groupId() != null) {
+            var group = groupRepository.findByIdAndUserId(request.groupId(), userId)
+                    .orElseThrow(() -> new GroupNotFoundException(request.groupId()));
+            task.setGroup(group);
+        }
+
+        if (request.tags() != null) {
+            task.setTags(resolveOrCreateTags(userId, request.tags()));
+        }
+
+        TaskJpaEntity savedTask = taskRepository.save(task);
+        return taskMapper.toResponse(savedTask);
     }
 
     private List<TagJpaEntity> resolveOrCreateTags(UUID userId, List<String> tagNames) {

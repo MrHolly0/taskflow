@@ -37,5 +37,38 @@ services:
       postgres:
         condition: service_healthy
 
+  nlp-worker:
+    build:
+      context: ../nlp-worker
+      dockerfile: Dockerfile
+    ports:
+      - "${NLP_PORT:-8081}:8081"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NLP_PORT: 8081
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  notification-worker:
+    build:
+      context: ../notification-worker
+      dockerfile: Dockerfile
+    ports:
+      - "${NOTIFICATION_PORT:-8082}:8082"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-taskflow}
+      DB_USER: ${DB_USER:-taskflow}
+      DB_PASSWORD: ${DB_PASSWORD:-taskflow}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:}
+      NOTIFICATION_PORT: 8082
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:

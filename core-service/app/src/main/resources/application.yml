@@ -32,6 +32,34 @@ app:
     auth-date-max-age: ${TELEGRAM_AUTH_MAX_AGE:86400}
     webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
     voice-dir: ${TELEGRAM_VOICE_DIR:/tmp/taskflow/voice}
+  nlp:
+    worker-url: ${NLP_WORKER_URL:http://localhost:8081}
+    connect-timeout-seconds: 5
+    read-timeout-seconds: 30
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      nlp-worker:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+  retry:
+    instances:
+      nlp-worker:
+        max-attempts: 3
+        wait-duration: 500ms
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  info:
+    title: TaskFlow API
+    version: 1.0.0
+    description: Digital task management assistant powered by AI
 
 management:
   endpoints:
