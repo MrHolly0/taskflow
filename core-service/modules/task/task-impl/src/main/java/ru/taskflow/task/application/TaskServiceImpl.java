@@ -5,6 +5,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.taskflow.audit.api.AuditEventType;
+import ru.taskflow.audit.api.AuditService;
 import ru.taskflow.notify.api.NotificationService;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskStatus;
@@ -22,7 +24,9 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -35,6 +39,7 @@ public class TaskServiceImpl implements TaskService {
     private final TagRepository tagRepository;
     private final TaskMapper taskMapper;
     private final NotificationService notificationService;
+    private final AuditService auditService;
 
     @Override
     @Transactional
@@ -60,6 +65,7 @@ public class TaskServiceImpl implements TaskService {
         }
 
         TaskJpaEntity savedTask = taskRepository.save(task);
+        auditService.record(userId, savedTask.getId(), AuditEventType.CREATED, null);
         return taskMapper.toResponse(savedTask);
     }
 
@@ -114,6 +120,8 @@ public class TaskServiceImpl implements TaskService {
         }
 
         TaskJpaEntity updatedTask = taskRepository.save(task);
+        Map<String, Object> delta = buildDelta(task, request);
+        auditService.record(userId, taskId, AuditEventType.UPDATED, delta);
 
         if (deadlineChanged) {
             notificationService.cancelTaskNotifications(taskId);
@@ -130,6 +138,8 @@ public class TaskServiceImpl implements TaskService {
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         task.setStatus(TaskStatus.DONE);
         task.setCompletedAt(OffsetDateTime.now());
+        taskRepository.save(task);
+        auditService.record(userId, taskId, AuditEventType.STATUS_CHANGED, Map.of("status", "DONE"));
     }
 
     @Override
@@ -139,6 +149,8 @@ public class TaskServiceImpl implements TaskService {
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         task.setDeleted(true);
         task.setDeletedAt(OffsetDateTime.now());
+        taskRepository.save(task);
+        auditService.record(userId, taskId, AuditEventType.DELETED, null);
     }
 
     @Override
@@ -153,6 +165,7 @@ public class TaskServiceImpl implements TaskService {
         }
 
         TaskJpaEntity savedTask = taskRepository.save(task);
+        auditService.record(userId, taskId, AuditEventType.UPDATED, Map.of("isDraft", false));
         return taskMapper.toResponse(savedTask);
     }
 
@@ -200,6 +213,29 @@ public class TaskServiceImpl implements TaskService {
             }
         }
         return result;
+    }
+
+    private Map<String, Object> buildDelta(TaskJpaEntity task, UpdateTaskRequest request) {
+        Map<String, Object> delta = new HashMap<>();
+        if (request.title() != null && !request.title().equals(task.getTitle())) {
+            delta.put("title", request.title());
+        }
+        if (request.description() != null && !request.description().equals(task.getDescription())) {
+            delta.put("description", request.description());
+        }
+        if (request.priority() != null && !request.priority().equals(task.getPriority())) {
+            delta.put("priority", request.priority());
+        }
+        if (request.deadline() != null && !request.deadline().equals(task.getDeadline())) {
+            delta.put("deadline", request.deadline());
+        }
+        if (request.estimateMinutes() != null && !request.estimateMinutes().equals(task.getEstimateMinutes())) {
+            delta.put("estimateMinutes", request.estimateMinutes());
+        }
+        if (request.status() != null && !request.status().equals(task.getStatus())) {
+            delta.put("status", request.status());
+        }
+        return delta.isEmpty() ? null : delta;
     }
 
     @Override

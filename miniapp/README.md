@@ -1,11 +1,167 @@
+# miniapp
 
-  # Курс ассистент и трекер (Copy)
+Адаптивное веб-приложение (Telegram Mini App + самостоятельный сайт) для TaskFlow. Построено на Vite, React 18, TypeScript, Tailwind CSS и shadcn/ui. Работает на всех экранах (мобилка, планшет, ПК).
 
-  This is a code bundle for Курс ассистент и трекер (Copy). The original project is available at https://www.figma.com/design/lK32NUhS1H5MjLuQq2I49x/%D0%9A%D1%83%D1%80%D1%81-%D0%B0%D1%81%D1%81%D0%B8%D1%81%D1%82%D0%B5%D0%BD%D1%82-%D0%B8-%D1%82%D1%80%D0%B5%D0%BA%D0%B5%D1%80--Copy-.
+## Возможности
 
-  ## Running the code
+- **FocusPage** — Ассистент-first: показывает 1-3 приоритетные задачи на "сейчас" (ближайшие 2 часа)
+- **AllTasksPage** — Полный список задач с единственным селектором контекста (Сегодня / На неделю / Всё)
+- **BoardPage** — Канбан с drag-and-drop (колонки статусов)
+- **GroupsPage** — Управление группами/категориями задач
+- **SettingsPage** — Настройки уведомлений и пользователя
+- **QuickInputModal** — Быстрое создание задачи с поддержкой голоса
+- **Адаптив** — Работает на 375px (мобилка) до 1920px (ПК)
 
-  Run `npm i` to install the dependencies.
+## Быстрый старт
 
-  Run `npm run dev` to start the development server.
-  
+Требует: Node.js 18+, pnpm
+
+```bash
+# Установить зависимости
+pnpm install
+
+# Запустить dev сервер
+pnpm dev
+
+# Собрать для production
+pnpm build
+
+# Предпросмотр production сборки
+pnpm preview
+```
+
+Доступно по адресу `http://localhost:5173` (или показано в терминале)
+
+## Настройка Telegram Mini App
+
+1. В [@BotFather](https://t.me/botfather), установите Mini App:
+   ```
+   /mybotcommand
+   → Выберите вашего бота
+   → Edit commands
+   → Добавить app: https://yourdomain.com/miniapp
+   ```
+
+2. Тестируйте в Telegram:
+   - Откройте бота
+   - Нажмите на иконку приложения
+   - Приложение загружается в Telegram WebView
+
+## Конфигурация
+
+Переменные окружения (`.env.local`):
+```
+VITE_API_BASE_URL=http://localhost:8080/api
+VITE_TELEGRAM_BOT_ID=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+```
+
+## Структура проекта
+
+```
+src/
+├── app/
+│   ├── pages/          Компоненты страниц (маршруты)
+│   │   ├── Focus.tsx
+│   │   ├── AllTasks.tsx
+│   │   ├── Board.tsx
+│   │   ├── Groups.tsx
+│   │   ├── Settings.tsx
+│   │   └── Stats.tsx
+│   └── App.tsx          Основной роутер
+├── components/
+│   ├── TaskCard.tsx
+│   ├── QuickInputModal.tsx
+│   ├── GroupDetailModal.tsx
+│   └── [компоненты shadcn/ui]
+├── lib/
+│   ├── api.ts           Axios клиент с JWT интерцепторами
+│   ├── auth.ts          Авторизация через Telegram WebApp
+│   ├── hooks/
+│   │   └── useTasks.ts  TanStack Query для загрузки задач
+│   └── store.ts         Zustand для глобального состояния
+├── styles/
+│   └── globals.css      Tailwind setup
+└── main.tsx            Vite точка входа
+```
+
+## Основные библиотеки
+
+- **Vite** — Build tool
+- **React 18** — UI фреймворк
+- **TypeScript** — Типизация
+- **TanStack Query v5** — Управление серверным состоянием
+- **Zustand** — Клиентское состояние (auth, UI)
+- **React Hook Form** — Обработка форм
+- **Zod** — Валидация схем
+- **Tailwind CSS** — Стилизация
+- **shadcn/ui** — Доступные компоненты
+- **@dnd-kit** — Drag-and-drop для Канбана
+- **Tabler Icons** — Библиотека иконок
+
+## Интеграция с API
+
+Axios клиент (`lib/api.ts`) имеет:
+- JWT токен в Authorization header
+- Авто-обновление токена при истечении
+- Интерцепторы для request/response
+- Обработка ошибок
+
+Поток авторизации:
+1. Парсинг `initData` из Telegram WebApp
+2. POST на `/api/v1/auth/telegram-miniapp`
+3. Получение JWT + refresh токена
+4. Сохранение JWT в памяти, refresh в cookie
+
+## Сборка для production
+
+```bash
+# Собрать
+pnpm build
+
+# Вывод: dist/
+# Deploy на nginx/cdn с:
+# - Gzip сжатием
+# - Cache-Control для assets
+# - index.html: Cache-Control: no-cache
+
+# Пример nginx конфига:
+# location ~\.js$ { add_header Cache-Control "max-age=31536000"; }
+# location / { try_files $uri /index.html; }
+```
+
+## Docker
+
+```bash
+# Собрать образ
+docker build -f miniapp/Dockerfile -t taskflow-miniapp:latest miniapp/
+
+# Запустить
+docker run -p 3000:3000 taskflow-miniapp:latest
+```
+
+Dockerfile использует multi-stage: сборка в Node, запуск из nginx alpine.
+
+## Тестирование
+
+```bash
+# Unit тесты
+pnpm test
+
+# Покрытие
+pnpm test:coverage
+```
+
+(Настройка тестов опциональна; проект использует ручное тестирование сейчас)
+
+## Целевые показатели производительности
+
+- **LCP** (Largest Contentful Paint): < 2.5s
+- **FID** (First Input Delay): < 100ms
+- **CLS** (Cumulative Layout Shift): < 0.1
+- Размер бандла: < 300KB gzipped
+
+Проверьте с помощью:
+```bash
+pnpm build && pnpm preview
+# Откройте DevTools → Lighthouse
+```
