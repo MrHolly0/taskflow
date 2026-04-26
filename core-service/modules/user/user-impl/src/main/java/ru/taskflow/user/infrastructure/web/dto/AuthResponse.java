@@ -1,4 +1,9 @@
 package ru.taskflow.user.infrastructure.web.dto;
 
-public record AuthResponse(String accessToken, String refreshToken) {
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public record AuthResponse(
+    @JsonProperty("token") String accessToken,
+    @JsonProperty("refreshToken") String refreshToken
+) {
 }

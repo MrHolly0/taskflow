@@ -54,7 +54,7 @@ public class NlpWorkerClient {
     public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, String userLanguage) {
         try {
             var response = restClient.post()
-                .uri(config.getWorkerUrl() + "/nlp/parse-voice")
+                .uri(config.getWorkerUrl() + "/nlp/parse-voice?userTimezone=" + userTimezone + "&userLanguage=" + userLanguage)
                 .header("Content-Type", "application/octet-stream")
                 .body(audioBytes)
                 .retrieve()

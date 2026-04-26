@@ -64,6 +64,14 @@ public class AuthController {
         return issueTokens(dto.id(), dto.username());
     }
 
+    @PostMapping("/dev-token")
+    @ResponseStatus(HttpStatus.OK)
+    public AuthResponse devToken(@RequestBody Map<String, String> body) {
+        UUID userId = UUID.fromString(body.get("userId"));
+        String username = body.get("username");
+        return issueTokens(userId, username);
+    }
+
     private AuthResponse issueTokens(UUID userId, String username) {
         String accessToken = jwtService.issueAccessToken(userId, username);
         String refreshToken = refreshTokenService.issue(userId);

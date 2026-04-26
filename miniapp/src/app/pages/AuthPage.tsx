@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { IconBrandTelegram, IconSparkles, IconBolt, IconShield } from '@tabler/icons-react';
 import { motion } from 'motion/react';
-import { useStore, User } from '@/lib/store';
+import { useStore } from '@/lib/store';
+import { authenticateViaInitData } from '@/lib/auth';
 
 const features = [
   {
@@ -22,20 +23,23 @@ const features = [
 ];
 
 export function AuthPage() {
-  const login = useStore((s) => s.login);
+  const setAuthenticated = useStore((s) => s.setAuthenticated);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleTelegramLogin = () => {
+  const handleTelegramLogin = async () => {
     setLoading(true);
-    setTimeout(() => {
-      const user: User = {
-        id: 'tg_123456',
-        name: 'Саша',
-        username: 'sasha_dev',
-        avatar: undefined,
-      };
-      login(user);
-    }, 1800);
+    setError(null);
+    try {
+      await authenticateViaInitData();
+      setAuthenticated(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Ошибка авторизации';
+      setError(message);
+      console.error('Auth error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -109,6 +113,12 @@ export function AuthPage() {
                 </>
               )}
             </button>
+
+            {error && (
+              <p className="text-center text-xs text-red-500 px-4">
+                {error}
+              </p>
+            )}
 
             <p className="text-center text-xs text-muted-foreground px-4">
               Авторизация через Telegram — безопасно и без паролей.

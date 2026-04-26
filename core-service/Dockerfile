@@ -2,12 +2,8 @@
 FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /app
 
-# Copy gradle wrapper and config
-COPY gradle ./gradle
-COPY gradlew build.gradle.kts settings.gradle.kts ./
-
-# Copy source code
-COPY core-service ./core-service
+# Copy entire project (Gradle multi-module requires all modules)
+COPY . .
 
 # Build the application
 RUN chmod +x gradlew && \

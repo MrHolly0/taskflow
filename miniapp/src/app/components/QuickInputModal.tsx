@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { IconMicrophone, IconSend, IconSparkles, IconCheck, IconArrowLeft } from '@tabler/icons-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useCreateTask, CreateTaskRequest } from '@/lib/hooks/useTasks';
+import { useCreateTask, CreateTaskRequest, useParseText } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';
 import {
@@ -21,28 +21,6 @@ interface ParsedTask {
   estimateMinutes?: number;
 }
 
-function parseMockTask(text: string): ParsedTask {
-  const lower = text.toLowerCase();
-  let priority: ParsedTask['priority'] = 'MEDIUM';
-  if (lower.includes('срочно') || lower.includes('важно') || lower.includes('deadline')) {
-    priority = 'URGENT';
-  } else if (lower.includes('сегодня') || lower.includes('скоро')) {
-    priority = 'HIGH';
-  } else if (lower.includes('когда-нибудь') || lower.includes('потом')) {
-    priority = 'LOW';
-  }
-
-  let estimateMinutes: number | undefined;
-  const timeMatch = lower.match(/(\d+)\s*(мин|час)/);
-  if (timeMatch) {
-    const val = parseInt(timeMatch[1]);
-    estimateMinutes = timeMatch[2] === 'час' ? val * 60 : val;
-  }
-
-  const title = text.charAt(0).toUpperCase() + text.slice(1).replace(/[.!?]+$/, '');
-
-  return { title, priority, estimateMinutes };
-}
 
 const MOCK_VOICE_PHRASES = [
   'Купить хлеб и молоко по пути домой',
@@ -72,6 +50,7 @@ interface QuickInputModalProps {
 
 export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   const { mutate: createTask, isPending: isCreating } = useCreateTask();
+  const { mutate: parseText, isPending: isParsing } = useParseText();
   const [phase, setPhase] = useState<Phase>('input');
   const [text, setText] = useState('');
   const [parsedTask, setParsedTask] = useState<ParsedTask | null>(null);
@@ -107,11 +86,21 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   const handleSubmit = () => {
     if (!text.trim()) return;
     setPhase('processing');
-    processingTimerRef.current = setTimeout(() => {
-      const parsed = parseMockTask(text.trim());
-      setParsedTask(parsed);
-      setPhase('confirm');
-    }, 1200);
+    parseText(text.trim(), {
+      onSuccess: (parsed) => {
+        if (parsed) {
+          setParsedTask(parsed);
+          setPhase('confirm');
+        } else {
+          setError('Не удалось разобрать текст');
+          setPhase('input');
+        }
+      },
+      onError: () => {
+        setError('Ошибка при обработке текста');
+        setPhase('input');
+      },
+    });
   };
 
   const handleConfirm = () => {

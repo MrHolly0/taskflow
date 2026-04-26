@@ -101,6 +101,31 @@ export interface CreateTaskRequest {
   tags?: string[];
 }
 
+export interface ParsedTask {
+  title: string;
+  priority: string;
+  estimateMinutes?: number;
+  groupId?: string;
+  tags?: string[];
+}
+
+export interface ParseResponse {
+  tasks: ParsedTask[];
+}
+
+export const useParseText = () => {
+  return useMutation({
+    mutationFn: async (text: string) => {
+      const response = await getClient().post<ParseResponse>('/tasks/parse-text', {
+        text,
+        userTimezone: 'Europe/Moscow',
+        userLanguage: 'ru',
+      });
+      return response.data.tasks[0] || null;
+    },
+  });
+};
+
 export const useCreateTask = () => {
   const queryClient = useQueryClient();
 

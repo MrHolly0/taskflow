@@ -2,9 +2,7 @@ FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /app
 
-COPY gradle ./gradle
-COPY gradlew build.gradle.kts settings.gradle.kts ./
-COPY notification-worker ./notification-worker
+COPY . .
 
 RUN chmod +x gradlew && \
     ./gradlew :notification-worker:bootJar -x test

@@ -8,6 +8,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import ru.taskflow.nlp.api.NlpGatewayService;
 import ru.taskflow.shared.security.AuthenticatedUser;
 import ru.taskflow.task.api.TaskPriority;
 import ru.taskflow.task.api.TaskService;
@@ -20,6 +21,8 @@ import ru.taskflow.task.api.dto.TaskResponse;
 import ru.taskflow.task.api.dto.UpdateTaskRequest;
 
 import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/tasks")
@@ -27,6 +30,7 @@ import java.time.LocalDate;
 public class TaskController {
 
     private final TaskService taskService;
+    private final NlpGatewayService nlpGatewayService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -107,5 +111,18 @@ public class TaskController {
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
         return taskService.createQuick(user.userId(), request);
+    }
+
+    @PostMapping("/parse-text")
+    public Map<String, Object> parseText(
+            @RequestBody Map<String, String> request,
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        String text = request.get("text");
+        String userTimezone = request.getOrDefault("userTimezone", "Europe/Moscow");
+        String userLanguage = request.getOrDefault("userLanguage", "ru");
+
+        var result = nlpGatewayService.parseText(text, userTimezone);
+        return Map.of("tasks", result.tasks());
     }
 }
