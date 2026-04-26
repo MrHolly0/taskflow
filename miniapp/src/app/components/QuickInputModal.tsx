@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { IconMicrophone, IconSend, IconSparkles, IconCheck } from '@tabler/icons-react';
+import { IconMicrophone, IconSend, IconSparkles, IconCheck, IconArrowLeft } from '@tabler/icons-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useStore, Priority } from '@/lib/store';
+import { useCreateTask, CreateTaskRequest } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';
 import {
@@ -10,17 +10,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/app/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
-type Phase = 'input' | 'recording' | 'processing' | 'done';
+type Phase = 'input' | 'recording' | 'processing' | 'confirm' | 'loading' | 'done';
 
-function parseMockTask(text: string): {
+interface ParsedTask {
   title: string;
-  priority: Priority;
-  group?: string;
-  estimatedTime?: number;
-} {
+  priority: 'URGENT' | 'HIGH' | 'MEDIUM' | 'LOW';
+  groupId?: string;
+  estimateMinutes?: number;
+}
+
+function parseMockTask(text: string): ParsedTask {
   const lower = text.toLowerCase();
-  let priority: Priority = 'MEDIUM';
+  let priority: ParsedTask['priority'] = 'MEDIUM';
   if (lower.includes('срочно') || lower.includes('важно') || lower.includes('deadline')) {
     priority = 'URGENT';
   } else if (lower.includes('сегодня') || lower.includes('скоро')) {
@@ -29,27 +32,16 @@ function parseMockTask(text: string): {
     priority = 'LOW';
   }
 
-  let group: string | undefined;
-  if (lower.includes('работ') || lower.includes('офис') || lower.includes('отчёт') || lower.includes('отчет')) {
-    group = 'Работа';
-  } else if (lower.includes('учёб') || lower.includes('учеб') || lower.includes('экзамен') || lower.includes('курс')) {
-    group = 'Учёба';
-  } else if (lower.includes('купи') || lower.includes('магазин')) {
-    group = 'Покупки';
-  } else if (lower.includes('мам') || lower.includes('папа') || lower.includes('семь')) {
-    group = 'Семья';
-  }
-
+  let estimateMinutes: number | undefined;
   const timeMatch = lower.match(/(\d+)\s*(мин|час)/);
-  let estimatedTime: number | undefined;
   if (timeMatch) {
     const val = parseInt(timeMatch[1]);
-    estimatedTime = timeMatch[2] === 'час' ? val * 60 : val;
+    estimateMinutes = timeMatch[2] === 'час' ? val * 60 : val;
   }
 
   const title = text.charAt(0).toUpperCase() + text.slice(1).replace(/[.!?]+$/, '');
 
-  return { title, priority, group, estimatedTime };
+  return { title, priority, estimateMinutes };
 }
 
 const MOCK_VOICE_PHRASES = [
@@ -59,16 +51,31 @@ const MOCK_VOICE_PHRASES = [
   'Позвонить в банк насчёт карточки',
 ];
 
+const PRIORITY_LABEL: Record<ParsedTask['priority'], string> = {
+  URGENT: 'Срочно',
+  HIGH: 'Важно',
+  MEDIUM: 'Средний',
+  LOW: 'Когда будет время',
+};
+
+const PRIORITY_COLOR: Record<ParsedTask['priority'], string> = {
+  URGENT: 'text-red-500',
+  HIGH: 'text-orange-500',
+  MEDIUM: 'text-blue-500',
+  LOW: 'text-gray-400',
+};
+
 interface QuickInputModalProps {
   open: boolean;
   onClose: () => void;
 }
 
 export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
-  const addTask = useStore((s) => s.addTask);
+  const { mutate: createTask, isPending: isCreating } = useCreateTask();
   const [phase, setPhase] = useState<Phase>('input');
   const [text, setText] = useState('');
-  const [parsedTask, setParsedTask] = useState<ReturnType<typeof parseMockTask> | null>(null);
+  const [parsedTask, setParsedTask] = useState<ParsedTask | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout>();
   const processingTimerRef = useRef<NodeJS.Timeout>();
@@ -78,6 +85,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
       setPhase('input');
       setText('');
       setParsedTask(null);
+      setError(null);
       setTimeout(() => textareaRef.current?.focus(), 100);
     }
     return () => {
@@ -102,18 +110,36 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
     processingTimerRef.current = setTimeout(() => {
       const parsed = parseMockTask(text.trim());
       setParsedTask(parsed);
-      addTask({
-        title: parsed.title,
-        priority: parsed.priority,
-        status: 'TODO',
-        group: parsed.group,
-        estimatedTime: parsed.estimatedTime,
-      });
-      setPhase('done');
-      setTimeout(() => {
-        onClose();
-      }, 1800);
+      setPhase('confirm');
     }, 1200);
+  };
+
+  const handleConfirm = () => {
+    if (!parsedTask) return;
+    setPhase('loading');
+    const request: CreateTaskRequest = {
+      title: parsedTask.title,
+      priority: parsedTask.priority,
+      estimateMinutes: parsedTask.estimateMinutes,
+    };
+    createTask(request, {
+      onSuccess: () => {
+        setPhase('done');
+        setTimeout(() => {
+          onClose();
+        }, 1500);
+      },
+      onError: (err) => {
+        setError('Ошибка при создании задачи');
+        setPhase('confirm');
+      },
+    });
+  };
+
+  const handleBack = () => {
+    setPhase('input');
+    setParsedTask(null);
+    setError(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -153,11 +179,11 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Напиши задачу как есть — AI сам разберёт приоритет и группу..."
+                  placeholder="Напиши задачу как есть — AI сам разберёт приоритет и время..."
                   className="resize-none min-h-[100px] text-base"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Например: «Срочно написать отчёт для Димы»
+                  Например: «Срочно написать отчёт для Димы, 2 часа»
                 </p>
                 <div className="flex gap-2">
                   <Button
@@ -174,7 +200,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                     className="flex-1 gap-2 h-11"
                   >
                     <IconSend className="h-4 w-4" />
-                    Добавить
+                    Далее
                     <span className="text-xs opacity-60 ml-1">⌘↵</span>
                   </Button>
                 </div>
@@ -234,6 +260,87 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
               </motion.div>
             )}
 
+            {phase === 'confirm' && parsedTask && (
+              <motion.div
+                key="confirm"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="space-y-4"
+              >
+                <div className="space-y-3 bg-muted/50 p-4 rounded-lg">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                      Задача
+                    </p>
+                    <p className="font-medium text-base">{parsedTask.title}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                        Приоритет
+                      </p>
+                      <p className={cn('font-medium text-sm', PRIORITY_COLOR[parsedTask.priority])}>
+                        {PRIORITY_LABEL[parsedTask.priority]}
+                      </p>
+                    </div>
+                    {parsedTask.estimateMinutes && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                          Время
+                        </p>
+                        <p className="font-medium text-sm">
+                          ~{parsedTask.estimateMinutes} мин
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleBack}
+                    className="gap-2 h-11 flex-1"
+                  >
+                    <IconArrowLeft className="h-4 w-4" />
+                    Назад
+                  </Button>
+                  <Button
+                    onClick={handleConfirm}
+                    disabled={isCreating}
+                    className="flex-1 gap-2 h-11"
+                  >
+                    <IconCheck className="h-4 w-4" />
+                    Добавить
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
+            {phase === 'loading' && (
+              <motion.div
+                key="loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center py-8 space-y-3"
+              >
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  className="w-10 h-10 border-2 border-primary/20 border-t-primary rounded-full"
+                />
+                <p className="text-muted-foreground text-sm">Добавляем задачу...</p>
+              </motion.div>
+            )}
+
             {phase === 'done' && parsedTask && (
               <motion.div
                 key="done"
@@ -252,11 +359,6 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                 <div className="text-center space-y-1">
                   <p className="font-medium">Добавлено!</p>
                   <p className="text-sm text-muted-foreground">«{parsedTask.title}»</p>
-                  {parsedTask.group && (
-                    <p className="text-xs text-muted-foreground">
-                      Группа: {parsedTask.group}
-                    </p>
-                  )}
                 </div>
               </motion.div>
             )}

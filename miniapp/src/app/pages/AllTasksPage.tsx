@@ -1,14 +1,26 @@
 import { useState } from 'react';
-import { IconSearch, IconPlus, IconClock, IconChevronRight, IconInbox } from '@tabler/icons-react';
-import { useStore, Status, Task } from '@/lib/store';
-import { formatDeadline, getPriorityColor, cn } from '@/lib/utils';
-import { getStatusLabel, getPriorityLabel } from '@/lib/store';
+import { IconSearch, IconPlus, IconClock, IconInbox } from '@tabler/icons-react';
+import { useStore, Status } from '@/lib/store';
+import { formatDeadline, cn } from '@/lib/utils';
+import { getStatusLabel } from '@/lib/store';
+import { useAllTasks, useCompleteTask } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
-import { Badge } from '@/app/components/ui/badge';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
 import { QuickInputModal } from '@/app/components/QuickInputModal';
+
+interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  priority: string;
+  status: string;
+  deadline?: string;
+  estimateMinutes?: number;
+  isDraft: boolean;
+  groupName?: string;
+}
 
 type Context = 'now' | 'today' | 'week' | 'all';
 
@@ -33,38 +45,13 @@ export function AllTasksPage() {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [quickInputOpen, setQuickInputOpen] = useState(false);
 
-  const tasks = useStore((state) => state.tasks);
+  const { data: allTasks = [], isLoading, error } = useAllTasks();
+  const { mutate: completeTask } = useCompleteTask();
 
-  const filteredTasks = tasks.filter((task) => {
+  const filteredTasks = (allTasks || []).filter((task) => {
     if (search && !task.title.toLowerCase().includes(search.toLowerCase())) {
       return false;
     }
-
-    if (context === 'now') {
-      return task.status !== 'DONE' && task.status !== 'CANCELLED' && ['URGENT', 'HIGH'].includes(task.priority);
-    }
-
-    if (context === 'today') {
-      const today = new Date().toDateString();
-      return (
-        task.status !== 'DONE' &&
-        task.status !== 'CANCELLED' &&
-        task.deadline &&
-        new Date(task.deadline).toDateString() === today
-      );
-    }
-
-    if (context === 'week') {
-      const weekFromNow = new Date();
-      weekFromNow.setDate(weekFromNow.getDate() + 7);
-      return (
-        task.status !== 'DONE' &&
-        task.status !== 'CANCELLED' &&
-        task.deadline &&
-        new Date(task.deadline) <= weekFromNow
-      );
-    }
-
     return true;
   });
 
@@ -72,6 +59,22 @@ export function AllTasksPage() {
     setSelectedTask(task);
     setTaskModalOpen(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
+        <p className="text-muted-foreground">Загружаем задачи...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
+        <p className="text-destructive">Ошибка загрузки задач</p>
+      </div>
+    );
+  }
 
   return (
     <>

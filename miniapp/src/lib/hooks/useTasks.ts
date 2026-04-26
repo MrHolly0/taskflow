@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
@@ -75,6 +75,44 @@ export const useDeleteTask = () => {
   return useMutation({
     mutationFn: async (taskId: string) => {
       await getClient().delete(`/tasks/${taskId}`);
+    },
+  });
+};
+
+export const useAllTasks = (date?: string) => {
+  return useQuery({
+    queryKey: ['tasks', 'all', date],
+    queryFn: async () => {
+      const params = date ? { date } : {};
+      const response = await getClient().get<DigestResponse>('/tasks/digest', { params });
+      return response.data.topTasks;
+    },
+    staleTime: 1000 * 60 * 2,
+  });
+};
+
+export interface CreateTaskRequest {
+  title: string;
+  description?: string;
+  priority: string;
+  deadline?: string;
+  estimateMinutes?: number;
+  groupId?: string;
+  tags?: string[];
+}
+
+export const useCreateTask = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: CreateTaskRequest) => {
+      const response = await getClient().post<Task>('/tasks/quick', request);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'focus'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'digest'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'all'] });
     },
   });
 };
