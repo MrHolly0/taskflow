@@ -57,6 +57,7 @@ interface AppState {
   groups: Group[];
   login: (user: User) => void;
   logout: () => void;
+  setAuthenticated: (auth: boolean) => void;
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
@@ -169,6 +170,7 @@ export const useStore = create<AppState>((set) => ({
 
   login: (user) => set({ isAuthenticated: true, user }),
   logout: () => set({ isAuthenticated: false, user: null }),
+  setAuthenticated: (auth) => set({ isAuthenticated: auth }),
 
   addTask: (task) =>
     set((state) => ({

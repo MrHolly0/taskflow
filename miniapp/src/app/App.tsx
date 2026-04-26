@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -11,6 +12,7 @@ import { StatsPage } from '@/app/pages/StatsPage';
 import { SettingsPage } from '@/app/pages/SettingsPage';
 import { AuthPage } from '@/app/pages/AuthPage';
 import { useStore } from '@/lib/store';
+import { getStoredToken, authenticateViaInitData, initializeTelegramWebApp } from '@/lib/auth';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +25,36 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const setAuthenticated = useStore((s) => s.setAuthenticated);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  useEffect(() => {
+    initializeTelegramWebApp();
+    const token = getStoredToken();
+
+    if (token) {
+      setAuthenticated(true);
+      setIsInitializing(false);
+    } else {
+      authenticateViaInitData()
+        .then(() => {
+          setAuthenticated(true);
+          setIsInitializing(false);
+        })
+        .catch((error) => {
+          console.error('Authentication failed:', error);
+          setIsInitializing(false);
+        });
+    }
+  }, [setAuthenticated]);
+
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-muted-foreground">Инициализация...</p>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return <AuthPage />;

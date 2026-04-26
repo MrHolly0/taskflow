@@ -2,11 +2,24 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { IconFlame, IconBolt, IconSquare, IconClock, IconArrowRight, IconPencil } from '@tabler/icons-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useStore, Priority, Task } from '@/lib/store';
-import { getFocusTasks, formatDeadline, getPriorityBgColor, cn } from '@/lib/utils';
+import { useStore, Priority } from '@/lib/store';
+import { formatDeadline, getPriorityBgColor, cn } from '@/lib/utils';
+import { useFocusTasks, useCompleteTask } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
+
+interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  priority: string;
+  status: string;
+  deadline?: string;
+  estimateMinutes?: number;
+  isDraft: boolean;
+  groupName?: string;
+}
 
 function getPriorityIcon(priority: Priority) {
   switch (priority) {
@@ -144,17 +157,12 @@ function FocusTaskCard({ task, index, onComplete, onSnooze, onClick }: FocusTask
 }
 
 export function FocusPage() {
-  const tasks = useStore((state) => state.tasks);
   const user = useStore((state) => state.user);
-  const completeTask = useStore((state) => state.completeTask);
-  const updateTask = useStore((state) => state.updateTask);
+  const { data: focusTasks = [], isLoading, error } = useFocusTasks();
+  const { mutate: completeTask } = useCompleteTask();
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-
-  const focusTasks = getFocusTasks(tasks);
-  const todoCount = tasks.filter((t) => t.status === 'TODO').length;
-  const remainingCount = Math.max(0, todoCount - focusTasks.length);
 
   const userName = user?.name ?? 'Друг';
   const today = new Date().toLocaleDateString('ru-RU', {
@@ -164,17 +172,33 @@ export function FocusPage() {
   });
 
   const handleSnooze = (id: string) => {
-    const task = tasks.find((t) => t.id === id);
-    if (!task?.deadline) return;
-    const newDeadline = new Date(task.deadline);
-    newDeadline.setDate(newDeadline.getDate() + 1);
-    updateTask(id, { deadline: newDeadline.toISOString() });
+    // TODO: реализовать перенесение задачи
   };
 
   const handleOpenTask = (task: Task) => {
     setSelectedTask(task);
     setModalOpen(true);
   };
+
+  const handleCompleteTask = (id: string) => {
+    completeTask(id);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-2xl mx-auto flex items-center justify-center min-h-[60vh]">
+        <p className="text-muted-foreground">Загружаем задачи...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-2xl mx-auto flex items-center justify-center min-h-[60vh]">
+        <p className="text-destructive">Ошибка загрузки задач</p>
+      </div>
+    );
+  }
 
   if (focusTasks.length === 0) {
     return (
@@ -240,31 +264,13 @@ export function FocusPage() {
                 key={task.id}
                 task={task}
                 index={index}
-                onComplete={completeTask}
+                onComplete={handleCompleteTask}
                 onSnooze={handleSnooze}
                 onClick={handleOpenTask}
               />
             ))}
           </AnimatePresence>
         </div>
-
-        {/* Task count */}
-        {remainingCount > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-center"
-          >
-            <Link
-              to="/all"
-              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Ещё {remainingCount} {remainingCount === 1 ? 'задача' : 'задач'} в очереди
-              <IconArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </motion.div>
-        )}
       </div>
 
       <TaskDetailModal
