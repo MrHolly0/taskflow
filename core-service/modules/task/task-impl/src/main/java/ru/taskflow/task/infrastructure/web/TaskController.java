@@ -13,9 +13,13 @@ import ru.taskflow.task.api.TaskPriority;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskStatus;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
+import ru.taskflow.task.api.dto.DigestResponse;
+import ru.taskflow.task.api.dto.FocusResponse;
 import ru.taskflow.task.api.dto.TaskFilterRequest;
 import ru.taskflow.task.api.dto.TaskResponse;
 import ru.taskflow.task.api.dto.UpdateTaskRequest;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/v1/tasks")
@@ -79,5 +83,29 @@ public class TaskController {
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
         taskService.delete(user.userId(), id);
+    }
+
+    @GetMapping("/focus")
+    public FocusResponse getFocusTasks(
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        return taskService.getFocusTasks(user.userId());
+    }
+
+    @GetMapping("/digest")
+    public DigestResponse getDigest(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(defaultValue = "#{T(java.time.LocalDate).now()}") LocalDate date
+    ) {
+        return taskService.getDigest(user.userId(), date);
+    }
+
+    @PostMapping("/quick")
+    @ResponseStatus(HttpStatus.CREATED)
+    public TaskResponse createQuick(
+            @RequestBody @Valid CreateTaskRequest request,
+            @AuthenticationPrincipal AuthenticatedUser user
+    ) {
+        return taskService.createQuick(user.userId(), request);
     }
 }

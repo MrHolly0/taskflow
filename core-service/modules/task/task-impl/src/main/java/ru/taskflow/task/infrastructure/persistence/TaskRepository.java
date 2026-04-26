@@ -8,6 +8,8 @@ import org.springframework.data.repository.query.Param;
 import ru.taskflow.task.api.TaskPriority;
 import ru.taskflow.task.api.TaskStatus;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -35,4 +37,50 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             @Param("tag") String tag,
             Pageable pageable
     );
+
+    @Query("""
+            SELECT t FROM TaskJpaEntity t
+            LEFT JOIN FETCH t.group
+            LEFT JOIN FETCH t.tags
+            WHERE t.userId = :userId
+              AND t.status != :done
+              AND t.isDraft = false
+              AND t.isDeleted = false
+            ORDER BY CASE t.priority
+              WHEN 'URGENT' THEN 0
+              WHEN 'HIGH' THEN 1
+              WHEN 'NORMAL' THEN 2
+              ELSE 3
+            END,
+            CASE WHEN t.deadline IS NULL THEN 1 ELSE 0 END,
+            t.deadline
+            """)
+    List<TaskJpaEntity> findFocusTasks(
+            @Param("userId") UUID userId,
+            @Param("done") TaskStatus done
+    );
+
+    @Query("""
+            SELECT t FROM TaskJpaEntity t
+            LEFT JOIN FETCH t.group
+            LEFT JOIN FETCH t.tags
+            WHERE t.userId = :userId
+              AND t.status != :done
+              AND t.isDraft = false
+              AND t.isDeleted = false
+              AND (DATE(t.deadline) = DATE(:date) OR (t.deadline IS NULL))
+            ORDER BY CASE t.priority
+              WHEN 'URGENT' THEN 0
+              WHEN 'HIGH' THEN 1
+              WHEN 'NORMAL' THEN 2
+              ELSE 3
+            END,
+            t.createdAt DESC
+            """)
+    List<TaskJpaEntity> findDigestTasks(
+            @Param("userId") UUID userId,
+            @Param("date") OffsetDateTime date,
+            @Param("done") TaskStatus done
+    );
+
 }

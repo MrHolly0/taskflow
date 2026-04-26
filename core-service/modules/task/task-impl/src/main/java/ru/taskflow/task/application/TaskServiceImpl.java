@@ -9,6 +9,8 @@ import ru.taskflow.notify.api.NotificationService;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskStatus;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
+import ru.taskflow.task.api.dto.DigestResponse;
+import ru.taskflow.task.api.dto.FocusResponse;
 import ru.taskflow.task.api.dto.TaskFilterRequest;
 import ru.taskflow.task.api.dto.TaskResponse;
 import ru.taskflow.task.api.dto.UpdateTaskRequest;
@@ -16,7 +18,9 @@ import ru.taskflow.task.api.exception.GroupNotFoundException;
 import ru.taskflow.task.api.exception.TaskNotFoundException;
 import ru.taskflow.task.infrastructure.persistence.*;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -196,5 +200,70 @@ public class TaskServiceImpl implements TaskService {
             }
         }
         return result;
+    }
+
+    @Override
+    public FocusResponse getFocusTasks(UUID userId) {
+        var tasks = taskRepository.findFocusTasks(userId, TaskStatus.DONE)
+                .stream()
+                .limit(3)
+                .map(taskMapper::toResponse)
+                .toList();
+        return new FocusResponse(tasks);
+    }
+
+    @Override
+    public DigestResponse getDigest(UUID userId, LocalDate date) {
+        var startOfDay = date.atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
+        var allTasks = taskRepository.findDigestTasks(userId, startOfDay, TaskStatus.DONE);
+
+        var topTasks = allTasks.stream()
+                .limit(5)
+                .map(taskMapper::toResponse)
+                .toList();
+
+        long totalTasks = allTasks.size();
+        long completedToday = allTasks.stream()
+                .filter(t -> t.getStatus() == TaskStatus.DONE)
+                .count();
+
+        long overdueTasks = allTasks.stream()
+                .filter(t -> t.getDeadline() != null && t.getDeadline().isBefore(OffsetDateTime.now()) && t.getStatus() != TaskStatus.DONE)
+                .count();
+
+        return new DigestResponse(topTasks, totalTasks, completedToday, overdueTasks);
+    }
+
+    @Override
+    @Transactional
+    public TaskResponse createQuick(UUID userId, CreateTaskRequest request) {
+        var task = new TaskJpaEntity();
+        task.setUserId(userId);
+        task.setTitle(request.title());
+        task.setDescription(request.description());
+        task.setPriority(request.priority());
+        task.setDeadline(request.deadline());
+        task.setEstimateMinutes(request.estimateMinutes());
+        task.setSource(request.source());
+        task.setDraft(false);
+        task.setStatus(TaskStatus.TODO);
+
+        if (request.groupId() != null) {
+            var group = groupRepository.findByIdAndUserId(request.groupId(), userId)
+                    .orElseThrow(() -> new GroupNotFoundException(request.groupId()));
+            task.setGroup(group);
+        }
+
+        if (!request.tags().isEmpty()) {
+            task.setTags(resolveOrCreateTags(userId, request.tags()));
+        }
+
+        TaskJpaEntity savedTask = taskRepository.save(task);
+
+        if (task.getDeadline() != null) {
+            notificationService.scheduleTaskReminder(userId, savedTask.getId(), savedTask.getTitle(), task.getDeadline());
+        }
+
+        return taskMapper.toResponse(savedTask);
     }
 }
