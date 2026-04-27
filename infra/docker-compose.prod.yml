@@ -30,8 +30,8 @@ services:
 
   core-service:
     build:
-      context: ../core-service
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: core-service/Dockerfile
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:?DB_NAME is required}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER is required}
@@ -58,8 +58,8 @@ services:
 
   nlp-worker:
     build:
-      context: ../nlp-worker
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: nlp-worker/Dockerfile
     environment:
       GROQ_API_KEY: ${GROQ_API_KEY:?GROQ_API_KEY is required}
       REDIS_HOST: redis
@@ -73,8 +73,8 @@ services:
 
   notification-worker:
     build:
-      context: ../notification-worker
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: notification-worker/Dockerfile
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
