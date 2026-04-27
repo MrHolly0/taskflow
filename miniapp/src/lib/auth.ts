@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { setApiToken } from './api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
+const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 interface AuthResponse {
   token: string;
@@ -47,6 +47,54 @@ export const authenticateViaInitData = async (): Promise<AuthResponse> => {
   }
 };
 
+export const isTelegramWebApp = (): boolean => {
+  return !!(window.Telegram?.WebApp?.initData);
+};
+
+export const authenticateAsDemoUser = async (): Promise<AuthResponse> => {
+  try {
+    const response = await axios.post<AuthResponse>(
+      `${API_BASE}/auth/dev-token`,
+      { username: 'demo_user' }
+    );
+    const { token } = response.data;
+    setApiToken(token);
+    localStorage.setItem('auth_token', token);
+    if (response.data.refreshToken) {
+      localStorage.setItem('refresh_token', response.data.refreshToken);
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Demo authentication failed:', error);
+    throw error;
+  }
+};
+
+export const authenticateViaLoginWidget = async (
+  widgetData: Record<string, string | number>
+): Promise<AuthResponse> => {
+  const fields: Record<string, string> = {};
+  for (const [key, value] of Object.entries(widgetData)) {
+    fields[key] = String(value);
+  }
+  try {
+    const response = await axios.post<AuthResponse>(
+      `${API_BASE}/auth/telegram-login`,
+      { fields }
+    );
+    const { token } = response.data;
+    setApiToken(token);
+    localStorage.setItem('auth_token', token);
+    if (response.data.refreshToken) {
+      localStorage.setItem('refresh_token', response.data.refreshToken);
+    }
+    return response.data;
+  } catch (error) {
+    console.error('Login widget auth failed:', error);
+    throw error;
+  }
+};
+
 export const getStoredToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
@@ -57,7 +105,18 @@ export const clearAuthTokens = () => {
 };
 
 export const initializeTelegramWebApp = () => {
-  if (window.Telegram?.WebApp) {
-    window.Telegram.WebApp.ready();
+  const twa = window.Telegram?.WebApp;
+  if (!twa) return;
+  twa.ready();
+  twa.expand();
+  twa.disableVerticalSwipes?.();
+};
+
+export const getUserFromToken = (token: string): { id: string; username: string } | null => {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return { id: payload.sub ?? '', username: payload.username ?? '' };
+  } catch {
+    return null;
   }
 };

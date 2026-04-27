@@ -42,12 +42,10 @@ docker compose -f docker-compose.prod.yml down
 ```
 
 Отличия от dev:
-- Лимиты ресурсов на каждый сервис (CPU, память)
 - Health checks включены
 - Restart policies: `on-failure`
 - Нет pgAdmin (безопасность)
 - TLS/HTTPS через nginx + Let's Encrypt
-- Логирование в `/var/log/taskflow/`
 
 ## Переменные окружения
 
@@ -85,9 +83,8 @@ APP_NOTIFICATION_POLL_INTERVAL_MS=30000
 Reverse proxy маршруты:
 - `/` → miniapp (React фронтенд)
 - `/api/` → core-service:8080
-- `/nlp/` → nlp-worker:8081
-- `/notify/` → notification-worker:8082
-- `/.well-known/` → certbot (Let's Encrypt)
+- `/telegram/webhook` → core-service:8080
+- `/swagger-ui.html` → core-service:8080
 
 Для HTTPS на production:
 ```bash

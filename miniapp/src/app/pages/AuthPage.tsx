@@ -1,8 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { IconBrandTelegram, IconSparkles, IconBolt, IconShield } from '@tabler/icons-react';
 import { motion } from 'motion/react';
 import { useStore } from '@/lib/store';
-import { authenticateViaInitData } from '@/lib/auth';
+import { authenticateViaInitData, authenticateAsDemoUser, authenticateViaLoginWidget, isTelegramWebApp, getStoredToken, getUserFromToken } from '@/lib/auth';
+
+const BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'MHTaskFlowAI_Bot';
+
+function TelegramLoginWidget({ onAuth }: { onAuth: (user: Record<string, string | number>) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    (window as any).onTelegramWidgetAuth = onAuth;
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-widget.js?22';
+    script.setAttribute('data-telegram-login', BOT_USERNAME);
+    script.setAttribute('data-size', 'large');
+    script.setAttribute('data-onauth', 'onTelegramWidgetAuth(user)');
+    script.setAttribute('data-request-access', 'write');
+    script.async = true;
+    containerRef.current.innerHTML = '';
+    containerRef.current.appendChild(script);
+    return () => { delete (window as any).onTelegramWidgetAuth; };
+  }, [onAuth]);
+
+  return <div ref={containerRef} className="flex justify-center" />;
+}
 
 const features = [
   {
@@ -24,19 +47,58 @@ const features = [
 
 export function AuthPage() {
   const setAuthenticated = useStore((s) => s.setAuthenticated);
+  const login = useStore((s) => s.login);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const applyAuth = () => {
+    const token = getStoredToken();
+    if (token) {
+      const info = getUserFromToken(token);
+      if (info) login({ id: info.id, name: info.username, username: info.username });
+    }
+    setAuthenticated(true);
+  };
 
   const handleTelegramLogin = async () => {
     setLoading(true);
     setError(null);
     try {
       await authenticateViaInitData();
-      setAuthenticated(true);
+      applyAuth();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Ошибка авторизации';
       setError(message);
       console.error('Auth error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await authenticateAsDemoUser();
+      applyAuth();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Ошибка авторизации';
+      setError(message);
+      console.error('Demo auth error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWidgetAuth = async (user: Record<string, string | number>) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await authenticateViaLoginWidget(user);
+      applyAuth();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Ошибка авторизации через Telegram';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -113,6 +175,27 @@ export function AuthPage() {
                 </>
               )}
             </button>
+
+            {!isTelegramWebApp() && (
+              <TelegramLoginWidget onAuth={handleWidgetAuth} />
+            )}
+
+            {!isTelegramWebApp() && (
+              <button
+                onClick={handleDemoLogin}
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed border border-border bg-muted/50 text-foreground"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                    Входим...
+                  </>
+                ) : (
+                  'Попробовать демо'
+                )}
+              </button>
+            )}
 
             {error && (
               <p className="text-center text-xs text-red-500 px-4">

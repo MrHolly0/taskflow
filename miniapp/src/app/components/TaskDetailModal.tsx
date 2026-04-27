@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { IconTrash, IconClock, IconX } from '@tabler/icons-react';
-import { useStore, Task, Priority, Status, getStatusLabel, getPriorityLabel } from '@/lib/store';
+import { IconTrash, IconClock } from '@tabler/icons-react';
+import { Priority, Status } from '@/lib/store';
+import { useUpdateTask, useDeleteTask, useGroups } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -33,51 +34,87 @@ const STATUS_OPTIONS: { value: Status; label: string }[] = [
   { value: 'CANCELLED', label: 'Отменено' },
 ];
 
+export interface TaskInput {
+  id: string;
+  title: string;
+  description?: string;
+  priority: string;
+  status: string;
+  deadline?: string;
+  group?: string;
+  groupName?: string;
+  groupId?: string;
+  estimatedTime?: number;
+  estimateMinutes?: number;
+}
+
 interface TaskDetailModalProps {
-  task: Task | null;
+  task: TaskInput | null;
   open: boolean;
   onClose: () => void;
 }
 
+function toDatetimeLocal(iso?: string): string {
+  if (!iso) return '';
+  return iso.slice(0, 16);
+}
+
 export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
-  const updateTask = useStore((s) => s.updateTask);
-  const deleteTask = useStore((s) => s.deleteTask);
-  const groups = useStore((s) => s.groups);
+  const { mutateAsync: updateTask } = useUpdateTask();
+  const { mutate: deleteTask } = useDeleteTask();
+  const { data: groups = [] } = useGroups();
 
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [description, setDescription] = useState(task?.description ?? '');
-  const [priority, setPriority] = useState<Priority>(task?.priority ?? 'MEDIUM');
-  const [status, setStatus] = useState<Status>(task?.status ?? 'TODO');
-  const [group, setGroup] = useState<string>(task?.group ?? '');
-  const [estimatedTime, setEstimatedTime] = useState<string>(
-    task?.estimatedTime ? String(task.estimatedTime) : ''
-  );
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<Priority>('MEDIUM');
+  const [status, setStatus] = useState<Status>('TODO');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+  const [deadline, setDeadline] = useState('');
+  const [estimatedTime, setEstimatedTime] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  // Sync state when task changes
   useEffect(() => {
     if (task) {
       setTitle(task.title);
       setDescription(task.description ?? '');
-      setPriority(task.priority);
-      setStatus(task.status);
-      setGroup(task.group ?? '');
-      setEstimatedTime(task.estimatedTime ? String(task.estimatedTime) : '');
+      setPriority((task.priority as Priority) ?? 'MEDIUM');
+      setStatus((task.status as Status) ?? 'TODO');
+      setDeadline(toDatetimeLocal(task.deadline));
+      const estimate = task.estimateMinutes ?? task.estimatedTime;
+      setEstimatedTime(estimate ? String(estimate) : '');
+      // resolve initial group id
+      if (task.groupId) {
+        setSelectedGroupId(task.groupId);
+      } else {
+        const groupLabel = task.groupName ?? task.group ?? '';
+        const found = groups.find(g => g.name === groupLabel);
+        setSelectedGroupId(found?.id ?? '');
+      }
     }
-  }, [task?.id]);
+  }, [task?.id, groups.length]);
 
   const taskId = task?.id;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!taskId) return;
-    updateTask(taskId, {
-      title,
-      description,
-      priority,
-      status,
-      group: group || undefined,
-      estimatedTime: estimatedTime ? parseInt(estimatedTime) : undefined,
-    });
-    onClose();
+    setSaving(true);
+    try {
+      await updateTask({
+        id: taskId,
+        title: title.trim() || undefined,
+        description: description || undefined,
+        priority,
+        status,
+        deadline: deadline ? `${deadline}:00Z` : undefined,
+        groupId: selectedGroupId || undefined,
+        estimateMinutes: estimatedTime ? parseInt(estimatedTime) : undefined,
+      });
+      onClose();
+    } catch {
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = () => {
@@ -86,20 +123,16 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
     onClose();
   };
 
-  const handleOpenChange = (open: boolean) => {
-    if (!open) onClose();
-  };
-
   if (!task) return null;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg w-full">
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="sr-only">Задача</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5">
+        <div className="space-y-3">
           {/* Title */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -165,15 +198,31 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
             </div>
           </div>
 
-          {/* Group + Time row */}
+          {/* Deadline */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Дедлайн
+            </label>
+            <div className="relative">
+              <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="datetime-local"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="pl-9 h-10 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Group + Estimate row */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Группа
               </label>
               <Select
-                value={group || '__none__'}
-                onValueChange={(v) => setGroup(v === '__none__' ? '' : v)}
+                value={selectedGroupId || '__none__'}
+                onValueChange={(v) => setSelectedGroupId(v === '__none__' ? '' : v)}
               >
                 <SelectTrigger className="h-10">
                   <SelectValue placeholder="Без группы" />
@@ -181,7 +230,7 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
                 <SelectContent>
                   <SelectItem value="__none__">Без группы</SelectItem>
                   {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.name}>
+                    <SelectItem key={g.id} value={g.id}>
                       {g.name}
                     </SelectItem>
                   ))}
@@ -191,25 +240,22 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
 
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Время (мин)
+                Оценка (мин)
               </label>
-              <div className="relative">
-                <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="number"
-                  value={estimatedTime}
-                  onChange={(e) => setEstimatedTime(e.target.value)}
-                  placeholder="30"
-                  className="pl-9 h-10"
-                />
-              </div>
+              <Input
+                type="number"
+                value={estimatedTime}
+                onChange={(e) => setEstimatedTime(e.target.value)}
+                placeholder="30"
+                className="h-10"
+              />
             </div>
           </div>
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-1">
-            <Button onClick={handleSave} className="flex-1 h-10">
-              Сохранить
+            <Button onClick={handleSave} disabled={saving} className="flex-1 h-10">
+              {saving ? 'Сохраняем...' : 'Сохранить'}
             </Button>
             <Button
               variant="ghost"

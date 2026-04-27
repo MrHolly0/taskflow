@@ -12,7 +12,8 @@ import { StatsPage } from '@/app/pages/StatsPage';
 import { SettingsPage } from '@/app/pages/SettingsPage';
 import { AuthPage } from '@/app/pages/AuthPage';
 import { useStore } from '@/lib/store';
-import { getStoredToken, authenticateViaInitData, initializeTelegramWebApp } from '@/lib/auth';
+import { getStoredToken, authenticateViaInitData, isTelegramWebApp, initializeTelegramWebApp, getUserFromToken } from '@/lib/auth';
+import { setApiToken } from '@/lib/api';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,27 +27,47 @@ const queryClient = new QueryClient({
 function AppContent() {
   const isAuthenticated = useStore((s) => s.isAuthenticated);
   const setAuthenticated = useStore((s) => s.setAuthenticated);
+  const login = useStore((s) => s.login);
   const [isInitializing, setIsInitializing] = useState(true);
+
+  const applyToken = (token: string): boolean => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem('auth_token');
+        return false;
+      }
+    } catch { /* malformed – treat as valid and let API reject it */ }
+
+    const info = getUserFromToken(token);
+    if (info) {
+      setApiToken(token);
+      login({ id: info.id, name: info.username, username: info.username });
+    }
+    setAuthenticated(true);
+    setIsInitializing(false);
+    return true;
+  };
+
+  const reAuthOrShowLogin = () => {
+    if (isTelegramWebApp()) {
+      authenticateViaInitData()
+        .then(() => {
+          const t = getStoredToken();
+          if (t) applyToken(t); else { setAuthenticated(true); setIsInitializing(false); }
+        })
+        .catch(() => setIsInitializing(false));
+    } else {
+      setIsInitializing(false);
+    }
+  };
 
   useEffect(() => {
     initializeTelegramWebApp();
     const token = getStoredToken();
-
-    if (token) {
-      setAuthenticated(true);
-      setIsInitializing(false);
-    } else {
-      authenticateViaInitData()
-        .then(() => {
-          setAuthenticated(true);
-          setIsInitializing(false);
-        })
-        .catch((error) => {
-          console.error('Authentication failed:', error);
-          setIsInitializing(false);
-        });
-    }
-  }, [setAuthenticated]);
+    if (token && applyToken(token)) return;
+    reAuthOrShowLogin();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isInitializing) {
     return (
@@ -77,7 +98,7 @@ function AppContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
         <BrowserRouter>
           <AppContent />
           <Toaster />

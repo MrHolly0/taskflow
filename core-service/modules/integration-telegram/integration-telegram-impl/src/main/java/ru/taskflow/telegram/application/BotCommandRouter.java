@@ -1,6 +1,7 @@
 package ru.taskflow.telegram.application;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,9 @@ public class BotCommandRouter {
     private final TaskService taskService;
     private final TelegramMessageSender sender;
 
+    @Value("${app.telegram.miniapp-url:}")
+    private String miniappUrl;
+
     public void handle(TelegramMessage message, UUID userId) {
         String command = parseCommand(message.text());
         long chatId = message.chat().id();
@@ -33,14 +37,20 @@ public class BotCommandRouter {
     }
 
     private void sendWelcome(long chatId, String firstName) {
-        sender.sendMessage(chatId, """
-                Привет, %s!
+        String text = """
+                Привет, %s! 👋
 
                 Я TaskFlow — помогаю управлять задачами. Просто напишите задачу, и я её сохраню.
 
                 /today — ваши задачи
                 /help — помощь
-                """.formatted(firstName));
+                """.formatted(firstName);
+
+        if (!miniappUrl.isBlank()) {
+            sender.sendMessageWithWebApp(chatId, text, "📱 Открыть TaskFlow", miniappUrl);
+        } else {
+            sender.sendMessage(chatId, text);
+        }
     }
 
     private void sendHelp(long chatId) {

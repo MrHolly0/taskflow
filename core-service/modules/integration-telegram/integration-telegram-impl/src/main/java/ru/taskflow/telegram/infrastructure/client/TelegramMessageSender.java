@@ -39,5 +39,11 @@ public class TelegramMessageSender {
         apiClient.answerCallbackQuery(callbackQueryId, text);
     }
 
+    public void sendMessageWithWebApp(long chatId, String text, String buttonText, String webAppUrl) {
+        var button = Map.of("text", buttonText, "web_app", Map.of("url", webAppUrl));
+        var replyMarkup = Map.of("inline_keyboard", List.of(List.of(button)));
+        apiClient.sendMessageWithKeyboard(chatId, text, "HTML", replyMarkup);
+    }
+
     public record InlineButton(String text, String callbackData) {}
 }

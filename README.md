@@ -87,24 +87,28 @@ taskflow/
 - Веб-сайт: использует Telegram Login Widget
 - Telegram бот: использует HMAC-SHA256 валидацию webhook
 
-JWT токены хранятся в памяти (XSS-безопасность), refresh токены в Redis.
+JWT токены хранятся в `localStorage`, refresh токены в Redis.
 
 ## Основные API эндпоинты
 
 ```bash
 # Авторизация
-POST /api/v1/auth/telegram-miniapp
+POST /api/v1/auth/telegram-miniapp   # Telegram Mini App (initData)
+POST /api/v1/auth/telegram-login     # Telegram Login Widget (веб)
+POST /api/v1/auth/dev-token          # Dev/demo токен
 
 # Задачи
-GET /api/v1/tasks/focus              # 1-3 приоритетные задачи
-GET /api/v1/tasks/digest?date=YYYY-MM-DD  # Дайджест на день
-POST /api/v1/tasks                   # Создать (черновик)
-PATCH /api/v1/tasks/{id}             # Обновить
-POST /api/v1/tasks/{id}/confirm      # Подтвердить черновик
+GET  /api/v1/tasks/focus             # 1-3 приоритетные задачи
+GET  /api/v1/tasks/digest?date=...   # Дайджест на день
+GET  /api/v1/tasks?size=100          # Полный список (Page<TaskResponse>)
+POST /api/v1/tasks                   # Создать
+PATCH /api/v1/tasks/{id}             # Обновить статус/приоритет/дедлайн
+POST /api/v1/tasks/{id}/complete     # Отметить выполненной
+POST /api/v1/tasks/parse-text        # NLP-разбор текста → массив задач
 DELETE /api/v1/tasks/{id}            # Удалить
 
 # Telegram webhook
-POST /api/telegram/webhook           # Входящие сообщения от бота
+POST /telegram/webhook               # Входящие сообщения от бота
 ```
 
 ## Конфигурация

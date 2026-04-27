@@ -4,7 +4,7 @@ import { IconFlame, IconBolt, IconSquare, IconClock, IconArrowRight, IconPencil 
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore, Priority } from '@/lib/store';
 import { formatDeadline, getPriorityBgColor, cn } from '@/lib/utils';
-import { useFocusTasks, useCompleteTask } from '@/lib/hooks/useTasks';
+import { useFocusTasks, useCompleteTask, useUpdateTask, useTasksList } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
@@ -81,17 +81,17 @@ function FocusTaskCard({ task, index, onComplete, onSnooze, onClick }: FocusTask
       <Card
         className={cn(
           'p-5 space-y-4 transition-shadow hover:shadow-md border border-border/60',
-          getPriorityBgColor(task.priority)
+          getPriorityBgColor(task.priority as Priority)
         )}
       >
         {/* Header row */}
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0 mt-0.5">
-            {getPriorityIcon(task.priority)}
+            {getPriorityIcon(task.priority as Priority)}
           </div>
           <div className="flex-1 min-w-0 space-y-0.5">
-            <div className={cn('text-xs font-semibold uppercase tracking-wide', getPriorityBadgeClass(task.priority))}>
-              {getPriorityLabel(task.priority)}
+            <div className={cn('text-xs font-semibold uppercase tracking-wide', getPriorityBadgeClass(task.priority as Priority))}>
+              {getPriorityLabel(task.priority as Priority)}
             </div>
             <button
               onClick={() => onClick(task)}
@@ -105,7 +105,7 @@ function FocusTaskCard({ task, index, onComplete, onSnooze, onClick }: FocusTask
         </div>
 
         {/* Meta info */}
-        {(task.deadline || task.group || task.estimatedTime) && (
+        {(task.deadline || task.groupName || task.estimateMinutes) && (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
             {task.deadline && (
               <div className="flex items-center gap-1.5">
@@ -113,14 +113,14 @@ function FocusTaskCard({ task, index, onComplete, onSnooze, onClick }: FocusTask
                 <span>{formatDeadline(task.deadline)}</span>
               </div>
             )}
-            {task.group && (
+            {task.groupName && (
               <div className="flex items-center gap-1">
-                <span>{task.group}</span>
+                <span>{task.groupName}</span>
               </div>
             )}
-            {task.estimatedTime && (
+            {task.estimateMinutes && (
               <div className="flex items-center gap-1">
-                <span>~{task.estimatedTime} мин</span>
+                <span>~{task.estimateMinutes} мин</span>
               </div>
             )}
           </div>
@@ -159,7 +159,12 @@ function FocusTaskCard({ task, index, onComplete, onSnooze, onClick }: FocusTask
 export function FocusPage() {
   const user = useStore((state) => state.user);
   const { data: focusTasks = [], isLoading, error } = useFocusTasks();
+  const { data: allTasks = [] } = useTasksList();
   const { mutate: completeTask } = useCompleteTask();
+  const { mutate: updateTask } = useUpdateTask();
+
+  const pendingCount = allTasks.filter((t: any) => t.status !== 'DONE' && t.status !== 'CANCELLED' && !t.isDraft).length;
+  const remainingCount = Math.max(0, pendingCount - focusTasks.length);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -172,7 +177,10 @@ export function FocusPage() {
   });
 
   const handleSnooze = (id: string) => {
-    // TODO: реализовать перенесение задачи
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(9, 0, 0, 0);
+    updateTask({ id, deadline: tomorrow.toISOString() });
   };
 
   const handleOpenTask = (task: Task) => {
@@ -236,15 +244,13 @@ export function FocusPage() {
             <h1 className="text-2xl font-semibold">Привет, {userName}!</h1>
             <p className="text-muted-foreground text-sm capitalize">{today}</p>
           </div>
-          {remainingCount > 0 && (
-            <Link
-              to="/all"
-              className="flex-shrink-0 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <span>Ещё {remainingCount}</span>
-              <IconArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          )}
+          <Link
+            to="/all"
+            className="flex-shrink-0 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <span>{remainingCount > 0 ? `Ещё ${remainingCount}` : 'Все задачи'}</span>
+            <IconArrowRight className="h-3.5 w-3.5" />
+          </Link>
         </div>
 
         {/* Focus label */}

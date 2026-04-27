@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { IconPlus, IconTrash, IconCheck, IconDots, IconArrowRight } from '@tabler/icons-react';
 import { useStore, Group, Task } from '@/lib/store';
+import { GroupResponse } from '@/lib/hooks/useTasks';
 import { getGroupIcon } from '@/lib/group-icons';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -21,12 +22,12 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
-import { getStatusLabel, getPriorityLabel } from '@/lib/store';
+import { getStatusLabel } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
 
 interface GroupDetailModalProps {
-  group: Group | null;
+  group: GroupResponse | null;
   open: boolean;
   onClose: () => void;
 }
@@ -54,7 +55,7 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
   const [openedTask, setOpenedTask] = useState<Task | null>(null);
 
   if (!group) return null;
-  const GroupIcon = getGroupIcon(group.icon);
+  const GroupIcon = getGroupIcon(group.icon ?? 'briefcase');
 
   const groupTasks = tasks.filter((t) => t.group === group.name);
   const activeTasks = groupTasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');

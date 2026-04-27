@@ -22,6 +22,7 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             LEFT JOIN FETCH t.group g
             LEFT JOIN FETCH t.tags
             WHERE t.userId = :userId
+              AND t.isDraft = false
               AND (:groupId IS NULL OR t.group.id = :groupId)
               AND (:status IS NULL OR t.status = :status)
               AND (:priority IS NULL OR t.priority = :priority)

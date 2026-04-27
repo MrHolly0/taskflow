@@ -15,6 +15,7 @@ public record CreateTaskRequest(
         TaskPriority priority,
         OffsetDateTime deadline,
         UUID groupId,
+        String groupName,
         List<String> tags,
         Integer estimateMinutes,
         TaskSource source

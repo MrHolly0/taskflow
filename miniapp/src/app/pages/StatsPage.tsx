@@ -1,36 +1,38 @@
-import { useStore } from '@/lib/store';
 import { Card } from '@/app/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useDigestTasks, useTasksList } from '@/lib/hooks/useTasks';
 
 export function StatsPage() {
-  const tasks = useStore((state) => state.tasks);
+  const { data: digest } = useDigestTasks();
+  const { data: allTasks = [] } = useTasksList();
 
-  const thisWeek = tasks.filter((task) => {
-    const createdAt = new Date(task.createdAt);
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return createdAt >= weekAgo;
-  });
-
-  const created = thisWeek.length;
-  const done = thisWeek.filter((t) => t.status === 'DONE').length;
-  const urgent = thisWeek.filter((t) => t.priority === 'URGENT').length;
+  const created = digest?.totalTasks ?? 0;
+  const done = digest?.completedToday ?? 0;
+  const overdue = digest?.overdueTasks ?? 0;
 
   const activityData = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
-    const dayTasks = tasks.filter((task) => {
-      const taskDate = new Date(task.createdAt);
-      return taskDate.toDateString() === date.toDateString();
-    });
+    const dayStr = date.toDateString();
+
+    const totalDay = allTasks.filter((task: any) =>
+      new Date(task.createdAt).toDateString() === dayStr
+    ).length;
+
+    const completedDay = allTasks.filter((task: any) =>
+      task.completedAt && new Date(task.completedAt).toDateString() === dayStr
+    ).length;
 
     return {
       name: date.toLocaleDateString('ru-RU', { weekday: 'short' }),
-      tasks: dayTasks.length,
+      создано: totalDay,
+      сделано: completedDay,
     };
   });
 
-  const streak = 5;
+  const activeDays = new Set(
+    allTasks.map((t: any) => new Date(t.createdAt).toDateString())
+  ).size;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -44,12 +46,12 @@ export function StatsPage() {
             <div className="text-xs text-muted-foreground mt-1.5">создано</div>
           </Card>
           <Card className="p-5 text-center">
-            <div className="text-3xl font-bold">{done}</div>
+            <div className="text-3xl font-bold text-green-600 dark:text-green-400">{done}</div>
             <div className="text-xs text-muted-foreground mt-1.5">сделано</div>
           </Card>
           <Card className="p-5 text-center">
-            <div className="text-3xl font-bold">{urgent}</div>
-            <div className="text-xs text-muted-foreground mt-1.5">срочных</div>
+            <div className="text-3xl font-bold text-red-500">{overdue}</div>
+            <div className="text-xs text-muted-foreground mt-1.5">просрочено</div>
           </Card>
         </div>
       </div>
@@ -58,7 +60,7 @@ export function StatsPage() {
         <div className="flex items-center gap-4">
           <div className="text-4xl">🔥</div>
           <div>
-            <div className="text-xl font-semibold">{streak} дней подряд</div>
+            <div className="text-xl font-semibold">{activeDays} активных дней</div>
             <p className="text-sm text-muted-foreground">Не пропускай завтра!</p>
           </div>
         </div>
@@ -66,8 +68,8 @@ export function StatsPage() {
 
       <Card className="p-5 space-y-4">
         <h2 className="text-sm font-medium">Активность по дням</h2>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={activityData}>
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={activityData} barCategoryGap="30%">
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis
               dataKey="name"
@@ -91,7 +93,11 @@ export function StatsPage() {
                 fontSize: '12px',
               }}
             />
-            <Bar dataKey="tasks" fill="var(--primary)" radius={[6, 6, 0, 0]} />
+            <Legend
+              wrapperStyle={{ fontSize: '12px', color: 'var(--muted-foreground)' }}
+            />
+            <Bar dataKey="создано" fill="var(--muted-foreground)" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="сделано" fill="var(--primary)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </Card>

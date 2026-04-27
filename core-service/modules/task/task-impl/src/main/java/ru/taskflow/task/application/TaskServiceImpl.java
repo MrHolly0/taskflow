@@ -54,11 +54,7 @@ public class TaskServiceImpl implements TaskService {
         task.setSource(request.source());
         task.setDraft(true);
 
-        if (request.groupId() != null) {
-            var group = groupRepository.findByIdAndUserId(request.groupId(), userId)
-                    .orElseThrow(() -> new GroupNotFoundException(request.groupId()));
-            task.setGroup(group);
-        }
+        task.setGroup(resolveGroup(userId, request.groupId(), request.groupName()));
 
         if (!request.tags().isEmpty()) {
             task.setTags(resolveOrCreateTags(userId, request.tags()));
@@ -215,6 +211,23 @@ public class TaskServiceImpl implements TaskService {
         return result;
     }
 
+    private GroupJpaEntity resolveGroup(UUID userId, UUID groupId, String groupName) {
+        if (groupId != null) {
+            return groupRepository.findByIdAndUserId(groupId, userId)
+                    .orElseThrow(() -> new GroupNotFoundException(groupId));
+        }
+        if (groupName != null && !groupName.isBlank()) {
+            return groupRepository.findByUserIdAndName(userId, groupName)
+                    .orElseGet(() -> {
+                        var g = new GroupJpaEntity();
+                        g.setUserId(userId);
+                        g.setName(groupName);
+                        return groupRepository.save(g);
+                    });
+        }
+        return null;
+    }
+
     private Map<String, Object> buildDelta(TaskJpaEntity task, UpdateTaskRequest request) {
         Map<String, Object> delta = new HashMap<>();
         if (request.title() != null && !request.title().equals(task.getTitle())) {
@@ -284,11 +297,7 @@ public class TaskServiceImpl implements TaskService {
         task.setDraft(false);
         task.setStatus(TaskStatus.TODO);
 
-        if (request.groupId() != null) {
-            var group = groupRepository.findByIdAndUserId(request.groupId(), userId)
-                    .orElseThrow(() -> new GroupNotFoundException(request.groupId()));
-            task.setGroup(group);
-        }
+        task.setGroup(resolveGroup(userId, request.groupId(), request.groupName()));
 
         if (!request.tags().isEmpty()) {
             task.setTags(resolveOrCreateTags(userId, request.tags()));

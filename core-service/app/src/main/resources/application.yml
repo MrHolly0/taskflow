@@ -32,6 +32,7 @@ app:
     auth-date-max-age: ${TELEGRAM_AUTH_MAX_AGE:86400}
     webhook-secret: ${TELEGRAM_WEBHOOK_SECRET:}
     voice-dir: ${TELEGRAM_VOICE_DIR:/tmp/taskflow/voice}
+    miniapp-url: ${MINIAPP_URL:}
   nlp:
     worker-url: ${NLP_WORKER_URL:http://localhost:8081}
     connect-timeout-seconds: 5

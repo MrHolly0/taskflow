@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { IconPlus, IconCheck, IconFolderOpen } from '@tabler/icons-react';
 import { motion } from 'motion/react';
-import { useStore, Group } from '@/lib/store';
+import { useTasksList, useGroups, useCreateGroup, GroupResponse } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -32,14 +32,14 @@ function CreateGroupModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const addGroup = useStore((s) => s.addGroup);
+  const { mutate: createGroup } = useCreateGroup();
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('briefcase');
   const [color, setColor] = useState('blue');
 
   const handleCreate = () => {
     if (!name.trim()) return;
-    addGroup({ name: name.trim(), icon, color });
+    createGroup({ name: name.trim(), icon, color });
     setName('');
     setIcon('briefcase');
     setColor('blue');
@@ -139,20 +139,20 @@ function getColorHex(color: string): string {
 }
 
 export function GroupsPage() {
-  const groups = useStore((state) => state.groups);
-  const tasks = useStore((state) => state.tasks);
+  const { data: groups = [] } = useGroups();
+  const { data: apiTasks = [] } = useTasksList();
   const [createOpen, setCreateOpen] = useState(false);
-  const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<GroupResponse | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
   const getGroupStats = (groupName: string) => {
-    const groupTasks = tasks.filter((t) => t.group === groupName);
-    const done = groupTasks.filter((t) => t.status === 'DONE').length;
-    const active = groupTasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
+    const groupTasks = apiTasks.filter((t: any) => t.groupName === groupName);
+    const done = groupTasks.filter((t: any) => t.status === 'DONE').length;
+    const active = groupTasks.filter((t: any) => t.status !== 'DONE' && t.status !== 'CANCELLED').length;
     return { total: groupTasks.length, done, active };
   };
 
-  const handleOpenGroup = (group: Group) => {
+  const handleOpenGroup = (group: GroupResponse) => {
     setSelectedGroup(group);
     setDetailOpen(true);
   };
@@ -184,7 +184,7 @@ export function GroupsPage() {
             const stats = getGroupStats(group.name);
             const cardStyle = GROUP_CARD_STYLE[group.color ?? 'blue'] ?? GROUP_CARD_STYLE.blue;
             const progress = stats.total > 0 ? (stats.done / stats.total) * 100 : 0;
-            const Icon = getGroupIcon(group.icon);
+            const Icon = getGroupIcon(group.icon ?? 'briefcase');
 
             return (
               <motion.button

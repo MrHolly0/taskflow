@@ -313,17 +313,7 @@ sudo certbot renew --force-renewal
 
 ## Resource Management
 
-Production `docker-compose.prod.yml` includes resource limits:
-
-- PostgreSQL: 1 CPU, 512 MB RAM
-- Redis: 0.5 CPU, 256 MB RAM
-- Core service: 2 CPU, 1024 MB RAM
-- NLP worker: 1 CPU, 512 MB RAM
-- Notification worker: 0.5 CPU, 256 MB RAM
-- Mini App: 0.5 CPU, 256 MB RAM
-- Nginx: 0.5 CPU, 256 MB RAM
-
-Adjust in `docker-compose.prod.yml` based on your server specs.
+`docker-compose.prod.yml` не включает жёстких лимитов ресурсов — Docker Swarm `deploy.resources` не поддерживается в standalone compose. При необходимости ограничьте через cgroups на уровне хоста или используйте Kubernetes.
 
 ## Environment Variables Reference
 
@@ -349,7 +339,7 @@ Adjust in `docker-compose.prod.yml` based on your server specs.
 | NLP_PORT | No | 8081 | NLP worker port |
 | NOTIFICATION_PORT | No | 8082 | Notification worker port |
 | MINIAPP_PORT | No | 3000 | Mini App port |
-| VITE_API_URL | No | http://localhost:8080/api/v1 | Frontend API URL |
+| VITE_API_URL | No | /api/v1 | Frontend API URL (build-time ARG, по умолчанию — относительный путь через nginx) |
 | APP_DOMAIN | No | localhost | Domain for production |
 
 ## Support

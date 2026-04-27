@@ -15,8 +15,14 @@ export function formatDeadline(deadline: string): string {
   const days = Math.floor(hours / 24);
 
   if (hours < 0) {
-    const absDays = Math.abs(days);
-    return `Просрочено на ${absDays} ${getDaysWord(absDays)}`;
+    const absHours = Math.abs(hours);
+    const absDays = Math.floor(absHours / 24);
+    if (absDays > 0) {
+      return `Просрочено на ${absDays} ${getDaysWord(absDays)}`;
+    }
+    return absHours > 0
+      ? `Просрочено на ${absHours} ${getHoursWord(absHours)}`
+      : 'Просрочено';
   }
 
   if (hours < 1) {

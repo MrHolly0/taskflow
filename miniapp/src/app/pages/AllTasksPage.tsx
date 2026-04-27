@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { IconSearch, IconPlus, IconClock, IconInbox } from '@tabler/icons-react';
-import { useStore, Status } from '@/lib/store';
+import { Status } from '@/lib/store';
 import { formatDeadline, cn } from '@/lib/utils';
 import { getStatusLabel } from '@/lib/store';
-import { useAllTasks, useCompleteTask } from '@/lib/hooks/useTasks';
+import { useTasksList } from '@/lib/hooks/useTasks';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -19,6 +19,7 @@ interface Task {
   deadline?: string;
   estimateMinutes?: number;
   isDraft: boolean;
+  groupId?: string;
   groupName?: string;
 }
 
@@ -45,9 +46,7 @@ export function AllTasksPage() {
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [quickInputOpen, setQuickInputOpen] = useState(false);
 
-  const { data: allTasks = [], isLoading, error } = useAllTasks();
-  const { mutate: completeTask } = useCompleteTask();
-
+  const { data: allTasks = [], isLoading, error } = useTasksList();
   const filteredTasks = (allTasks || []).filter((task) => {
     if (search && !task.title.toLowerCase().includes(search.toLowerCase())) {
       return false;
@@ -152,9 +151,9 @@ export function AllTasksPage() {
                     </span>
                     <span className={cn(
                       'text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0',
-                      STATUS_COLOR[task.status]
+                      STATUS_COLOR[task.status as Status]
                     )}>
-                      {getStatusLabel(task.status)}
+                      {getStatusLabel(task.status as Status)}
                     </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
@@ -164,8 +163,8 @@ export function AllTasksPage() {
                         {formatDeadline(task.deadline)}
                       </span>
                     )}
-                    {task.group && <span>{task.group}</span>}
-                    {task.estimatedTime && <span>~{task.estimatedTime} мин</span>}
+                    {task.groupName && <span>{task.groupName}</span>}
+                    {task.estimateMinutes && <span>~{task.estimateMinutes} мин</span>}
                   </div>
                 </div>
 

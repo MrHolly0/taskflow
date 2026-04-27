@@ -7,7 +7,6 @@ import {
   IconTags,
   IconChartBar,
   IconSettings,
-  IconMicrophone,
   IconPlus,
   IconMoon,
   IconSun,
@@ -167,7 +166,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           onClick={() => setQuickInputOpen(true)}
           className="lg:hidden fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
         >
-          <IconMicrophone className="h-6 w-6" />
+          <IconPlus className="h-6 w-6" />
         </button>
 
         {/* Mobile Bottom Navigation */}

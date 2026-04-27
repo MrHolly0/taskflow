@@ -67,9 +67,10 @@ public class AuthController {
     @PostMapping("/dev-token")
     @ResponseStatus(HttpStatus.OK)
     public AuthResponse devToken(@RequestBody Map<String, String> body) {
-        UUID userId = UUID.fromString(body.get("userId"));
-        String username = body.get("username");
-        return issueTokens(userId, username);
+        String username = body.getOrDefault("username", "dev_user");
+        long fakeTelegramId = -1_000_000_000L - Math.abs((long) username.hashCode() % 1_000_000_000L);
+        var dto = userService.findOrCreateByTelegram(fakeTelegramId, username, "Dev", "User");
+        return issueTokens(dto.id(), dto.username());
     }
 
     private AuthResponse issueTokens(UUID userId, String username) {

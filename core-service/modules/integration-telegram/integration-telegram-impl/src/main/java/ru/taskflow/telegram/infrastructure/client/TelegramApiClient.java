@@ -48,6 +48,18 @@ public class TelegramApiClient {
                 .toBodilessEntity();
     }
 
+    public void setDefaultMenuButton(String url, String buttonText) {
+        apiClient.post()
+                .uri("/setChatMenuButton")
+                .body(Map.of("menu_button", Map.of(
+                        "type", "web_app",
+                        "text", buttonText,
+                        "web_app", Map.of("url", url)
+                )))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     public byte[] downloadVoice(String fileId) {
         var fileInfo = apiClient.get()
                 .uri("/getFile?file_id={id}", fileId)

@@ -47,6 +47,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-taskflow}
       NLP_PORT: 8081
     depends_on:
       redis:
@@ -88,10 +89,11 @@ services:
       TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
       GROQ_API_KEY: ${GROQ_API_KEY}
+      MINIAPP_URL: ${MINIAPP_URL:-}
       JWT_SECRET: ${JWT_SECRET:-changeme-in-production}
       JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-60}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
-      NLP_SERVICE_URL: http://nlp-worker:8081
+      NLP_WORKER_URL: http://nlp-worker:8081
       SERVER_PORT: 8080
     depends_on:
       postgres:
@@ -105,8 +107,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${MINIAPP_PORT:-3000}:3000"
-    environment:
-      VITE_API_URL: http://localhost:8080/api/v1
     depends_on:
       - core-service
 

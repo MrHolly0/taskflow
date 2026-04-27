@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useStore, Status, Task } from '@/lib/store';
+import { Status, Task } from '@/lib/store';
+import { useTasksList, useUpdateTask } from '@/lib/hooks/useTasks';
 import {
   DndContext,
   DragEndEvent,
@@ -181,10 +182,28 @@ function DroppableColumn({
   );
 }
 
+function toTask(t: any): Task {
+  return {
+    id: String(t.id),
+    title: t.title,
+    description: t.description,
+    priority: t.priority,
+    status: t.status,
+    deadline: t.deadline,
+    group: t.groupName,
+    groupId: t.groupId,
+    estimatedTime: t.estimateMinutes,
+    createdAt: t.createdAt,
+    completedAt: t.completedAt,
+  };
+}
+
 /* ────────────── BoardPage ────────────── */
 export function BoardPage() {
-  const tasks = useStore((state) => state.tasks);
-  const updateTask = useStore((state) => state.updateTask);
+  const { data: apiTasks = [] } = useTasksList();
+  const { mutate: updateTaskStatus } = useUpdateTask();
+
+  const tasks: Task[] = apiTasks.map(toTask);
 
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -212,10 +231,7 @@ export function BoardPage() {
 
     const task = tasks.find((t) => t.id === taskId);
     if (task && task.status !== newStatus) {
-      updateTask(taskId, {
-        status: newStatus,
-        ...(newStatus === 'DONE' ? { completedAt: new Date().toISOString() } : {}),
-      });
+      updateTaskStatus({ id: taskId, status: newStatus });
     }
   };
 

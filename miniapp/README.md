@@ -51,9 +51,11 @@ pnpm preview
 
 Переменные окружения (`.env.local`):
 ```
-VITE_API_BASE_URL=http://localhost:8080/api
-VITE_TELEGRAM_BOT_ID=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+VITE_API_URL=/api/v1
+VITE_TELEGRAM_BOT_USERNAME=YourBotUsername
 ```
+
+По умолчанию `VITE_API_URL` не задана — используется относительный путь `/api/v1`, который в dev режиме проксируется Vite (`server.proxy`), а в Docker идёт через nginx.
 
 ## Структура проекта
 
@@ -107,10 +109,11 @@ Axios клиент (`lib/api.ts`) имеет:
 - Обработка ошибок
 
 Поток авторизации:
-1. Парсинг `initData` из Telegram WebApp
-2. POST на `/api/v1/auth/telegram-miniapp`
-3. Получение JWT + refresh токена
-4. Сохранение JWT в памяти, refresh в cookie
+- **Внутри Telegram:** `initData` → `POST /api/v1/auth/telegram-miniapp` → JWT
+- **В браузере (Telegram Login Widget):** `POST /api/v1/auth/telegram-login` → JWT
+- **Demo/dev:** `POST /api/v1/auth/dev-token` → JWT
+
+JWT хранится в `localStorage`, refresh токен в Redis.
 
 ## Сборка для production
 
@@ -139,7 +142,7 @@ docker build -f miniapp/Dockerfile -t taskflow-miniapp:latest miniapp/
 docker run -p 3000:3000 taskflow-miniapp:latest
 ```
 
-Dockerfile использует multi-stage: сборка в Node, запуск из nginx alpine.
+Dockerfile использует multi-stage: сборка в Node 20, запуск через `serve` (node:20-alpine).
 
 ## Тестирование
 
