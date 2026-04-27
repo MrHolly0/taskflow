@@ -15,10 +15,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '1'
-        memory: 512M
 
   redis:
     image: redis:7-alpine
@@ -31,10 +27,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '0.5'
-        memory: 256M
 
   core-service:
     build:
@@ -63,10 +55,6 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '2'
-        memory: 1024M
 
   nlp-worker:
     build:
@@ -82,10 +70,6 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '1'
-        memory: 512M
 
   notification-worker:
     build:
@@ -103,10 +87,6 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '0.5'
-        memory: 256M
 
   miniapp:
     build:
@@ -115,10 +95,6 @@ services:
     environment:
       VITE_API_URL: https://${APP_DOMAIN}/api/v1
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '0.5'
-        memory: 256M
 
   nginx:
     build:
@@ -137,10 +113,6 @@ services:
       - nlp-worker
       - notification-worker
     restart: unless-stopped
-    resources:
-      limits:
-        cpus: '0.5'
-        memory: 256M
 
 volumes:
   postgres_data:
