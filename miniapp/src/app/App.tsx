@@ -64,9 +64,24 @@ function AppContent() {
 
   useEffect(() => {
     initializeTelegramWebApp();
-    const token = getStoredToken();
-    if (token && applyToken(token)) return;
-    reAuthOrShowLogin();
+
+    if (isTelegramWebApp()) {
+      authenticateViaInitData()
+        .then(() => {
+          const t = getStoredToken();
+          if (t) applyToken(t);
+          else { setAuthenticated(true); setIsInitializing(false); }
+        })
+        .catch(() => {
+          const token = getStoredToken();
+          if (token && applyToken(token)) return;
+          setIsInitializing(false);
+        });
+    } else {
+      const token = getStoredToken();
+      if (token && applyToken(token)) return;
+      setIsInitializing(false);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isInitializing) {

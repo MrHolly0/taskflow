@@ -34,10 +34,22 @@ interface DigestResponse {
 
 const getClient = () => {
   const token = localStorage.getItem('auth_token');
-  return axios.create({
+  const client = axios.create({
     baseURL: API_BASE,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
+  client.interceptors.response.use(
+    (r) => r,
+    (err) => {
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        window.location.reload();
+      }
+      return Promise.reject(err);
+    }
+  );
+  return client;
 };
 
 export const useFocusTasks = () => {
