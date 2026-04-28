@@ -147,7 +147,7 @@ public class GroqLlmProvider implements LlmProvider {
                   "description": "описание или null",
                   "priority": "LOW|MEDIUM|HIGH|URGENT (по умолчанию MEDIUM)",
                   "deadline": "ISO-8601 datetime или null",
-                  "group": "категория/проект или null",
+                  "group": "категория задачи на русском — ОБЯЗАТЕЛЬНО заполни одним словом, например: Покупки, Работа, Здоровье, Дом, Учёба, Личное, Финансы, Спорт, Семья — выбери наиболее подходящую или придумай короткое название",
                   "tags": ["массив строк"],
                   "recurrence": "NONE|DAILY|WEEKLY|MONTHLY"
                 }
@@ -155,28 +155,48 @@ public class GroqLlmProvider implements LlmProvider {
             }
 
             Примеры:
-            Входной текст: "завтра до 18 купить молоко"
+            Входной текст: "завтра до 18 купить молоко и хлеб, сходить в аптеку за витаминами"
             {
-              "tasks": [{
-                "title": "Купить молоко",
-                "priority": "MEDIUM",
-                "deadline": "2026-04-25T18:00:00+03:00",
-                "group": null,
-                "tags": ["покупки"],
-                "recurrence": "NONE"
-              }]
+              "tasks": [
+                {
+                  "title": "Купить молоко и хлеб",
+                  "priority": "MEDIUM",
+                  "deadline": "2026-04-25T18:00:00+03:00",
+                  "group": "Покупки",
+                  "tags": ["магазин"],
+                  "recurrence": "NONE"
+                },
+                {
+                  "title": "Сходить в аптеку за витаминами",
+                  "priority": "MEDIUM",
+                  "deadline": null,
+                  "group": "Здоровье",
+                  "tags": ["аптека"],
+                  "recurrence": "NONE"
+                }
+              ]
             }
 
-            Входной текст: "каждый день в 9 утра делать зарядку, ежедневно"
+            Входной текст: "каждый день в 9 утра делать зарядку, сдать отчёт начальнику до пятницы"
             {
-              "tasks": [{
-                "title": "Делать зарядку",
-                "priority": "MEDIUM",
-                "deadline": "2026-04-25T09:00:00+03:00",
-                "group": null,
-                "tags": ["здоровье"],
-                "recurrence": "DAILY"
-              }]
+              "tasks": [
+                {
+                  "title": "Делать зарядку",
+                  "priority": "MEDIUM",
+                  "deadline": "2026-04-25T09:00:00+03:00",
+                  "group": "Спорт",
+                  "tags": ["здоровье"],
+                  "recurrence": "DAILY"
+                },
+                {
+                  "title": "Сдать отчёт начальнику",
+                  "priority": "HIGH",
+                  "deadline": "2026-04-25T18:00:00+03:00",
+                  "group": "Работа",
+                  "tags": ["отчёт"],
+                  "recurrence": "NONE"
+                }
+              ]
             }
 
             Правила:
@@ -184,6 +204,7 @@ public class GroqLlmProvider implements LlmProvider {
             - Deadline в ISO-8601 с timezone +03:00 (Москва)
             - Если дата не указана явно (только время), используй сегодняшнюю дату
             - Priority: LOW (обычное дело), MEDIUM (стандартное), HIGH (важное), URGENT (очень срочное)
+            - group — ВСЕГДА заполняй, никогда не null. Одно короткое слово или два на русском
             - Tags — бери из контекста (покупки, работа, здоровье и т.п.)
             - Recurrence — определяй из фраз типа "каждый день", "по вторникам", "еженедельно"
             - Если text слишком расплывчато — создавай задачу с тем, что понял, но без выдумок

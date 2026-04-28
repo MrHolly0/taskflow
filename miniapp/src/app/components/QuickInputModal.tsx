@@ -143,7 +143,10 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
       setTimeout(() => textareaRef.current?.focus(), 100);
     };
     recognition.onerror = () => {
-      setError('Не удалось распознать речь. Попробуй ещё раз.');
+      const inTelegram = !!(window as any).Telegram?.WebApp?.initData;
+      setError(inTelegram
+        ? 'Голосовой ввод ограничен Telegram — введи текст вручную.'
+        : 'Не удалось распознать речь. Попробуй ещё раз.');
       setPhase('input');
     };
     recognition.onend = () => { if (!resultReceived) setPhase('input'); };
