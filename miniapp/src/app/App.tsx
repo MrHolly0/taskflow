@@ -113,7 +113,7 @@ function AppContent() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
+      <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
         <BrowserRouter>
           <AppContent />
           <Toaster />

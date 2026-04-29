@@ -54,9 +54,16 @@ interface TaskDetailModalProps {
   onClose: () => void;
 }
 
-function toDatetimeLocal(iso?: string): string {
+function isoToLocalDate(iso?: string): string {
   if (!iso) return '';
-  return iso.slice(0, 16);
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function isoToLocalTime(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
@@ -69,7 +76,8 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
   const [priority, setPriority] = useState<Priority>('MEDIUM');
   const [status, setStatus] = useState<Status>('TODO');
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
-  const [deadline, setDeadline] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState('');
+  const [deadlineTime, setDeadlineTime] = useState('');
   const [estimatedTime, setEstimatedTime] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -79,7 +87,8 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
       setDescription(task.description ?? '');
       setPriority((task.priority as Priority) ?? 'MEDIUM');
       setStatus((task.status as Status) ?? 'TODO');
-      setDeadline(toDatetimeLocal(task.deadline));
+      setDeadlineDate(isoToLocalDate(task.deadline));
+      setDeadlineTime(isoToLocalTime(task.deadline) || '20:59');
       const estimate = task.estimateMinutes ?? task.estimatedTime;
       setEstimatedTime(estimate ? String(estimate) : '');
       // resolve initial group id
@@ -105,7 +114,7 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
         description: description || undefined,
         priority,
         status,
-        deadline: deadline ? `${deadline}:00Z` : undefined,
+        deadline: deadlineDate ? new Date(`${deadlineDate}T${deadlineTime || '20:59'}`).toISOString() : undefined,
         groupId: selectedGroupId || undefined,
         estimateMinutes: estimatedTime ? parseInt(estimatedTime) : undefined,
       });
@@ -203,13 +212,22 @@ export function TaskDetailModal({ task, open, onClose }: TaskDetailModalProps) {
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
               Дедлайн
             </label>
-            <div className="relative">
-              <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative">
+                <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={deadlineDate}
+                  onChange={(e) => setDeadlineDate(e.target.value)}
+                  className="pl-9 h-10 text-sm"
+                />
+              </div>
               <Input
-                type="datetime-local"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="pl-9 h-10 text-sm"
+                type="time"
+                value={deadlineTime}
+                onChange={(e) => setDeadlineTime(e.target.value)}
+                className="h-10 text-sm"
+                disabled={!deadlineDate}
               />
             </div>
           </div>

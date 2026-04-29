@@ -1,14 +1,19 @@
 import { Card } from '@/app/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useDigestTasks, useTasksList } from '@/lib/hooks/useTasks';
+import { useTasksList } from '@/lib/hooks/useTasks';
 
 export function StatsPage() {
-  const { data: digest } = useDigestTasks();
   const { data: allTasks = [] } = useTasksList();
 
-  const created = digest?.totalTasks ?? 0;
-  const done = digest?.completedToday ?? 0;
-  const overdue = digest?.overdueTasks ?? 0;
+  const now = new Date();
+  const weekAgo = new Date(now);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  const created = allTasks.filter((t: any) => new Date(t.createdAt) >= weekAgo).length;
+  const done = allTasks.filter((t: any) => t.completedAt && new Date(t.completedAt) >= weekAgo).length;
+  const overdue = allTasks.filter((t: any) =>
+    t.deadline && new Date(t.deadline) < now && t.status !== 'DONE' && t.status !== 'CANCELLED'
+  ).length;
 
   const activityData = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();

@@ -74,7 +74,8 @@ function splitIntoTasks(text: string, groups: { name: string }[] = []): ParsedTa
   }));
 }
 
-function guessGroup(title: string, groups: { name: string }[]): string | undefined {
+function guessGroup(title: string | null | undefined, groups: { name: string }[]): string | undefined {
+  if (!title) return undefined;
   const lower = title.toLowerCase();
   return groups.find(g => lower.includes(g.name.toLowerCase()))?.name;
 }
@@ -85,7 +86,14 @@ function capitalize(s: string): string {
 
 function toDateInputValue(iso?: string): string {
   if (!iso) return '';
-  return iso.slice(0, 10);
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function toTimeInputValue(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 interface QuickInputModalProps {
@@ -104,6 +112,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (open) {
@@ -117,14 +126,16 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   }, [open]);
 
   const handleVoice = useCallback(() => {
+    if ((window as any).Telegram?.WebApp) {
+      setError('Голосовой ввод недоступен в Telegram — введи текст вручную.');
+      return;
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      const inTelegram = !!(window as any).Telegram?.WebApp?.initData;
-      setError(inTelegram
-        ? 'Голосовой ввод недоступен в Telegram — введи текст вручную.'
-        : 'Голосовой ввод недоступен. Используй Chrome или Safari.');
+      setError('Голосовой ввод недоступен. Используй Chrome или Safari.');
       return;
     }
 
@@ -143,10 +154,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
       setTimeout(() => textareaRef.current?.focus(), 100);
     };
     recognition.onerror = () => {
-      const inTelegram = !!(window as any).Telegram?.WebApp?.initData;
-      setError(inTelegram
-        ? 'Голосовой ввод ограничен Telegram — введи текст вручную.'
-        : 'Не удалось распознать речь. Попробуй ещё раз.');
+      setError('Не удалось распознать речь. Попробуй ещё раз.');
       setPhase('input');
     };
     recognition.onend = () => { if (!resultReceived) setPhase('input'); };
@@ -160,21 +168,30 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
     setPhase('processing');
     parseText(text.trim(), {
       onSuccess: (parsed: any[]) => {
-        if (parsed && parsed.length > 0) {
-          setParsedTasks(parsed.map((p: any) => {
-            const rawDeadline: string | undefined = p.deadline ?? undefined;
-            const deadline = rawDeadline
-              ? rawDeadline.includes('T') ? rawDeadline : `${rawDeadline}T09:00:00Z`
-              : undefined;
-            return {
-              title: p.title,
-              priority: (p.priority ?? 'MEDIUM') as ParsedTask['priority'],
-              deadline,
-              groupName: p.group ?? guessGroup(p.title, groups),
-              estimateMinutes: p.estimateMinutes ?? undefined,
-            };
-          }));
-        } else {
+        try {
+          if (parsed && parsed.length > 0) {
+            setParsedTasks(parsed.map((p: any) => {
+              const rawDeadline = p.deadline;
+              let deadline: string | undefined;
+              if (typeof rawDeadline === 'string' && rawDeadline) {
+                deadline = rawDeadline.includes('T') ? rawDeadline : `${rawDeadline}T20:59:00Z`;
+              } else if (typeof rawDeadline === 'number') {
+                deadline = new Date(rawDeadline * 1000).toISOString();
+              }
+              const validPriorities = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
+              const priority = validPriorities.includes(p.priority) ? p.priority : 'MEDIUM';
+              return {
+                title: p.title ?? 'Без названия',
+                priority: priority as ParsedTask['priority'],
+                deadline,
+                groupName: p.group ?? guessGroup(p.title, groups),
+                estimateMinutes: p.estimateMinutes ?? undefined,
+              };
+            }));
+          } else {
+            setParsedTasks(splitIntoTasks(text.trim(), groups));
+          }
+        } catch {
           setParsedTasks(splitIntoTasks(text.trim(), groups));
         }
         setPhase('confirm');
@@ -203,13 +220,14 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   };
 
   const handleConfirm = async () => {
-    if (parsedTasks.length === 0) return;
+    if (parsedTasks.length === 0 || submittingRef.current) return;
+    submittingRef.current = true;
     setPhase('loading');
     try {
       for (const task of parsedTasks) {
         const dl = task.deadline || undefined;
         const deadline = dl
-          ? dl.includes('T') ? dl : `${dl}T09:00:00Z`
+          ? dl.includes('T') ? dl : `${dl}T20:59:00Z`
           : undefined;
         const request: CreateTaskRequest = {
           title: task.title,
@@ -222,9 +240,11 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
       }
       setPhase('done');
       setTimeout(() => onClose(), 1500);
-    } catch {
-      setError('Ошибка при создании задачи');
+    } catch (e) {
+      setError(`Ошибка при создании задачи: ${(e as any)?.message ?? 'попробуй ещё раз'}`);
       setPhase('confirm');
+    } finally {
+      submittingRef.current = false;
     }
   };
 
@@ -331,30 +351,48 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <p className="text-xs text-muted-foreground">Дедлайн</p>
-                          <Input
-                            type="date"
-                            value={toDateInputValue(task.deadline)}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                              updateTask(i, { deadline: e.target.value ? `${e.target.value}T09:00:00Z` : undefined })
-                            }
-                            className="h-8 text-xs"
-                          />
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Дедлайн</p>
+                            <Input
+                              type="date"
+                              value={toDateInputValue(task.deadline)}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const date = e.target.value;
+                                const time = toTimeInputValue(task.deadline) || '20:59';
+                                updateTask(i, { deadline: date ? new Date(`${date}T${time}`).toISOString() : undefined });
+                              }}
+                              className="h-8 text-xs"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">Время</p>
+                            <Input
+                              type="time"
+                              value={toTimeInputValue(task.deadline)}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const time = e.target.value;
+                                const date = toDateInputValue(task.deadline);
+                                if (date) updateTask(i, { deadline: new Date(`${date}T${time}`).toISOString() });
+                              }}
+                              disabled={!task.deadline}
+                              className="h-8 text-xs"
+                            />
+                          </div>
                         </div>
                         {groups.length > 0 && (
                           <div className="space-y-1">
                             <p className="text-xs text-muted-foreground">Группа</p>
                             <Select
-                              value={task.groupName ?? ''}
-                              onValueChange={(v: string) => updateTask(i, { groupName: v || undefined })}
+                              value={task.groupName ?? '__none__'}
+                              onValueChange={(v: string) => updateTask(i, { groupName: v === '__none__' ? undefined : v })}
                             >
                               <SelectTrigger className="h-8 text-xs">
                                 <SelectValue placeholder="—" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="">—</SelectItem>
+                                <SelectItem value="__none__">—</SelectItem>
                                 {groups.map(g => (
                                   <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>
                                 ))}

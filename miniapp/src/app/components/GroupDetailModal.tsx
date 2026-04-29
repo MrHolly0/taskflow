@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { IconPlus, IconTrash, IconCheck, IconDots, IconArrowRight } from '@tabler/icons-react';
-import { useStore, Group, Task } from '@/lib/store';
-import { GroupResponse } from '@/lib/hooks/useTasks';
+import { GroupResponse, useTasksList, useCompleteTask, useDeleteTask, useUpdateTask, useCreateTask, useDeleteGroup, useGroups } from '@/lib/hooks/useTasks';
 import { getGroupIcon } from '@/lib/group-icons';
+import { getStatusLabel } from '@/lib/store';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
@@ -22,7 +22,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
-import { getStatusLabel } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
 
@@ -43,31 +42,32 @@ function getPriorityDot(priority: string) {
 }
 
 export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps) {
-  const tasks = useStore((s) => s.tasks);
-  const groups = useStore((s) => s.groups);
-  const addTask = useStore((s) => s.addTask);
-  const completeTask = useStore((s) => s.completeTask);
-  const deleteTask = useStore((s) => s.deleteTask);
-  const updateTask = useStore((s) => s.updateTask);
-  const deleteGroup = useStore((s) => s.deleteGroup);
+  const { data: allTasks = [] } = useTasksList();
+  const { data: groups = [] } = useGroups();
+  const { mutate: completeTask } = useCompleteTask();
+  const { mutate: deleteTask } = useDeleteTask();
+  const { mutate: updateTask } = useUpdateTask();
+  const { mutate: createTask } = useCreateTask();
+  const { mutate: deleteGroup } = useDeleteGroup();
 
   const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [openedTask, setOpenedTask] = useState<Task | null>(null);
+  const [openedTaskId, setOpenedTaskId] = useState<string | null>(null);
 
   if (!group) return null;
   const GroupIcon = getGroupIcon(group.icon ?? 'briefcase');
 
-  const groupTasks = tasks.filter((t) => t.group === group.name);
+  const groupTasks = allTasks.filter((t) => t.groupId === group.id || t.groupName === group.name);
   const activeTasks = groupTasks.filter((t) => t.status !== 'DONE' && t.status !== 'CANCELLED');
   const doneTasks = groupTasks.filter((t) => t.status === 'DONE');
 
+  const openedTask = openedTaskId ? allTasks.find((t) => t.id === openedTaskId) ?? null : null;
+
   const handleAddTask = () => {
     if (!newTaskTitle.trim()) return;
-    addTask({
+    createTask({
       title: newTaskTitle.trim(),
       priority: 'MEDIUM',
-      status: 'TODO',
-      group: group.name,
+      groupId: group.id,
     });
     setNewTaskTitle('');
   };
@@ -76,6 +76,8 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
     deleteGroup(group.id);
     onClose();
   };
+
+  const otherGroups = groups.filter((g) => g.id !== group.id);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -93,25 +95,22 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-4 min-h-0">
-          {/* Active tasks */}
           {activeTasks.length > 0 && (
             <div className="space-y-2">
               {activeTasks.map((task) => (
                 <TaskRow
                   key={task.id}
                   task={task}
-                  groups={groups}
-                  currentGroup={group.name}
-                  onOpen={() => setOpenedTask(task)}
+                  otherGroups={otherGroups}
+                  onOpen={() => setOpenedTaskId(task.id)}
                   onComplete={() => completeTask(task.id)}
-                  onMove={(target) => updateTask(task.id, { group: target })}
+                  onMove={(targetGroupId) => updateTask({ id: task.id, groupId: targetGroupId ?? null })}
                   onDelete={() => deleteTask(task.id)}
                 />
               ))}
             </div>
           )}
 
-          {/* Done tasks */}
           {doneTasks.length > 0 && (
             <div className="space-y-2">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -121,10 +120,9 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
                 <TaskRow
                   key={task.id}
                   task={task}
-                  groups={groups}
-                  currentGroup={group.name}
-                  onOpen={() => setOpenedTask(task)}
-                  onMove={(target) => updateTask(task.id, { group: target })}
+                  otherGroups={otherGroups}
+                  onOpen={() => setOpenedTaskId(task.id)}
+                  onMove={(targetGroupId) => updateTask({ id: task.id, groupId: targetGroupId ?? null })}
                   onDelete={() => deleteTask(task.id)}
                   done
                 />
@@ -139,7 +137,6 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
           )}
         </div>
 
-        {/* Add task */}
         <div className="border-t border-border pt-4 space-y-3 flex-shrink-0">
           <div className="flex gap-2">
             <Input
@@ -167,7 +164,7 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
       <TaskDetailModal
         task={openedTask}
         open={!!openedTask}
-        onClose={() => setOpenedTask(null)}
+        onClose={() => setOpenedTaskId(null)}
       />
     </Dialog>
   );
@@ -175,24 +172,21 @@ export function GroupDetailModal({ group, open, onClose }: GroupDetailModalProps
 
 function TaskRow({
   task,
-  groups,
-  currentGroup,
+  otherGroups,
   onOpen,
   onComplete,
   onMove,
   onDelete,
   done,
 }: {
-  task: Task;
-  groups: Group[];
-  currentGroup: string;
+  task: { id: string; title: string; priority: string; status: string };
+  otherGroups: GroupResponse[];
   onOpen: () => void;
   onComplete?: () => void;
-  onMove: (target: string | undefined) => void;
+  onMove: (targetGroupId: string | undefined) => void;
   onDelete: () => void;
   done?: boolean;
 }) {
-  const otherGroups = groups.filter((g) => g.name !== currentGroup);
   return (
     <div
       className={cn(
@@ -211,7 +205,7 @@ function TaskRow({
         {task.title}
       </button>
       <span className="text-xs text-muted-foreground flex-shrink-0">
-        {getStatusLabel(task.status)}
+        {getStatusLabel(task.status as any)}
       </span>
       {!done && onComplete && (
         <button
@@ -247,7 +241,7 @@ function TaskRow({
               {otherGroups.map((g) => (
                 <DropdownMenuItem
                   key={g.id}
-                  onClick={() => onMove(g.name)}
+                  onClick={() => onMove(g.id)}
                   className="cursor-pointer"
                 >
                   {g.name}

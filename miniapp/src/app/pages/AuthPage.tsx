@@ -157,44 +157,43 @@ export function AuthPage() {
             transition={{ delay: 0.6, duration: 0.4 }}
             className="space-y-4"
           >
-            <button
-              onClick={handleTelegramLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-semibold text-white transition-all active:scale-95 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#0088cc' }}
-            >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Входим...
-                </>
-              ) : (
-                <>
-                  <IconBrandTelegram className="w-6 h-6" />
-                  Войти через Telegram
-                </>
-              )}
-            </button>
-
-            {!isTelegramWebApp() && (
-              <TelegramLoginWidget onAuth={handleWidgetAuth} />
-            )}
-
-            {!isTelegramWebApp() && (
+            {isTelegramWebApp() ? (
               <button
-                onClick={handleDemoLogin}
+                onClick={handleTelegramLogin}
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed border border-border bg-muted/50 text-foreground"
+                className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-semibold text-white transition-all active:scale-95 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                style={{ backgroundColor: '#0088cc' }}
               >
                 {loading ? (
                   <>
-                    <div className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     Входим...
                   </>
                 ) : (
-                  'Попробовать демо'
+                  <>
+                    <IconBrandTelegram className="w-6 h-6" />
+                    Войти через Telegram
+                  </>
                 )}
               </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleDemoLogin}
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-2xl font-semibold transition-all active:scale-95 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed border border-border bg-muted/50 text-foreground"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                      Входим...
+                    </>
+                  ) : (
+                    'Попробовать демо'
+                  )}
+                </button>
+                <TelegramLoginWidget onAuth={handleWidgetAuth} />
+              </>
             )}
 
             {error && (

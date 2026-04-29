@@ -47,9 +47,30 @@ export function AllTasksPage() {
   const [quickInputOpen, setQuickInputOpen] = useState(false);
 
   const { data: allTasks = [], isLoading, error } = useTasksList();
+
   const filteredTasks = (allTasks || []).filter((task) => {
-    if (search && !task.title.toLowerCase().includes(search.toLowerCase())) {
-      return false;
+    if (search && !task.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (task.isDraft) return false;
+
+    const now = new Date();
+    const deadline = task.deadline ? new Date(task.deadline) : null;
+
+    if (context === 'now') {
+      return (
+        task.status !== 'DONE' && task.status !== 'CANCELLED' &&
+        (task.priority === 'URGENT' || task.status === 'IN_PROGRESS' ||
+          (deadline !== null && deadline < now))
+      );
+    }
+    if (context === 'today') {
+      const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      return task.status !== 'DONE' && task.status !== 'CANCELLED' &&
+        (deadline === null || deadline <= endOfToday);
+    }
+    if (context === 'week') {
+      const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 6, 23, 59, 59);
+      return task.status !== 'DONE' && task.status !== 'CANCELLED' &&
+        (deadline === null || deadline <= endOfWeek);
     }
     return true;
   });

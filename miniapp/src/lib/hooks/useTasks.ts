@@ -238,3 +238,16 @@ export const useCreateGroup = () => {
     },
   });
 };
+
+export const useDeleteGroup = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (groupId: string) => {
+      await getClient().delete(`/groups/${groupId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+};
