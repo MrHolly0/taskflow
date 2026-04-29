@@ -31,20 +31,20 @@ public class YandexGptLlmProvider implements LlmProvider {
     private final RestClient restClient;
 
     @Override
-    public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage) {
+    public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage, List<String> existingGroups) {
         try {
             if (!config.isEnabled() || config.getApiKey() == null || config.getApiKey().isEmpty()) {
                 return new ParsedTasks(List.of());
             }
-            return callYandexGptApi(text, userTimezone, userLanguage);
+            return callYandexGptApi(text, userTimezone, userLanguage, existingGroups != null ? existingGroups : List.of());
         } catch (Exception e) {
             log.warn("Failed to parse tasks from YandexGPT", e);
             return new ParsedTasks(List.of());
         }
     }
 
-    private ParsedTasks callYandexGptApi(String text, String userTimezone, String userLanguage) throws JsonProcessingException {
-        String systemPrompt = getSystemPrompt();
+    private ParsedTasks callYandexGptApi(String text, String userTimezone, String userLanguage, List<String> existingGroups) throws JsonProcessingException {
+        String systemPrompt = buildSystemPrompt(existingGroups);
 
         var request = Map.of(
             "modelUri", "gpt://" + config.getFolderId() + "/" + config.getModel(),
@@ -118,7 +118,11 @@ public class YandexGptLlmProvider implements LlmProvider {
         return new ParsedTasks(tasks);
     }
 
-    private String getSystemPrompt() {
+    private String buildSystemPrompt(List<String> existingGroups) {
+        String groupInstruction = existingGroups.isEmpty()
+            ? "\"group\": \"категория/проект — одно короткое слово на русском, например: Покупки, Работа, Здоровье. ВСЕГДА заполняй\","
+            : "\"group\": \"ВЫБИРАЙ из существующих групп пользователя: " + existingGroups + ". Создавай новую только если ни одна не подходит\",";
+
         return """
             Ты ассистент для разбора задач из текста. Твоя задача — преобразовать пользовательский текст в структурированный JSON с информацией о задачах.
 
@@ -130,7 +134,8 @@ public class YandexGptLlmProvider implements LlmProvider {
                   "description": "описание (опционально)",
                   "priority": "LOW|MEDIUM|HIGH|URGENT (по умолчанию MEDIUM)",
                   "deadline": "ISO 8601 дата (опционально, парсить из текста)",
-                  "group": "категория/проект (опционально)",
+            """ + "      " + groupInstruction + """
+
                   "tags": ["список", "тегов"],
                   "recurrence": "NONE|DAILY|WEEKLY|MONTHLY (по умолчанию NONE)"
                 }
@@ -142,6 +147,7 @@ public class YandexGptLlmProvider implements LlmProvider {
             - Приоритеты: URGENT для срочных, HIGH для важных, LOW для неспешных
             - Теги — это ключевые слова из текста
             - Повторяющиеся задачи (каждый день, еженедельно) — указывай в recurrence
+            - group — ВСЕГДА заполняй, никогда не null
             """;
     }
 

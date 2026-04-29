@@ -14,6 +14,7 @@ import ru.taskflow.nlp.infrastructure.web.dto.ParseTextRequest;
 import ru.taskflow.nlp.infrastructure.web.dto.ParseTextResponse;
 
 import java.io.IOException;
+import java.util.List;
 
 @RestController
 @RequestMapping("/nlp")
@@ -27,7 +28,8 @@ public class NlpController {
         ParsedTasks result = nlpService.parseText(
             request.text(),
             request.userTimezone(),
-            request.userLanguage()
+            request.userLanguage(),
+            request.existingGroups()
         );
         return new ParseTextResponse(result.tasks());
     }
@@ -36,12 +38,14 @@ public class NlpController {
     public ParseTextResponse parseVoice(
         @RequestParam("file") MultipartFile file,
         @RequestParam(value = "userTimezone", defaultValue = "Europe/Moscow") String userTimezone,
-        @RequestParam(value = "userLanguage", defaultValue = "ru") String userLanguage
+        @RequestParam(value = "userLanguage", defaultValue = "ru") String userLanguage,
+        @RequestParam(value = "existingGroups", required = false) List<String> existingGroups
     ) throws IOException {
         ParsedTasks result = nlpService.parseVoice(
             file.getBytes(),
             userTimezone,
-            userLanguage
+            userLanguage,
+            existingGroups
         );
         return new ParseTextResponse(result.tasks());
     }

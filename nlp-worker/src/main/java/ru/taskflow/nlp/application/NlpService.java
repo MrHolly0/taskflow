@@ -26,8 +26,9 @@ public class NlpService {
     private static final String CACHE_PREFIX = "nlp:cache:";
     private static final Duration CACHE_TTL = Duration.ofHours(24);
 
-    public ParsedTasks parseText(String text, String userTimezone, String userLanguage) {
-        String cacheKey = getCacheKey(text);
+    public ParsedTasks parseText(String text, String userTimezone, String userLanguage, java.util.List<String> existingGroups) {
+        java.util.List<String> groups = existingGroups != null ? existingGroups : java.util.List.of();
+        String cacheKey = getCacheKey(text, groups);
 
         String cached = redis.opsForValue().get(cacheKey);
         if (cached != null) {
@@ -38,7 +39,7 @@ public class NlpService {
             }
         }
 
-        ParsedTasks result = llmProvider.parseTasksFromText(text, userTimezone, userLanguage);
+        ParsedTasks result = llmProvider.parseTasksFromText(text, userTimezone, userLanguage, groups);
 
         try {
             String json = objectMapper.writeValueAsString(result);
@@ -50,20 +51,23 @@ public class NlpService {
         return result;
     }
 
-    public ParsedTasks parseVoice(byte[] audioBytes, String userTimezone, String userLanguage) {
+    public ParsedTasks parseVoice(byte[] audioBytes, String userTimezone, String userLanguage, java.util.List<String> existingGroups) {
         String transcript = speechToTextProvider.transcribeAudio(audioBytes);
 
         if (transcript.isEmpty()) {
             return new ParsedTasks(java.util.List.of());
         }
 
-        return parseText(transcript, userTimezone, userLanguage);
+        return parseText(transcript, userTimezone, userLanguage, existingGroups);
     }
 
-    private String getCacheKey(String text) {
+    private String getCacheKey(String text, java.util.List<String> groups) {
         try {
+            java.util.List<String> sorted = new java.util.ArrayList<>(groups);
+            java.util.Collections.sort(sorted);
+            String input = text + "|" + sorted;
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(text.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hash) {
                 sb.append(String.format("%02x", b));

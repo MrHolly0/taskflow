@@ -45,12 +45,12 @@ public class LlmProviderConfiguration {
         }
 
         @Override
-        public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage) {
+        public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage, List<String> existingGroups) {
             for (int i = 0; i < providers.size(); i++) {
                 LlmProvider provider = providers.get(i);
                 try {
                     log.debug("Attempting parse with: {}", provider.getClass().getSimpleName());
-                    ParsedTasks result = provider.parseTasksFromText(text, userTimezone, userLanguage);
+                    ParsedTasks result = provider.parseTasksFromText(text, userTimezone, userLanguage, existingGroups);
                     if (result != null && !result.tasks().isEmpty()) {
                         if (i > 0) {
                             log.info("{} succeeded as fallback after primary failed", provider.getClass().getSimpleName());

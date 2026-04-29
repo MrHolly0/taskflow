@@ -29,17 +29,17 @@ public class GroqLlmProvider implements LlmProvider {
     private final RestClient restClient;
 
     @Override
-    public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage) {
+    public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage, List<String> existingGroups) {
         try {
-            return callGroqApi(text, userTimezone, userLanguage);
+            return callGroqApi(text, userTimezone, userLanguage, existingGroups);
         } catch (Exception e) {
             log.error("Failed to parse tasks from Groq", e);
             return new ParsedTasks(List.of());
         }
     }
 
-    private ParsedTasks callGroqApi(String text, String userTimezone, String userLanguage) throws JsonProcessingException {
-        String systemPrompt = getSystemPrompt();
+    private ParsedTasks callGroqApi(String text, String userTimezone, String userLanguage, List<String> existingGroups) throws JsonProcessingException {
+        String systemPrompt = buildSystemPrompt(existingGroups);
 
         var request = Map.of(
             "model", config.getLlmModel(),
@@ -132,7 +132,11 @@ public class GroqLlmProvider implements LlmProvider {
         }
     }
 
-    private String getSystemPrompt() {
+    private String buildSystemPrompt(List<String> existingGroups) {
+        String groupInstruction = existingGroups.isEmpty()
+            ? "\"group\": \"категория задачи на русском — ОБЯЗАТЕЛЬНО заполни одним словом, например: Покупки, Работа, Здоровье, Дом, Учёба, Личное, Финансы, Спорт, Семья — выбери наиболее подходящую или придумай короткое название\","
+            : "\"group\": \"ВЫБИРАЙ из существующих групп пользователя: " + existingGroups + ". Создавай новую только если ни одна не подходит — тогда одно короткое слово на русском\",";
+
         return """
             Ты — помощник для разбора задач на русском языке.
             Пользователь описывает задачи в виде текста (часто списком или потоком сознания).
@@ -147,7 +151,8 @@ public class GroqLlmProvider implements LlmProvider {
                   "description": "описание или null",
                   "priority": "LOW|MEDIUM|HIGH|URGENT (по умолчанию MEDIUM)",
                   "deadline": "ISO-8601 datetime или null",
-                  "group": "категория задачи на русском — ОБЯЗАТЕЛЬНО заполни одним словом, например: Покупки, Работа, Здоровье, Дом, Учёба, Личное, Финансы, Спорт, Семья — выбери наиболее подходящую или придумай короткое название",
+            """ + "      " + groupInstruction + """
+
                   "tags": ["массив строк"],
                   "recurrence": "NONE|DAILY|WEEKLY|MONTHLY"
                 }
