@@ -31,7 +31,9 @@ export GROQ_WHISPER_API_KEY=ваш_ключ_здесь
 ```json
 {
   "text": "купить молоко завтра в 18:00",
-  "userId": "uuid"
+  "userTimezone": "Europe/Moscow",
+  "userLanguage": "ru",
+  "existingGroups": ["работа", "дом"]
 }
 ```
 
@@ -43,7 +45,8 @@ export GROQ_WHISPER_API_KEY=ваш_ключ_здесь
       "title": "Купить молоко",
       "deadline": "2026-04-27T18:00:00Z",
       "priority": "HIGH",
-      "groupId": "покупки"
+      "estimateMinutes": 15,
+      "groupName": "покупки"
     }
   ]
 }
@@ -53,7 +56,8 @@ export GROQ_WHISPER_API_KEY=ваш_ключ_здесь
 ```
 multipart/form-data:
   audio: file.ogg
-  userId: uuid
+  userTimezone: Europe/Moscow
+  userLanguage: ru
 ```
 
 ## Конфигурация
@@ -75,7 +79,7 @@ multipart/form-data:
 - Установка приоритета из контекстных подсказок
 - Оценка длительности выполнения
 
-Поддерживаемые поля вывода: `title`, `description`, `deadline`, `priority`, `estimateMinutes`, `groupId`
+Поддерживаемые поля вывода: `title`, `description`, `deadline`, `priority`, `estimateMinutes`, `groupName`
 
 ## Сборка
 

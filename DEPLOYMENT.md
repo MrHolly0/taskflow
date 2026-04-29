@@ -209,7 +209,7 @@ curl -vI https://your-domain.com
 ```bash
 curl -X POST https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook \
   -H "Content-Type: application/json" \
-  -d "{\"url\": \"https://your-domain.com/telegram/webhook\", \"secret_token\": \"${TELEGRAM_WEBHOOK_SECRET}\"}"
+  -d "{\"url\": \"https://your-domain.com/api/telegram/webhook\", \"secret_token\": \"${TELEGRAM_WEBHOOK_SECRET}\"}"
 ```
 
 ## Monitoring & Maintenance

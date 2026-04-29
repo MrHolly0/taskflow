@@ -65,7 +65,7 @@ REDIS_PORT=6379
 
 # Telegram
 TELEGRAM_BOT_TOKEN=ваш_токен_бота
-TELEGRAM_BOT_SECRET=ваш_секрет_webhook
+TELEGRAM_WEBHOOK_SECRET=ваш_секрет_webhook
 
 # LLM
 GROQ_API_KEY=ваш_groq_ключ

@@ -37,11 +37,31 @@ curl http://localhost:8080/actuator/health
 
 ## Основные эндпоинты
 
-- `POST /api/v1/auth/telegram-miniapp` — Авторизация через Telegram Mini App
-- `GET /api/v1/tasks/focus` — 1-3 приоритетных задачи на сейчас
-- `GET /api/v1/tasks/digest?date=YYYY-MM-DD` — Дайджест задач на день
-- `POST /api/v1/tasks` — Создать задачу (черновик)
+**Авторизация**
+- `POST /api/v1/auth/telegram-miniapp` — Авторизация через Telegram Mini App (initData)
+- `POST /api/v1/auth/telegram-login` — Авторизация через Telegram Login Widget
+- `POST /api/v1/auth/refresh` — Обновить access token по refresh token
+- `POST /api/v1/auth/dev-token` — Dev/demo токен (только в dev)
+
+**Задачи**
+- `GET  /api/v1/tasks` — Список задач (Page, фильтры: groupId, status, priority, tag)
+- `POST /api/v1/tasks` — Создать черновик задачи
+- `POST /api/v1/tasks/quick` — Создать задачу без черновика (сразу активна)
+- `POST /api/v1/tasks/parse-text` — NLP-разбор текста → массив задач
+- `GET  /api/v1/tasks/{id}` — Получить задачу
+- `PATCH /api/v1/tasks/{id}` — Обновить поля задачи
+- `POST /api/v1/tasks/{id}/complete` — Отметить выполненной
 - `POST /api/v1/tasks/{id}/confirm` — Подтвердить черновик
+- `DELETE /api/v1/tasks/{id}` — Удалить (soft delete)
+- `GET  /api/v1/tasks/focus` — 1-3 приоритетных задачи на сегодня
+- `GET  /api/v1/tasks/digest?date=YYYY-MM-DD` — Дайджест задач на день
+
+**Группы**
+- `GET  /api/v1/groups` — Список групп пользователя
+- `POST /api/v1/groups` — Создать группу
+- `DELETE /api/v1/groups/{id}` — Удалить группу
+
+**Telegram**
 - `POST /api/telegram/webhook` — Webhook Telegram бота (secret в конфиге)
 
 ## Конфигурация

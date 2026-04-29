@@ -4,8 +4,8 @@
 
 ## Возможности
 
-- **FocusPage** — Ассистент-first: показывает 1-3 приоритетные задачи на "сейчас" (ближайшие 2 часа)
-- **AllTasksPage** — Полный список задач с единственным селектором контекста (Сегодня / На неделю / Всё)
+- **FocusPage** — Ассистент-first: показывает 1-3 приоритетных задачи (не выполненные, дедлайн ≤ конец сегодня, по приоритету)
+- **AllTasksPage** — Полный список задач с фильтром контекста (Сейчас / Сегодня / Неделя / Всё)
 - **BoardPage** — Канбан с drag-and-drop (колонки статусов)
 - **GroupsPage** — Управление группами/категориями задач
 - **SettingsPage** — Настройки уведомлений и пользователя
@@ -62,28 +62,27 @@ VITE_TELEGRAM_BOT_USERNAME=YourBotUsername
 ```
 src/
 ├── app/
-│   ├── pages/          Компоненты страниц (маршруты)
-│   │   ├── Focus.tsx
-│   │   ├── AllTasks.tsx
-│   │   ├── Board.tsx
-│   │   ├── Groups.tsx
-│   │   ├── Settings.tsx
-│   │   └── Stats.tsx
-│   └── App.tsx          Основной роутер
-├── components/
-│   ├── TaskCard.tsx
-│   ├── QuickInputModal.tsx
-│   ├── GroupDetailModal.tsx
-│   └── [компоненты shadcn/ui]
+│   ├── pages/
+│   │   ├── FocusPage.tsx
+│   │   ├── AllTasksPage.tsx
+│   │   ├── BoardPage.tsx
+│   │   ├── GroupsPage.tsx
+│   │   ├── StatsPage.tsx
+│   │   ├── SettingsPage.tsx
+│   │   └── AuthPage.tsx
+│   ├── components/
+│   │   ├── QuickInputModal.tsx
+│   │   ├── TaskDetailModal.tsx
+│   │   ├── GroupDetailModal.tsx
+│   │   └── ui/               shadcn/ui компоненты
+│   └── App.tsx
 ├── lib/
 │   ├── api.ts           Axios клиент с JWT интерцепторами
-│   ├── auth.ts          Авторизация через Telegram WebApp
+│   ├── auth.ts          Авторизация: initData / Login Widget / demo
 │   ├── hooks/
-│   │   └── useTasks.ts  TanStack Query для загрузки задач
-│   └── store.ts         Zustand для глобального состояния
-├── styles/
-│   └── globals.css      Tailwind setup
-└── main.tsx            Vite точка входа
+│   │   └── useTasks.ts  TanStack Query хуки (задачи, группы, NLP)
+│   └── store.ts         Zustand (auth state, user)
+└── main.tsx
 ```
 
 ## Основные библиотеки

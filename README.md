@@ -105,10 +105,16 @@ POST /api/v1/tasks                   # Создать
 PATCH /api/v1/tasks/{id}             # Обновить статус/приоритет/дедлайн
 POST /api/v1/tasks/{id}/complete     # Отметить выполненной
 POST /api/v1/tasks/parse-text        # NLP-разбор текста → массив задач
+POST /api/v1/tasks/quick             # Быстрое создание без черновика
 DELETE /api/v1/tasks/{id}            # Удалить
 
+# Группы
+GET  /api/v1/groups                  # Список групп
+POST /api/v1/groups                  # Создать группу
+DELETE /api/v1/groups/{id}           # Удалить группу
+
 # Telegram webhook
-POST /telegram/webhook               # Входящие сообщения от бота
+POST /api/telegram/webhook           # Входящие сообщения от бота
 ```
 
 ## Конфигурация
@@ -207,7 +213,7 @@ docker compose -f infra/docker-compose.yml logs postgres
 ```
 
 **Telegram webhook не работает:**
-- Проверьте `TELEGRAM_BOT_SECRET` в `.env`
+- Проверьте `TELEGRAM_WEBHOOK_SECRET` в `.env`
 - URL должен быть `https://yourdomain.com/api/telegram/webhook`
 - Сертификат должен быть валидным (Let's Encrypt)
 
