@@ -15,9 +15,9 @@ public class NlpGatewayServiceImpl implements NlpGatewayService {
     private final NlpWorkerClient nlpWorkerClient;
 
     @Override
-    public NlpParseResult parseText(String text, String userTimezone) {
+    public NlpParseResult parseText(String text, String userTimezone, java.util.List<String> existingGroups) {
         try {
-            return nlpWorkerClient.parseText(text, userTimezone, "ru");
+            return nlpWorkerClient.parseText(text, userTimezone, "ru", existingGroups);
         } catch (Exception e) {
             log.error("NLP parseText failed", e);
             return new NlpParseResult(java.util.List.of());
@@ -25,9 +25,9 @@ public class NlpGatewayServiceImpl implements NlpGatewayService {
     }
 
     @Override
-    public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone) {
+    public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, java.util.List<String> existingGroups) {
         try {
-            return nlpWorkerClient.parseVoice(audioBytes, userTimezone, "ru");
+            return nlpWorkerClient.parseVoice(audioBytes, userTimezone, "ru", existingGroups);
         } catch (Exception e) {
             log.error("NLP parseVoice failed", e);
             return new NlpParseResult(java.util.List.of());

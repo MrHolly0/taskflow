@@ -1,7 +1,9 @@
 package ru.taskflow.nlp.api;
 
-public interface NlpGatewayService {
-    NlpParseResult parseText(String text, String userTimezone);
+import java.util.List;
 
-    NlpParseResult parseVoice(byte[] audioBytes, String userTimezone);
+public interface NlpGatewayService {
+    NlpParseResult parseText(String text, String userTimezone, List<String> existingGroups);
+
+    NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, List<String> existingGroups);
 }

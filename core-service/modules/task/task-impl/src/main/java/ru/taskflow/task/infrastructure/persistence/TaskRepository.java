@@ -47,6 +47,7 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
               AND t.status != :done
               AND t.isDraft = false
               AND t.isDeleted = false
+              AND (t.deadline IS NULL OR t.deadline <= :endOfToday)
             ORDER BY CASE t.priority
               WHEN 'URGENT' THEN 0
               WHEN 'HIGH' THEN 1
@@ -58,7 +59,8 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             """)
     List<TaskJpaEntity> findFocusTasks(
             @Param("userId") UUID userId,
-            @Param("done") TaskStatus done
+            @Param("done") TaskStatus done,
+            @Param("endOfToday") OffsetDateTime endOfToday
     );
 
     @Query("""

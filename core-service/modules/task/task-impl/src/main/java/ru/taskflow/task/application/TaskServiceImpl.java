@@ -253,7 +253,9 @@ public class TaskServiceImpl implements TaskService {
 
     @Override
     public FocusResponse getFocusTasks(UUID userId) {
-        var tasks = taskRepository.findFocusTasks(userId, TaskStatus.DONE)
+        var endOfToday = OffsetDateTime.now(ZoneOffset.UTC)
+                .withHour(23).withMinute(59).withSecond(59).withNano(0);
+        var tasks = taskRepository.findFocusTasks(userId, TaskStatus.DONE, endOfToday)
                 .stream()
                 .limit(3)
                 .map(taskMapper::toResponse)
@@ -310,5 +312,12 @@ public class TaskServiceImpl implements TaskService {
         }
 
         return taskMapper.toResponse(savedTask);
+    }
+
+    @Override
+    public List<String> findGroupNames(UUID userId) {
+        return groupRepository.findAllByUserId(userId).stream()
+            .map(GroupJpaEntity::getName)
+            .toList();
     }
 }

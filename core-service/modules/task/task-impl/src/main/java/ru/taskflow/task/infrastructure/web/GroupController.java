@@ -11,6 +11,7 @@ import ru.taskflow.task.api.dto.GroupResponse;
 import ru.taskflow.task.application.GroupService;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/groups")
@@ -29,5 +30,12 @@ public class GroupController {
     public GroupResponse create(@AuthenticationPrincipal AuthenticatedUser user,
                                 @RequestBody @Valid CreateGroupRequest request) {
         return groupService.create(user.userId(), request);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@AuthenticationPrincipal AuthenticatedUser user,
+                       @PathVariable UUID id) {
+        groupService.delete(user.userId(), id);
     }
 }

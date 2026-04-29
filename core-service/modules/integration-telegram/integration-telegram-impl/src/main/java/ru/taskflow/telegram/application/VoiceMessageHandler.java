@@ -38,9 +38,10 @@ public class VoiceMessageHandler {
         sender.sendMessage(message.chat().id(), "🎤 Распознаю голосовое сообщение...");
 
         String userTimezone = "Europe/Moscow";
+        List<String> groups = taskService.findGroupNames(userId);
 
         try {
-            var parseResult = nlpGatewayService.parseVoice(data, userTimezone);
+            var parseResult = nlpGatewayService.parseVoice(data, userTimezone, groups);
 
             if (parseResult.tasks().isEmpty()) {
                 sender.sendMessage(message.chat().id(), "Не удалось распознать голосовое сообщение. Попробуйте текстом.");
@@ -61,7 +62,7 @@ public class VoiceMessageHandler {
                         priority,
                         deadline,
                         null,
-                        null,
+                        parsed.group(),
                         parsed.tags(),
                         null,
                         TaskSource.BOT_VOICE

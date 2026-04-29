@@ -122,7 +122,8 @@ public class TaskController {
         String userTimezone = request.getOrDefault("userTimezone", "Europe/Moscow");
         String userLanguage = request.getOrDefault("userLanguage", "ru");
 
-        var result = nlpGatewayService.parseText(text, userTimezone);
+        List<String> groups = taskService.findGroupNames(user.userId());
+        var result = nlpGatewayService.parseText(text, userTimezone, groups);
         return Map.of("tasks", result.tasks());
     }
 }

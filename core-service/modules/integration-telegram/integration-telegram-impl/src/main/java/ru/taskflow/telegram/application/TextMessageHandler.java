@@ -31,8 +31,9 @@ public class TextMessageHandler {
 
     public void handle(TelegramMessage message, UUID userId) {
         String userTimezone = "Europe/Moscow";
+        List<String> groups = taskService.findGroupNames(userId);
 
-        var parseResult = nlpGatewayService.parseText(message.text(), userTimezone);
+        var parseResult = nlpGatewayService.parseText(message.text(), userTimezone, groups);
 
         if (parseResult.tasks().isEmpty()) {
             sender.sendMessage(message.chat().id(), "Не удалось распарсить текст. Попробуйте переформулировать задачу.");
@@ -53,7 +54,7 @@ public class TextMessageHandler {
                     priority,
                     deadline,
                     null,
-                    null,
+                    parsed.group(),
                     parsed.tags(),
                     null,
                     TaskSource.BOT_TEXT

@@ -24,12 +24,12 @@ public class NlpWorkerClient {
 
     @CircuitBreaker(name = "nlp-worker", fallbackMethod = "parseTextFallback")
     @Retry(name = "nlp-worker")
-    public NlpParseResult parseText(String text, String userTimezone, String userLanguage) {
-        var request = Map.of(
-            "text", text,
-            "userTimezone", userTimezone,
-            "userLanguage", userLanguage
-        );
+    public NlpParseResult parseText(String text, String userTimezone, String userLanguage, List<String> existingGroups) {
+        var request = new java.util.HashMap<String, Object>();
+        request.put("text", text);
+        request.put("userTimezone", userTimezone);
+        request.put("userLanguage", userLanguage);
+        request.put("existingGroups", existingGroups != null ? existingGroups : List.of());
 
         try {
             var response = restClient.post()
@@ -51,10 +51,13 @@ public class NlpWorkerClient {
 
     @CircuitBreaker(name = "nlp-worker", fallbackMethod = "parseVoiceFallback")
     @Retry(name = "nlp-worker")
-    public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, String userLanguage) {
+    public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, String userLanguage, List<String> existingGroups) {
         try {
+            String groupsParam = (existingGroups != null && !existingGroups.isEmpty())
+                ? "&existingGroups=" + String.join("&existingGroups=", existingGroups)
+                : "";
             var response = restClient.post()
-                .uri(config.getWorkerUrl() + "/nlp/parse-voice?userTimezone=" + userTimezone + "&userLanguage=" + userLanguage)
+                .uri(config.getWorkerUrl() + "/nlp/parse-voice?userTimezone=" + userTimezone + "&userLanguage=" + userLanguage + groupsParam)
                 .header("Content-Type", "application/octet-stream")
                 .body(audioBytes)
                 .retrieve()
@@ -71,12 +74,12 @@ public class NlpWorkerClient {
         return new NlpParseResult(List.of());
     }
 
-    public NlpParseResult parseTextFallback(String text, String userTimezone, String userLanguage, Exception e) {
+    public NlpParseResult parseTextFallback(String text, String userTimezone, String userLanguage, List<String> existingGroups, Exception e) {
         log.warn("NLP parseText circuit breaker fallback, returning empty result", e);
         return new NlpParseResult(List.of());
     }
 
-    public NlpParseResult parseVoiceFallback(byte[] audioBytes, String userTimezone, String userLanguage, Exception e) {
+    public NlpParseResult parseVoiceFallback(byte[] audioBytes, String userTimezone, String userLanguage, List<String> existingGroups, Exception e) {
         log.warn("NLP parseVoice circuit breaker fallback, returning empty result", e);
         return new NlpParseResult(List.of());
     }

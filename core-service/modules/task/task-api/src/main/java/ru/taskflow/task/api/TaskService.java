@@ -10,6 +10,7 @@ import ru.taskflow.task.api.dto.TaskResponse;
 import ru.taskflow.task.api.dto.UpdateTaskRequest;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 public interface TaskService {
@@ -35,4 +36,6 @@ public interface TaskService {
     DigestResponse getDigest(UUID userId, LocalDate date);
 
     TaskResponse createQuick(UUID userId, CreateTaskRequest request);
+
+    List<String> findGroupNames(UUID userId);
 }
