@@ -8,7 +8,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -25,8 +29,13 @@ public class TelegramNotificationSender {
     @Value("${app.telegram.api-base-url:https://api.telegram.org}")
     private String apiBaseUrl;
 
+    private static final ZoneId MOSCOW = ZoneId.of("Europe/Moscow");
+    private static final DateTimeFormatter DEADLINE_FMT =
+            DateTimeFormatter.ofPattern("d MMMM, HH:mm", new Locale("ru")).withZone(MOSCOW);
+
     public void sendTaskReminder(Long chatId, String title, String deadline) {
-        String text = String.format("📌 Напоминание о задаче\n\n<b>%s</b>\nДедлайн: %s", title, deadline);
+        String deadlineFormatted = formatDeadline(deadline);
+        String text = String.format("📌 Напоминание о задаче\n\n<b>%s</b>\nДедлайн: %s", title, deadlineFormatted);
 
         try {
             sendMessage(chatId, text);
@@ -34,6 +43,15 @@ public class TelegramNotificationSender {
         } catch (RestClientException e) {
             log.error("Failed to send notification to chat {}: {}", chatId, e.getMessage());
             throw e;
+        }
+    }
+
+    private String formatDeadline(String iso) {
+        if (iso == null || iso.isBlank()) return "не указан";
+        try {
+            return DEADLINE_FMT.format(Instant.parse(iso));
+        } catch (Exception e) {
+            return iso;
         }
     }
 

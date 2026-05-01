@@ -91,6 +91,7 @@ public class TaskServiceImpl implements TaskService {
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
 
         boolean deadlineChanged = request.deadline() != null;
+        boolean titleChanged = request.title() != null;
 
         if (request.title() != null) task.setTitle(request.title());
         if (request.description() != null) task.setDescription(request.description());
@@ -119,9 +120,11 @@ public class TaskServiceImpl implements TaskService {
         Map<String, Object> delta = buildDelta(task, request);
         auditService.record(userId, taskId, AuditEventType.UPDATED, delta);
 
-        if (deadlineChanged) {
+        if (deadlineChanged || titleChanged) {
             notificationService.cancelTaskNotifications(taskId);
-            notificationService.scheduleTaskReminder(userId, taskId, updatedTask.getTitle(), request.deadline());
+            if (updatedTask.getDeadline() != null) {
+                notificationService.scheduleTaskReminder(userId, taskId, updatedTask.getTitle(), updatedTask.getDeadline());
+            }
         }
 
         return taskMapper.toResponse(updatedTask);

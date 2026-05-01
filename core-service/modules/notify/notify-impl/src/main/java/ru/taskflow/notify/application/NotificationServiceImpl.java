@@ -47,11 +47,16 @@ public class NotificationServiceImpl implements NotificationService {
             .map(UserSettingsJpaEntity::getDefaultReminderMinutes)
             .orElse(60);
 
+        OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime fireAt = deadline.minusMinutes(offsetMinutes);
 
-        if (fireAt.isBefore(OffsetDateTime.now())) {
-            log.debug("Fire time is in the past, skipping notification for task: {}", taskId);
+        if (deadline.isBefore(now)) {
+            log.debug("Deadline is in the past, skipping notification for task: {}", taskId);
             return;
+        }
+
+        if (fireAt.isBefore(now)) {
+            fireAt = now.plusSeconds(5);
         }
 
         var notification = new ScheduledNotificationJpaEntity();
