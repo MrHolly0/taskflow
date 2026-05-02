@@ -1,226 +1,202 @@
-# TaskFlow
+# TaskFlow - цифровой ассистент, способный преобразовать поток мыслей в текстовом или голосовом форматах в полноценный план задач.
 
-Цифровой ассистент-планировщик для преобразования голоса и текста в структурированный список задач, на базе LLM (Groq API) и Telegram интеграции.
+## 1. Введение
 
-## Возможности
+Планирование задач - это неотъемлемая часть повседневной жизни современного человека. Студенты, фрилансеры, офисные сотрудники и другие ежедневно держат в голове десятки дел, дедлайнов и договорённостей. Существующие инструменты планирования: Todoist, ЯндексТрекер, встроенные заметки, всё это требует ручного заполнения форм. Пользователь вынужден открыть приложение, написать название, выбрать приоритет, установить дедлайн. Этот барьер приводит к тому, что задачи либо не фиксируются вовсе, либо оседают в виде бесструктурных записей.
 
-- **Голосовой ввод** через Telegram бота или веб-приложение
-- **AI разбор** текста/голоса → автоматическое извлечение заголовка, дедлайна, приоритета
-- **Automatic напоминания** об истекающих дедлайнах
-- **Draft-flow** — создание с подтверждением перед сохранением
-- **Модульная архитектура** на Spring Boot (user, task, nlp-gateway, notify, telegram, audit)
-- **Telegram Mini App** для доступа внутри Telegram
-- **Адаптивный веб-интерфейс** (мобилка, планшет, ПК)
+Актуальность проекта обусловлена тремя факторами:
 
-## Быстрый старт
+- Массовое распространение голосового ввода в смартфонах и популяризация голосовых сообщений сменило привычное взаимодействие людей в интернете
+- Telegram всё ещё держит планку основного мессенджером в РФ с аудиторией свыше 80 млн пользователей, люди уже находятся внутри этого приложения и им нет нужны использовать отдельное
+- Технологии LLM (больших языковых моделей) позволяют извлекать структурированные данные из произвольного текста с высокой точностью
 
-Требует: Java 21, Docker, Node.js 18+, pnpm
+TaskFlow устраняет барьер между мыслью и задачей: пользователь говорит или пишет в Telegram в свободной форме, а система сама структурирует, расставляет приоритеты и напоминает.
+
+---
+
+## 2. Определение программного продукта
+
+### 2.1 Описание проблемы
+
+**Проблема:** Люди не фиксируют задачи в структурированном виде, потому что существующие инструменты требуют переключения между приложениями и ручного заполнения форм. Голосовые заметки остаются неразобранными, текстовые списки без приоритетов и дедлайнов.
+
+**Воздействует на:** студентов, фрилансеров, людей без устойчивого навыка планирования, тех, кто пользуется Telegram как основным средством коммуникации.
+
+**Результатом чего является:** пропущенные дедлайны, забытые задачи, хронический стресс от ощущения незавершённых дел, снижение личной и профессиональной продуктивности.
+
+**Выигрыш от ПП:**
+
+- пользователь фиксирует задачи в 2 секунды голосом или текстом, не покидая Telegram
+- система автоматически определяет приоритет и дедлайн из контекста сообщения
+- напоминания приходят туда же, где человек уже находится, т.е. в мессенджер
+- не требуется установка дополнительного приложения
+
+---
+
+### 2.2 Цель программного продукта
+
+**Для:** людей, активно использующих Telegram и желающих планировать задачи без переключения между приложениями и без ручного заполнения форм
+
+**которые:** хотят фиксировать планы быстро: голосом или текстом в свободной форме и получать структурированный список задач с автоматическими приоритетами и напоминаниями
+
+**TaskFlow является:** интеллектуальным планировщиком задач с голосовым вводом, встроенным в Telegram
+
+**который:** автоматически распознаёт речь, извлекает задачи из произвольного текста на русском языке с помощью LLM, расставляет приоритеты и отправляет напоминания о дедлайнах прямо в Telegram
+
+**в отличие от:** Todoist и Яндекс Задачи, требующих ручного ввода и установки отдельного приложения. Notion, недоступного в РФ. Других Telegram-ботов-планировщиков, не использующих LLM для разбора свободного текста
+
+**текущий продукт:** работает внутри Telegram без установки, понимает естественную русскую речь и свободный текст, авторизует пользователя автоматически через его Telegram-аккаунт, предоставляет визуальный интерфейс (Mini App) и быстрые команды через бота, т.е. всё в одном месте
+
+---
+
+## 3. Контекст использования
+
+### 3.1 Описание заинтересованных лиц
+
+| Имя | Описание | Цели, интересы, предпочтения |
+| --- | --- | --- |
+| Пользователь-планировщик | Человек, ежедневно работающий с потоком задач: студент, фрилансер, офисный сотрудник. Активный использовать Telegram. | Быстро фиксировать задачи голосом или текстом, видеть приоритеты, не пропускать дедлайны. Не хочет тратить время на заполнение форм. |
+| Telegram Bot | Программный агент, принимающий сообщения от пользователя и отправляющий ответы и уведомления. | Корректно обработать входящее сообщение (текст или голос) и передать данные в бэкенд. Доставить ответ и напоминания пользователю. |
+| Groq API (LLM) | Внешний сервис, предоставляющий доступ к языковой модели Llama 3 для разбора текста. | Получить промпт с текстом задачи и вернуть структурированный JSON со списком задач, приоритетами и дедлайнами. |
+| Whisper API | Внешний сервис распознавания речи от OpenAI. | Принять аудиофайл (OGG из Telegram), вернуть транскрибированный текст на русском языке. |
+| Разработчик / администратор | Студент, разрабатывающий и поддерживающий систему. | Иметь понятную микросервисную архитектуру, простой запуск через docker-compose, Swagger-документацию для демонстрации. |
+
+![telegram-cloud-photo-size-2-5305663132313262126-y](https://github.com/user-attachments/assets/b59182a9-012e-4b88-bc3f-b37c296565d5)
+
+---
+
+### 3.2 Окружение продукта
+
+**Количество людей, участвующих в выполнении задачи?**
+
+Один пользователь на сессию. Система не предполагает совместной работы над задачами в MVP. Каждый пользователь работает со своим изолированным списком задач, идентифицируемым по Telegram user ID.
+
+**Какова продолжительность цикла задачи?**
+
+Типичный цикл: пользователь отправляет голосовое или текстовое сообщение => получает подтверждение с разбивкой задач (2–5 секунд) => в течение дня получает напоминания => отмечает задачи выполненными. 
+Цикл одной задачи: от создания до выполнения, от нескольких минут до нескольких дней.
+
+**Какие-то уникальные ограничения окружающей среды?**
+
+- Пользователь взаимодействует с системой через смартфон или ПК внутри Telegram
+- Голосовой ввод возможен только при наличии микрофона
+- Работа системы зависит от доступности внешних API (Groq, Whisper, Telegram), требуется обработка отказов
+- Groq API имеет дневной лимит запросов в бесплатном плане
+
+**Какие системные платформы используются сегодня?**
+
+Целевые пользователи используют Telegram на iOS и Android (смартфоны) и Telegram Desktop (Windows/macOS). 
+Бэкенд разворачивается на сервере под управлением Linux в Docker-контейнерах.
+Фронтенд (React) работает как Telegram Mini App внутри мессенджера и как самостоятельный веб-сайт в браузере.
+
+---
+
+## 4. Быстрый старт
+
+Нужны Docker и Docker Compose 2.x. Если хочешь собирать без контейнеров — JDK 21. Node.js 18+ нужен только если трогаешь фронтенды. ngrok — только для локальной разработки Telegram webhook'а.
 
 ```bash
-# 1. Запустить инфраструктуру
-docker compose -f infra/docker-compose.yml up -d
+git clone <repo-url>
+cd taskflow
+cp .env.example .env
+```
 
-# 2. Запустить backend (Spring Boot ядро)
+Запусти БД и кэш:
+```bash
+docker compose -f infra/docker-compose.yml up -d postgres redis
+```
+
+В трёх разных терминалах запусти сервисы:
+```bash
 ./gradlew :core-service:app:bootRun
-
-# 3. Запустить frontend (React Vite)
-cd miniapp && pnpm install && pnpm dev
-
-# 4. Запустить NLP сервис
 ./gradlew :nlp-worker:bootRun
-
-# 5. Запустить сервис уведомлений
 ./gradlew :notification-worker:bootRun
 ```
 
-Приложение доступно:
-- Mini App: `http://localhost:3000`
-- Core-service API: `http://localhost:8080` (Swagger: `/swagger-ui.html`)
-- pgAdmin: `http://localhost:5050` (для просмотра БД)
-
-## Структура проекта
-
-```
-taskflow/
-├── core-service/           Spring Boot ядро (Java 21, многомодульное)
-│   ├── app/                Main приложение + Liquibase миграции
-│   ├── modules/
-│   │   ├── user/           Авторизация (JWT, Telegram)
-│   │   ├── task/           CRUD задач, focus mode, дайджест
-│   │   ├── nlp-gateway/    LLM шлюз (Groq, YandexGPT)
-│   │   ├── notify/         Расписание напоминаний
-│   │   ├── integration-telegram/  Telegram бот webhook
-│   │   └── audit/          Логирование событий
-│   └── shared/             Security, JPA, exception handling
-├── nlp-worker/             Standalone сервис обработки текста/голоса
-├── notification-worker/    Standalone сервис отправки напоминаний
-├── miniapp/                React 18 + Vite (Telegram Mini App + веб)
-├── infra/                  Docker Compose, nginx, конфигурация
-├── .env.example            Шаблон переменных окружения
-└── DEPLOYMENT.md           Полный гайд по развёртыванию на VPS
+И фронтенды:
+```bash
+cd miniapp && pnpm dev    # на :5173
+cd website && pnpm dev    # на :3000
 ```
 
-## Стек технологий
+Swagger будет на http://localhost:8080/swagger-ui.html.
 
-**Backend:**
-- Java 21, Spring Boot 3.3, Spring Security
-- PostgreSQL 16, Redis 7, Liquibase (миграции)
-- Groq LLM API (основной), YandexGPT (fallback)
-- Telegram Bot API (webhook режим)
+Для Telegram webhook нужен публичный HTTPS. Локально используй ngrok:
+```bash
+ngrok http 8080
+curl -X POST https://api.telegram.org/bot<TOKEN>/setWebhook \
+  -d "url=https://abc123.ngrok.io/api/telegram/webhook" \
+  -d "secret_token=<SECRET>"
+```
 
-**Frontend:**
-- React 18, Vite, TypeScript
-- TanStack Query v5, Zustand
-- Tailwind CSS, shadcn/ui, Tabler Icons
-- @dnd-kit (drag-and-drop канбан)
+---
 
-**Deployment:**
-- Docker (multi-stage builds)
-- docker-compose (dev/prod)
-- nginx (reverse proxy)
-- Let's Encrypt (TLS/HTTPS)
+## 5. Архитектура
 
-## Авторизация
+Три Java сервиса плюс React фронтенд и Next.js сайт. Каждый сервис — отдельный контейнер.
 
-Единственный способ авторизации — **через Telegram**:
-- Mini App: использует `initData` от Telegram WebApp
-- Веб-сайт: использует Telegram Login Widget
-- Telegram бот: использует HMAC-SHA256 валидацию webhook
+**core-service** — основное приложение. Внутри шесть модулей: user (авторизация), task (CRUD и режим фокуса), nlp-gateway (вызовы к nlp-worker), notify (напоминания), integration-telegram (webhook и команды /start, /help, /today), audit (логирование).
 
-JWT токены хранятся в `localStorage`, refresh токены в Redis.
+**nlp-worker** парсит текст и голос через Groq API (извлечение названия, дедлайна, приоритета) и Whisper (преобразование голоса в текст).
 
-## Основные API эндпоинты
+**notification-worker** отправляет напоминания через Telegram Bot API. Каждую минуту проверяет таблицу scheduled_notifications и отправляет при необходимости.
+
+**miniapp** и **website** — почти идентичные интерфейсы. Mini App работает внутри Telegram, сайт в браузере.
+
+```
+Telegram Bot       Mini App (Telegram)      Browser (website)
+       │                  │                          │
+       └──────────────────┼──────────────────────────┘
+                          │
+                   core-service:8080
+                          │
+              ┌───────────┼───────────┐
+              │           │           │
+         nlp-worker   postgres     redis
+           :8081      :5432       :6379
+```
+
+---
+
+## 6. REST API
+
+Полная документация в Swagger UI (`/swagger-ui.html`). Краткий обзор:
+
+**Авторизация:** `POST /api/v1/auth/login` с initData (Mini App) или данными Telegram Login Widget.
+
+**Задачи:** CRUD на `/api/v1/tasks` + режим фокуса (`/focus`), дайджест (`/digest`), парсинг текста (`/parse-text`) и быстрый ввод (`/quick`).
+
+**Группы:** CRUD на `/api/v1/groups`.
+
+**Webhook:** `POST /api/telegram/webhook` для входящих обновлений от Telegram.
+
+---
+
+## 7. Разработка
+
+Запускай тесты: `./gradlew test`. Для отчёта по покрытию: `./gradlew test jacocoTestReport`.
+
+Собрать: `./gradlew build` (всё) или `./gradlew :core-service:app:build` (конкретный модуль).
+
+TypeScript-типы из OpenAPI генерируются здесь:
+```bash
+cd shared-types && pnpm generate
+```
+
+Миграции БД (Liquibase) применяются автоматически при старте. Добавляй новые в `core-service/app/src/main/resources/db/changelog/`.
+
+---
+
+## 8. Production
 
 ```bash
-# Авторизация
-POST /api/v1/auth/telegram-miniapp   # Telegram Mini App (initData)
-POST /api/v1/auth/telegram-login     # Telegram Login Widget (веб)
-POST /api/v1/auth/dev-token          # Dev/demo токен
-
-# Задачи
-GET  /api/v1/tasks/focus             # 1-3 приоритетные задачи
-GET  /api/v1/tasks/digest?date=...   # Дайджест на день
-GET  /api/v1/tasks?size=100          # Полный список (Page<TaskResponse>)
-POST /api/v1/tasks                   # Создать
-PATCH /api/v1/tasks/{id}             # Обновить статус/приоритет/дедлайн
-POST /api/v1/tasks/{id}/complete     # Отметить выполненной
-POST /api/v1/tasks/parse-text        # NLP-разбор текста → массив задач
-POST /api/v1/tasks/quick             # Быстрое создание без черновика
-DELETE /api/v1/tasks/{id}            # Удалить
-
-# Группы
-GET  /api/v1/groups                  # Список групп
-POST /api/v1/groups                  # Создать группу
-DELETE /api/v1/groups/{id}           # Удалить группу
-
-# Telegram webhook
-POST /api/telegram/webhook           # Входящие сообщения от бота
+docker compose -f infra/docker-compose.prod.yml up -d
 ```
 
-## Конфигурация
+Это запустит nginx (reverse proxy), все три сервиса, PostgreSQL и Redis с persistence.
 
-Создайте файл `.env` (см. `.env.example`):
+---
 
-```bash
-# БД
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=taskflow
-DB_USER=taskflow
-DB_PASSWORD=ваш_пароль
+## 9. Документация
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-# Telegram
-TELEGRAM_BOT_TOKEN=ваш_токен_бота
-TELEGRAM_BOT_SECRET=ваш_вебхук_секрет
-
-# LLM
-GROQ_API_KEY=ваш_groq_ключ
-GROQ_WHISPER_API_KEY=ваш_groq_ключ
-YANDEX_GPT_API_KEY=ваш_yandex_ключ (опционально)
-```
-
-## Запуск на VPS
-
-```bash
-# 1. Клонировать репо
-git clone https://github.com/your/taskflow.git
-cd taskflow
-
-# 2. Установить .env
-cp .env.example .env
-# — отредактировать .env с реальными значениями
-
-# 3. Запустить (production)
-docker compose -f infra/docker-compose.prod.yml up -d --build
-
-# 4. Сертификат Let's Encrypt
-docker compose -f infra/docker-compose.prod.yml exec nginx certbot certonly \
-  --webroot -w /var/www/certbot -d yourdomain.com
-```
-
-Подробные инструкции см. [DEPLOYMENT.md](DEPLOYMENT.md).
-
-## Документация
-
-- **[core-service/README.md](core-service/README.md)** — Архитектура, модули, запуск
-- **[nlp-worker/README.md](nlp-worker/README.md)** — Парсинг текста/голоса
-- **[notification-worker/README.md](notification-worker/README.md)** — Напоминания, polling
-- **[infra/README.md](infra/README.md)** — Docker Compose, окружение
-- **[miniapp/README.md](miniapp/README.md)** — Фронтенд, структура проекта
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Развёртывание на VPS (200+ строк)
-
-## Тестирование
-
-```bash
-# Unit тесты
-./gradlew :core-service:app:test
-
-# Smoke-тест
-curl http://localhost:8080/actuator/health
-
-# Swagger API docs
-open http://localhost:8080/swagger-ui.html
-```
-
-## Разработка
-
-```bash
-# Сборка всех модулей (без тестов)
-./gradlew build -x test
-
-# Clean
-./gradlew clean
-
-# Lint (если настроен)
-cd miniapp && pnpm lint
-```
-
-## Проблемы и решения
-
-**Порт уже занят:**
-```bash
-docker compose -f infra/docker-compose.yml down
-# или измените PORTS в docker-compose.yml
-```
-
-**БД не подключается:**
-```bash
-docker compose -f infra/docker-compose.yml logs postgres
-```
-
-**Telegram webhook не работает:**
-- Проверьте `TELEGRAM_WEBHOOK_SECRET` в `.env`
-- URL должен быть `https://yourdomain.com/api/telegram/webhook`
-- Сертификат должен быть валидным (Let's Encrypt)
-
-## Лицензия
-
-MIT (или другая по выбору)
-
-## Контакты
-
-Проект разработан как курсовая работа (две отдельные курсовые: по Java и по веб-технологиям).
+Swagger на `/swagger-ui.html` при запуске. JavaDoc: `./gradlew javadoc`. Каждый модуль имеет README в `docs/`.
