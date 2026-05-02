@@ -126,8 +126,9 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   }, [open]);
 
   const handleVoice = useCallback(() => {
-    if ((window as any).Telegram?.WebApp) {
-      setError('Голосовой ввод недоступен в Telegram — введи текст вручную.');
+    const isInTelegram = (window as any).Telegram?.WebApp?.initData;
+    if (isInTelegram) {
+      setError('Голосовой ввод недоступен в Telegram Mini App — введи текст вручную.');
       return;
     }
 

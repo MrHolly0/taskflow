@@ -11,6 +11,10 @@ import org.springframework.web.client.RestClient;
 import ru.taskflow.nlp.api.NlpParseResult;
 import ru.taskflow.nlp.api.NlpParsedTask;
 
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.core.io.ByteArrayResource;
+
 import java.util.List;
 import java.util.Map;
 
@@ -53,13 +57,22 @@ public class NlpWorkerClient {
     @Retry(name = "nlp-worker")
     public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, String userLanguage, List<String> existingGroups) {
         try {
-            String groupsParam = (existingGroups != null && !existingGroups.isEmpty())
-                ? "&existingGroups=" + String.join("&existingGroups=", existingGroups)
-                : "";
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new ByteArrayResource(audioBytes) {
+                @Override
+                public String getFilename() {
+                    return "voice.ogg";
+                }
+            });
+            body.add("userTimezone", userTimezone);
+            body.add("userLanguage", userLanguage);
+            if (existingGroups != null) {
+                existingGroups.forEach(g -> body.add("existingGroups", g));
+            }
+
             var response = restClient.post()
-                .uri(config.getWorkerUrl() + "/nlp/parse-voice?userTimezone=" + userTimezone + "&userLanguage=" + userLanguage + groupsParam)
-                .header("Content-Type", "application/octet-stream")
-                .body(audioBytes)
+                .uri(config.getWorkerUrl() + "/nlp/parse-voice")
+                .body(body)
                 .retrieve()
                 .body(NlpWorkerResponse.class);
 
