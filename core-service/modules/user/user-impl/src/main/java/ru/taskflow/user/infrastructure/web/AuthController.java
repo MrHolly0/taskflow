@@ -1,5 +1,7 @@
 package ru.taskflow.user.infrastructure.web;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@Tag(name = "Auth", description = "Авторизация через Telegram и управление токенами")
 public class AuthController {
 
     private final TelegramInitDataValidator initDataValidator;
@@ -30,6 +33,7 @@ public class AuthController {
 
     @PostMapping("/telegram-miniapp")
     @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Авторизация Mini App", description = "Проверяет подпись initData и выдаёт JWT токены")
     public AuthResponse miniAppAuth(@Valid @RequestBody TelegramMiniAppAuthRequest request) {
         if (!initDataValidator.validate(request.initData())) {
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid initData");
@@ -42,6 +46,7 @@ public class AuthController {
 
     @PostMapping("/telegram-login")
     @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Авторизация через Telegram Login Widget", description = "Проверяет данные Login Widget и выдаёт JWT токены")
     public AuthResponse loginWidgetAuth(@Valid @RequestBody TelegramLoginWidgetAuthRequest request) {
         if (!loginWidgetValidator.validate(request.fields())) {
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid login widget data");
@@ -55,6 +60,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Обновить токен", description = "Выдаёт новые access и refresh токены")
     public AuthResponse refresh(@Valid @RequestBody RefreshRequest request) {
         UUID userId = refreshTokenService.resolve(request.refreshToken())
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
@@ -66,6 +72,7 @@ public class AuthController {
 
     @PostMapping("/dev-token")
     @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Выдать тестовый токен", description = "Для локальной разработки: создаёт фиктивного пользователя и выдаёт токены")
     public AuthResponse devToken(@RequestBody Map<String, String> body) {
         String username = body.getOrDefault("username", "dev_user");
         long fakeTelegramId = -1_000_000_000L - Math.abs((long) username.hashCode() % 1_000_000_000L);

@@ -1,5 +1,7 @@
 package ru.taskflow.task.infrastructure.web;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,6 +29,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/tasks")
 @RequiredArgsConstructor
+@Tag(name = "Tasks", description = "Управление задачами: создание, чтение, обновление, удаление")
 public class TaskController {
 
     private final TaskService taskService;
@@ -34,6 +37,7 @@ public class TaskController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Создать задачу", description = "Создаёт новую задачу из формы или голоса")
     public TaskResponse create(
             @RequestBody @Valid CreateTaskRequest request,
             @AuthenticationPrincipal AuthenticatedUser user
@@ -42,6 +46,7 @@ public class TaskController {
     }
 
     @GetMapping("/{id}")
+    @Operation(summary = "Получить задачу", description = "Возвращает одну задачу по ID")
     public TaskResponse findById(
             @PathVariable java.util.UUID id,
             @AuthenticationPrincipal AuthenticatedUser user
@@ -50,6 +55,7 @@ public class TaskController {
     }
 
     @GetMapping
+    @Operation(summary = "Список всех задач", description = "Возвращает все задачи с фильтрацией и постраничной выборкой")
     public Page<TaskResponse> findAll(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(required = false) java.util.UUID groupId,
@@ -63,6 +69,7 @@ public class TaskController {
     }
 
     @PatchMapping("/{id}")
+    @Operation(summary = "Обновить задачу", description = "Обновляет название, дедлайн, приоритет и статус")
     public TaskResponse update(
             @PathVariable java.util.UUID id,
             @RequestBody @Valid UpdateTaskRequest request,
@@ -73,6 +80,7 @@ public class TaskController {
 
     @PostMapping("/{id}/complete")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Отметить как выполненную", description = "Меняет статус на DONE и отменяет напоминания")
     public void complete(
             @PathVariable java.util.UUID id,
             @AuthenticationPrincipal AuthenticatedUser user
@@ -82,6 +90,7 @@ public class TaskController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Удалить задачу", description = "Мягко удаляет задачу (is_deleted = true)")
     public void delete(
             @PathVariable java.util.UUID id,
             @AuthenticationPrincipal AuthenticatedUser user
@@ -90,6 +99,7 @@ public class TaskController {
     }
 
     @GetMapping("/focus")
+    @Operation(summary = "Режим фокуса", description = "Возвращает 1–3 приоритетные задачи с ближайшим дедлайном")
     public FocusResponse getFocusTasks(
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
@@ -97,6 +107,7 @@ public class TaskController {
     }
 
     @GetMapping("/digest")
+    @Operation(summary = "Дайджест на дату", description = "Возвращает все задачи на конкретную дату (по умолчанию сегодня)")
     public DigestResponse getDigest(
             @AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(defaultValue = "#{T(java.time.LocalDate).now()}") LocalDate date
@@ -106,6 +117,7 @@ public class TaskController {
 
     @PostMapping("/quick")
     @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Быстрый ввод", description = "Создаёт задачу в режиме черновика для подтверждения")
     public TaskResponse createQuick(
             @RequestBody @Valid CreateTaskRequest request,
             @AuthenticationPrincipal AuthenticatedUser user
@@ -114,6 +126,7 @@ public class TaskController {
     }
 
     @PostMapping("/parse-text")
+    @Operation(summary = "NLP-парсинг текста", description = "Извлекает название, дедлайн, приоритет из произвольного текста через Groq LLM")
     public Map<String, Object> parseText(
             @RequestBody Map<String, String> request,
             @AuthenticationPrincipal AuthenticatedUser user

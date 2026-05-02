@@ -1,5 +1,7 @@
 package ru.taskflow.telegram.infrastructure.web;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -17,6 +19,7 @@ import ru.taskflow.telegram.infrastructure.client.dto.TelegramUpdate;
 @Slf4j
 @RestController
 @RequestMapping("/api/telegram/webhook")
+@Tag(name = "Telegram", description = "Webhook для получения обновлений от Telegram Bot API")
 public class TelegramWebhookController {
 
     private final String webhookSecret;
@@ -34,6 +37,7 @@ public class TelegramWebhookController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.OK)
+    @Operation(summary = "Webhook Telegram", description = "Получает обновления от Telegram Bot API (сообщения, команды, обратные вызовы). Проверяет подпись, выполняет дедупликацию по update_id")
     public void handleUpdate(
             @RequestHeader(value = "X-Telegram-Bot-Api-Secret-Token", required = false) String secret,
             @RequestBody TelegramUpdate update
