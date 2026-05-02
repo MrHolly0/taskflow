@@ -8,6 +8,12 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Сервис управления refresh-токенами.
+ *
+ * Выдаёт долгоживущие refresh-токены для обновления JWT,
+ * хранит их в Redis с TTL 30 дней.
+ */
 @Service
 @RequiredArgsConstructor
 public class RefreshTokenService {

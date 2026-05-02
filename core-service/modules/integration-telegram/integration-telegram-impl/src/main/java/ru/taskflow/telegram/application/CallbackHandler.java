@@ -8,6 +8,12 @@ import ru.taskflow.telegram.infrastructure.client.dto.TelegramCallbackQuery;
 
 import java.util.UUID;
 
+/**
+ * Обработчик inline-кнопок и обратных вызовов от Telegram.
+ *
+ * Обрабатывает действия пользователя в inline-меню (подтверждение/отклонение задач,
+ * пагинация результатов).
+ */
 @Service
 @RequiredArgsConstructor
 public class CallbackHandler {

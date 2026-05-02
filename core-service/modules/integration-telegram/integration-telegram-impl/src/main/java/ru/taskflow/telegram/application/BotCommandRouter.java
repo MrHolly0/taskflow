@@ -14,6 +14,12 @@ import ru.taskflow.telegram.infrastructure.client.dto.TelegramMessage;
 
 import java.util.UUID;
 
+/**
+ * Обработчик слеш-команд Telegram бота.
+ *
+ * Поддерживает команды /start, /help, /today и возвращает соответствующие
+ * ответы с информацией о боте и списком задач пользователя.
+ */
 @Service
 @RequiredArgsConstructor
 public class BotCommandRouter {

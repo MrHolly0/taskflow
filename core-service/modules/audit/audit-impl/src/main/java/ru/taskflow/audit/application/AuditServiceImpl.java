@@ -13,6 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Сервис аудита и логирования действий с задачами.
+ *
+ * Записывает все операции над задачами (создание, обновление, удаление, изменение статуса)
+ * для целей аудита и анализа истории.
+ */
 @Service
 @RequiredArgsConstructor
 public class AuditServiceImpl implements AuditService {

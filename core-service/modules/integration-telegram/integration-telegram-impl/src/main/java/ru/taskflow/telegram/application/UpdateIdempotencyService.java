@@ -6,6 +6,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
+/**
+ * Сервис дедупликации обновлений от Telegram.
+ *
+ * Предотвращает обработку одного и того же обновления дважды,
+ * используя Redis для кэширования уже обработанных update_id.
+ */
 @Service
 @RequiredArgsConstructor
 public class UpdateIdempotencyService {

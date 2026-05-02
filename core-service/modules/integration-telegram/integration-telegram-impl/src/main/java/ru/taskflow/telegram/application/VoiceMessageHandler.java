@@ -21,6 +21,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Обработчик голосовых сообщений в Telegram боте.
+ *
+ * Преобразует аудио в текст через NLP worker и обрабатывает как текстовое сообщение.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

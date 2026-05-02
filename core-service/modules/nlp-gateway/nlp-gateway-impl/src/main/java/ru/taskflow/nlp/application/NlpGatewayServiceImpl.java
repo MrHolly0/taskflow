@@ -7,6 +7,12 @@ import ru.taskflow.nlp.api.NlpGatewayService;
 import ru.taskflow.nlp.api.NlpParseResult;
 import ru.taskflow.nlp.infrastructure.NlpWorkerClient;
 
+/**
+ * Шлюз к сервису обработки естественного языка.
+ *
+ * Предоставляет методы для разбора текста и голоса через отдельный NLP worker,
+ * с обработкой ошибок и fallback на пустой результат.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

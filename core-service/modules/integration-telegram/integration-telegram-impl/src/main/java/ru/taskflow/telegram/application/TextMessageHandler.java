@@ -20,6 +20,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Обработчик текстовых сообщений в Telegram боте.
+ *
+ * Использует NLP для распознавания задач из свободного текста,
+ * создаёт задачи и предлагает пользователю подтверждение.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

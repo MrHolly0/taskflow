@@ -29,6 +29,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Основной сервис управления задачами пользователя.
+ *
+ * Предоставляет операции для создания, чтения, обновления и удаления задач,
+ * а также специализированные эндпоинты для режима фокуса и дайджестов.
+ * Поддерживает автоматическую группировку, теги, уведомления и аудит.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -41,6 +48,16 @@ public class TaskServiceImpl implements TaskService {
     private final NotificationService notificationService;
     private final AuditService auditService;
 
+    /**
+     * Создаёт новую задачу для пользователя.
+     *
+     * Задача изначально создаётся в статусе draft. Если указана группа,
+     * автоматически создаётся, если её не существует.
+     *
+     * @param userId ID пользователя
+     * @param request параметры новой задачи (название, описание, приоритет и т.д.)
+     * @return созданная задача с ID
+     */
     @Override
     @Transactional
     public TaskResponse create(UUID userId, CreateTaskRequest request) {
@@ -65,6 +82,14 @@ public class TaskServiceImpl implements TaskService {
         return taskMapper.toResponse(savedTask);
     }
 
+    /**
+     * Получает задачу по ID.
+     *
+     * @param userId ID пользователя
+     * @param taskId ID задачи
+     * @return данные задачи
+     * @throws TaskNotFoundException если задача не найдена или принадлежит другому пользователю
+     */
     @Override
     public TaskResponse findById(UUID userId, UUID taskId) {
         return taskRepository.findByIdAndUserId(taskId, userId)
@@ -72,6 +97,17 @@ public class TaskServiceImpl implements TaskService {
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
     }
 
+    /**
+     * Получает список всех задач пользователя с фильтрацией.
+     *
+     * Поддерживает фильтрацию по группе, статусу, приоритету и тегам.
+     * Результаты постраничные.
+     *
+     * @param userId ID пользователя
+     * @param filter критерии фильтрации
+     * @param pageable параметры страницы и сортировки
+     * @return страница с задачами
+     */
     @Override
     public Page<TaskResponse> findAll(UUID userId, TaskFilterRequest filter, Pageable pageable) {
         return taskRepository.findAllWithFilter(
@@ -84,6 +120,18 @@ public class TaskServiceImpl implements TaskService {
         ).map(taskMapper::toResponse);
     }
 
+    /**
+     * Обновляет параметры задачи.
+     *
+     * Если изменился дедлайн или название, отправляет обновление в сервис уведомлений.
+     * Записывает событие в аудит.
+     *
+     * @param userId ID пользователя
+     * @param taskId ID задачи
+     * @param request новые параметры
+     * @return обновленная задача
+     * @throws TaskNotFoundException если задача не найдена
+     */
     @Override
     @Transactional
     public TaskResponse update(UUID userId, UUID taskId, UpdateTaskRequest request) {
@@ -130,6 +178,15 @@ public class TaskServiceImpl implements TaskService {
         return taskMapper.toResponse(updatedTask);
     }
 
+    /**
+     * Отмечает задачу как выполненную.
+     *
+     * Устанавливает статус DONE и фиксирует время завершения.
+     *
+     * @param userId ID пользователя
+     * @param taskId ID задачи
+     * @throws TaskNotFoundException если задача не найдена
+     */
     @Override
     @Transactional
     public void complete(UUID userId, UUID taskId) {
@@ -141,6 +198,15 @@ public class TaskServiceImpl implements TaskService {
         auditService.record(userId, taskId, AuditEventType.STATUS_CHANGED, Map.of("status", "DONE"));
     }
 
+    /**
+     * Удаляет задачу (мягкое удаление).
+     *
+     * Задача помечается как удалённая с фиксацией времени.
+     *
+     * @param userId ID пользователя
+     * @param taskId ID задачи
+     * @throws TaskNotFoundException если задача не найдена
+     */
     @Override
     @Transactional
     public void delete(UUID userId, UUID taskId) {
@@ -254,6 +320,15 @@ public class TaskServiceImpl implements TaskService {
         return delta.isEmpty() ? null : delta;
     }
 
+    /**
+     * Получает ограниченный список задач для режима фокуса.
+     *
+     * Возвращает до 3 актуальных задач на сегодня (с дедлайном до конца дня),
+     * исключая выполненные.
+     *
+     * @param userId ID пользователя
+     * @return ответ с задачами для фокуса
+     */
     @Override
     public FocusResponse getFocusTasks(UUID userId) {
         var endOfToday = OffsetDateTime.now(ZoneOffset.UTC)
@@ -266,6 +341,15 @@ public class TaskServiceImpl implements TaskService {
         return new FocusResponse(tasks);
     }
 
+    /**
+     * Получает дайджест по задачам на конкретную дату.
+     *
+     * Агрегирует статистику по выполненным, просроченным и активным задачам.
+     *
+     * @param userId ID пользователя
+     * @param date дата для дайджеста
+     * @return ответ с статистикой и списком задач
+     */
     @Override
     public DigestResponse getDigest(UUID userId, LocalDate date) {
         var startOfDay = date.atStartOfDay(ZoneOffset.UTC).toOffsetDateTime();
@@ -288,6 +372,16 @@ public class TaskServiceImpl implements TaskService {
         return new DigestResponse(topTasks, totalTasks, completedToday, overdueTasks);
     }
 
+    /**
+     * Создаёт задачу в статусе активной (не draft) с быстрым способом.
+     *
+     * Используется для быстрого добавления задач через боты и интеграции.
+     * Автоматически расписывает напоминания если указан дедлайн.
+     *
+     * @param userId ID пользователя
+     * @param request параметры новой задачи
+     * @return созданная активная задача
+     */
     @Override
     @Transactional
     public TaskResponse createQuick(UUID userId, CreateTaskRequest request) {

@@ -17,6 +17,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * Сервис управления напоминаниями и уведомлениями.
+ *
+ * Планирует отправку напоминаний о задачах, управляет расписанием уведомлений,
+ * отправляемых notification-worker через Quartz.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j

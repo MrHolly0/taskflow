@@ -11,6 +11,12 @@ import ru.taskflow.telegram.infrastructure.client.dto.TelegramUser;
 
 import java.util.UUID;
 
+/**
+ * Маршрутизатор обновлений от Telegram Bot API.
+ *
+ * Распределяет входящие события (сообщения, команды, обратные вызовы)
+ * на соответствующие обработчики. Разрешает Telegram ID в ID пользователей системы.
+ */
 @Service
 @RequiredArgsConstructor
 public class UpdateRouter {
@@ -21,6 +27,14 @@ public class UpdateRouter {
     private final VoiceMessageHandler voiceHandler;
     private final CallbackHandler callbackHandler;
 
+    /**
+     * Маршрутизирует входящее обновление от Telegram.
+     *
+     * Определяет тип события (команда, текст, голос, callback) и передаёт
+     * на соответствующий обработчик. Автоматически создаёт пользователей при необходимости.
+     *
+     * @param update обновление от Telegram Bot API
+     */
     public void route(TelegramUpdate update) {
         TelegramCallbackQuery callback = update.callbackQuery();
         if (callback != null) {
