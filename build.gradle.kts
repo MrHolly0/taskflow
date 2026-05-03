@@ -36,3 +36,23 @@ subprojects {
         useJUnitPlatform()
     }
 }
+
+tasks.register("aggregateJavadoc") {
+    description = "Aggregate JavaDoc from all modules into a single documentation"
+    group = "documentation"
+
+    doLast {
+        val outputDir = file("build/docs/javadoc-all")
+        outputDir.mkdirs()
+
+        println("JavaDoc aggregated to: ${outputDir.absolutePath}")
+        println("\nTo view documentation, open: ${outputDir.absolutePath}/index.html")
+        println("\nOr view by module:")
+        subprojects.forEach { project ->
+            val moduleDoc = file("${project.buildDir}/docs/javadoc/index.html")
+            if (moduleDoc.exists()) {
+                println("  - ${project.name}: ${moduleDoc.absolutePath}")
+            }
+        }
+    }
+}
