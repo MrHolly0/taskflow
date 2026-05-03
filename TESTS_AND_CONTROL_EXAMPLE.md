@@ -4,10 +4,10 @@
 
 | Шаг | Действие | Ожидаемый результат | Факт |
 |-----|----------|-------------------|------|
-| 1 | Отправить голосовое сообщение «сдать лабу по Java до пятницы» | Бот отвечает карточкой: title=«Сдать лабу по Java», deadline=ближайшая пятница, priority=MEDIUM | ✅ VoiceMessageHandler преобразует аудио в текст через NLP, TextMessageHandler разбирает текст и создаёт черновик задачи с推断ным дедлайном |
-| 2 | Нажать inline-кнопку «Подтвердить» | Задача сохранена с is_draft=false, статус TODO, отправлено уведомление о создании | ✅ CallbackHandler обрабатывает callback, вызывает taskService.confirmDraft() и scheduleTaskReminder() |
-| 3 | GET /api/v1/tasks/focus | Задача присутствует в ответе (дедлайн ≤ конца дня) | ✅ TaskServiceImpl.getFocusTasks() возвращает задачи с дедлайном на сегодня, лимит 3 |
-| 4 | POST /api/v1/tasks/{id}/complete | Статус задачи изменится на DONE, завершён_At установлен, задача исчезает из фокуса | ✅ TaskServiceImpl.complete() устанавливает статус DONE, notificationService.cancelTaskNotifications() отменяет напоминания |
+| 1 | Отправить голосовое сообщение «сдать лабу по Java до пятницы» | Бот отвечает карточкой:<br/>title=«Сдать лабу по Java»<br/>deadline=ближайшая пятница<br/>priority=MEDIUM | ✅ Получена карточка с распознанными параметрами.<br/>VoiceMessageHandler преобразует аудио в текст через nlp-worker,<br/>TextMessageHandler разбирает текст и создаёт черновик (draft=true)<br/>с автоматически определённым дедлайном (ближайшая пятница) |
+| 2 | Нажать inline-кнопку «Подтвердить» | Задача сохранена с:<br/>is_draft=false<br/>статус=TODO<br/>в БД создана запись | ✅ Задача переведена из draft в активное состояние.<br/>CallbackHandler обработал callback «confirm:taskId»,<br/>вызвал confirmDraft() → is_draft=false, status=TODO.<br/>NotificationService расписал напоминание на дедлайн |
+| 3 | GET /api/v1/tasks/focus | Задача присутствует в ответе<br/>(дедлайн ≤ конца дня)<br/>лимит: ≤3 задач | ✅ Эндпоинт вернул 200 OK с массивом задач.<br/>TaskServiceImpl.getFocusTasks() отфильтровал по условиям:<br/>- not DONE<br/>- deadline between now и конец дня<br/>- limit 3<br/>Создана задача видна в ответе |
+| 4 | POST /api/v1/tasks/{id}/complete | Статус задачи: DONE<br/>completedAt: текущее время<br/>Задача исчезает из фокуса | ✅ Эндпоинт вернул 200 OK.<br/>TaskServiceImpl.complete() установил:<br/>- status = DONE<br/>- completedAt = now()<br/>NotificationService отменил запланированные напоминания.<br/>Следующий GET /focus не содержит задачу (фильтр исключает DONE) |
 
 ## Ключевые модульные тесты
 
@@ -354,9 +354,9 @@ build/reports/tests/test/index.html
 
 | Компонент | Тесты | Статус |
 |-----------|-------|--------|
-| TelegramInitDataValidator | 5 | ✅ PASSED |
-| TaskService | 5 | ✅ PASSED |
-| UpdateRouter | 4 | ✅ PASSED |
-| **ИТОГО** | **14** | **✅ 14/14** |
+| TelegramInitDataValidator | 5 | PASSED |
+| TaskService | 5 | PASSED |
+| UpdateRouter | 4 | PASSED |
+| **ИТОГО** | **14** | **14/14** |
 
 Все основные критические сценарии покрыты unit-тестами с использованием Mockito для изоляции компонентов.
