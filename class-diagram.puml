@@ -1,0 +1,1254 @@
+@startuml
+class ru.taskflow.shared.security.TelegramInitDataValidator {
+- String botToken
+- long maxAgeSeconds
++ boolean validate(String)
+- Map<String,String> parseQueryString(String)
+}
+
+
+class ru.taskflow.task.infrastructure.persistence.TaskJpaEntity {
+- UUID id
+- UUID userId
+- GroupJpaEntity group
+- TaskJpaEntity parentTask
+- String title
+- String description
+- TaskPriority priority
+- TaskStatus status
+- OffsetDateTime deadline
+- Integer estimateMinutes
+- boolean isDraft
+- TaskSource source
+- String rawLlmResponse
+- boolean isDeleted
+- OffsetDateTime deletedAt
+- OffsetDateTime createdAt
+- OffsetDateTime updatedAt
+- OffsetDateTime completedAt
+- List<TagJpaEntity> tags
+~ void prePersist()
+~ void preUpdate()
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.TelegramApiClient {
+- String botToken
+- RestClient apiClient
+- RestClient fileClient
++ void sendMessage(long,String,String)
++ void sendMessageWithKeyboard(long,String,String,Object)
++ void answerCallbackQuery(String,String)
++ void setDefaultMenuButton(String,String)
++ byte[] downloadVoice(String)
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.TelegramApiClient$GetFileResponse {
+- boolean ok
+- FileInfo result
++ boolean ok()
++ FileInfo result()
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.TelegramApiClient$FileInfo {
+- String fileId
+- String filePath
++ String fileId()
++ String filePath()
+}
+
+
+interface ru.taskflow.task.infrastructure.persistence.TagRepository {
+~ Optional<TagJpaEntity> findByUserIdAndName(UUID,String)
+~ List<TagJpaEntity> findAllByUserIdAndNameIn(UUID,List<String>)
+}
+
+class ru.taskflow.task.api.dto.GroupResponse {
+- UUID id
+- String name
+- String color
+- String icon
++ UUID id()
++ String color()
++ String icon()
++ String name()
+}
+
+
+class ru.taskflow.task.api.dto.DigestResponse {
+- List<TaskResponse> topTasks
+- long totalTasks
+- long completedToday
+- long overdueTasks
++ List<TaskResponse> topTasks()
++ long completedToday()
++ long overdueTasks()
++ long totalTasks()
+}
+
+
+class ru.taskflow.nlp.application.NlpService {
+- LlmProvider llmProvider
+- SpeechToTextProvider speechToTextProvider
+- StringRedisTemplate redis
+- ObjectMapper objectMapper
+- {static} String CACHE_PREFIX
+- {static} Duration CACHE_TTL
++ ParsedTasks parseText(String,String,String,java.util.List<String>)
++ ParsedTasks parseVoice(byte[],String,String,java.util.List<String>)
+- String getCacheKey(String,java.util.List<String>)
+}
+
+
+interface ru.taskflow.nlp.domain.LlmProvider {
+~ ParsedTasks parseTasksFromText(String,String,String,List<String>)
+}
+
+class ru.taskflow.shared.security.JwtService {
+- SecretKey secretKey
+- long accessTokenTtlSeconds
++ String issueAccessToken(UUID,String)
++ Optional<UUID> extractUserId(String)
+}
+
+
+class ru.taskflow.nlp.infrastructure.config.LlmProviderConfiguration {
+- GroqLlmProvider groqProvider
+- Optional<YandexGptLlmProvider> yandexProvider
++ LlmProvider llmProvider()
+- List<LlmProvider> buildProviderList()
+}
+
+
+class ru.taskflow.nlp.infrastructure.config.LlmProviderConfiguration$FallbackLlmProvider {
+- List<LlmProvider> providers
++ ParsedTasks parseTasksFromText(String,String,String,List<String>)
+}
+
+
+class ru.taskflow.task.api.dto.CreateTaskRequest {
+- String title
+- String description
+- TaskPriority priority
+- OffsetDateTime deadline
+- UUID groupId
+- String groupName
+- List<String> tags
+- Integer estimateMinutes
+- TaskSource source
++ String title()
++ List<String> tags()
++ TaskSource source()
++ String description()
++ OffsetDateTime deadline()
++ UUID groupId()
++ TaskPriority priority()
++ String groupName()
++ Integer estimateMinutes()
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.dto.TelegramUser {
+- long id
+- String username
+- String firstName
+- String lastName
++ String username()
++ long id()
++ String firstName()
++ String lastName()
+}
+
+
+class ru.taskflow.telegram.application.VoiceMessageHandler {
+- TelegramApiClient apiClient
+- TelegramMessageSender sender
+- TaskService taskService
+- NlpGatewayService nlpGatewayService
++ void handle(TelegramMessage,UUID)
+- TaskPriority parsePriority(String)
+}
+
+
+class ru.taskflow.nlp.domain.ParsedTask {
+- String title
+- String description
+- String priority
+- Instant deadline
+- String group
+- List<String> tags
+- String recurrence
++ List<String> tags()
++ String recurrence()
++ Instant deadline()
++ String description()
++ String title()
++ String priority()
++ String group()
+}
+
+
+class ru.taskflow.nlp.infrastructure.web.NlpController {
+- NlpService nlpService
++ ParseTextResponse parseText(ParseTextRequest)
++ ParseTextResponse parseVoice(MultipartFile,String,String,List<String>)
+}
+
+
+class ru.taskflow.notificationworker.application.NotificationDispatcher {
+- ScheduledNotificationPoller poller
+- TelegramNotificationSender sender
+- ObjectMapper objectMapper
++ void processNotifications()
+- void dispatchNotification(PendingNotification)
+- void dispatchTaskReminder(PendingNotification)
+}
+
+
+class ru.taskflow.task.api.dto.FocusResponse {
+- List<TaskResponse> tasks
++ List<TaskResponse> tasks()
+}
+
+
+interface ru.taskflow.task.infrastructure.persistence.TaskRepository {
+~ Optional<TaskJpaEntity> findByIdAndUserId(UUID,UUID)
+~ Page<TaskJpaEntity> findAllWithFilter(UUID,UUID,TaskStatus,TaskPriority,String,Pageable)
+~ List<TaskJpaEntity> findFocusTasks(UUID,TaskStatus,OffsetDateTime)
+~ List<TaskJpaEntity> findDigestTasks(UUID,OffsetDateTime,TaskStatus)
+}
+
+class ru.taskflow.nlp.infrastructure.web.dto.ParseTextResponse {
+- List<ParsedTask> tasks
++ List<ParsedTask> tasks()
+}
+
+
+class ru.taskflow.notify.application.NotificationServiceImpl {
+- ScheduledNotificationRepository scheduledNotificationRepository
+- UserRepository userRepository
+- UserSettingsRepository userSettingsRepository
+- ObjectMapper objectMapper
++ void scheduleTaskReminder(UUID,UUID,String,OffsetDateTime)
++ void cancelTaskNotifications(UUID)
+- String buildPayload(String,OffsetDateTime)
+}
+
+
+interface ru.taskflow.notify.api.NotificationService {
+~ void scheduleTaskReminder(UUID,UUID,String,OffsetDateTime)
+~ void cancelTaskNotifications(UUID)
+}
+
+class ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider {
+- GroqConfig config
+- ObjectMapper objectMapper
+- RestClient restClient
++ ParsedTasks parseTasksFromText(String,String,String,List<String>)
+- ParsedTasks callGroqApi(String,String,String,List<String>)
+- ParsedTasks parseJsonResponse(String,String)
+- Instant parseDeadline(String,ZoneId)
+- String buildSystemPrompt(List<String>)
+}
+
+
+class ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider$GroqCompletionResponse {
+- List<Choice> choices
++ List<Choice> choices()
+}
+
+
+class ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider$Choice {
+- Message message
++ Message message()
+}
+
+
+class ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider$Message {
+- String content
++ String content()
+}
+
+
+enum ru.taskflow.task.api.TaskStatus {
++  TODO
++  IN_PROGRESS
++  DONE
++  CANCELLED
+}
+
+class ru.taskflow.user.infrastructure.web.dto.TelegramLoginWidgetAuthRequest {
+- Map<String,String> fields
++ Map<String,String> fields()
+}
+
+
+class ru.taskflow.app.web.GlobalExceptionHandler {
++ ResponseEntity<ProblemDetail> handleNotFound(NotFoundException,WebRequest)
++ ResponseEntity<ProblemDetail> handleAccessDenied(AccessDeniedException,WebRequest)
++ ResponseEntity<ProblemDetail> handleValidation(MethodArgumentNotValidException,WebRequest)
++ ResponseEntity<ProblemDetail> handleGeneral(Exception,WebRequest)
+}
+
+class ru.taskflow.shared.security.JwtServiceTest {
+- {static} String SECRET
+- {static} long TTL_SECONDS
+- JwtService jwtService
+~ void setUp()
+~ void issuedToken_extractsCorrectUserId()
+~ void expiredToken_returnsEmpty()
+~ void tamperedToken_returnsEmpty()
+~ void randomString_returnsEmpty()
+~ void differentTokensForDifferentUsers()
+}
+
+
+class ru.taskflow.telegram.config.TelegramBotConfig {
+- String botToken
+- String miniappUrl
++ TelegramApiClient telegramApiClient()
++ void setupMenuButton()
+}
+
+
+class ru.taskflow.user.infrastructure.web.AuthController {
+- TelegramInitDataValidator initDataValidator
+- TelegramLoginWidgetValidator loginWidgetValidator
+- JwtService jwtService
+- UserService userService
+- RefreshTokenService refreshTokenService
++ AuthResponse miniAppAuth(TelegramMiniAppAuthRequest)
++ AuthResponse loginWidgetAuth(TelegramLoginWidgetAuthRequest)
++ AuthResponse refresh(RefreshRequest)
++ AuthResponse devToken(Map<String,String>)
+- AuthResponse issueTokens(UUID,String)
+- TelegramUser parseMiniAppUser(String)
+- long extractJsonLong(String,String)
+- String extractJsonString(String,String)
+}
+
+
+class ru.taskflow.user.infrastructure.web.AuthController$TelegramUser {
+- long id
+- String username
+- String firstName
+- String lastName
++ String lastName()
++ String firstName()
++ String username()
++ long id()
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.dto.TelegramChat {
+- long id
++ long id()
+}
+
+
+class ru.taskflow.telegram.application.UpdateRouter {
+- UserService userService
+- BotCommandRouter commandRouter
+- TextMessageHandler textHandler
+- VoiceMessageHandler voiceHandler
+- CallbackHandler callbackHandler
++ void route(TelegramUpdate)
+- UserDto resolveUser(TelegramUser)
+}
+
+
+class ru.taskflow.telegram.UpdateIdempotencyServiceTest {
+- StringRedisTemplate redis
+- ValueOperations<String,String> valueOps
+- UpdateIdempotencyService service
+~ void setUp()
+~ void newUpdateId_notYetProcessed()
+~ void seenUpdateId_alreadyProcessed()
+}
+
+
+class ru.taskflow.task.infrastructure.persistence.ReminderJpaEntity {
+- UUID id
+- TaskJpaEntity task
+- int offsetMinutes
+}
+
+class ru.taskflow.telegram.infrastructure.web.TelegramWebhookController {
+- String webhookSecret
+- UpdateIdempotencyService idempotencyService
+- UpdateRouter updateRouter
++ void handleUpdate(String,TelegramUpdate)
+}
+
+
+class ru.taskflow.nlp.infrastructure.groq.GroqConfig {
+- String apiKey
+- String baseUrl
+- String llmModel
+- String whisperModel
+- int connectTimeoutSeconds
+- int readTimeoutSeconds
+}
+
+class ru.taskflow.shared.exception.NotFoundException {
+}
+class ru.taskflow.task.api.exception.GroupNotFoundException {
+}
+class ru.taskflow.user.infrastructure.persistence.UserJpaEntity {
+- UUID id
+- Long telegramId
+- String username
+- String firstName
+- String lastName
+- String languageCode
+- String timezone
+- OffsetDateTime createdAt
+- OffsetDateTime updatedAt
+~ void prePersist()
+~ void preUpdate()
+}
+
+
+class ru.taskflow.user.infrastructure.web.dto.AuthResponse {
+- String accessToken
+- String refreshToken
++ String accessToken()
++ String refreshToken()
+}
+
+
+interface ru.taskflow.audit.api.AuditService {
+~ void record(UUID,UUID,AuditEventType,Map<String,Object>)
+~ List<TaskEventResponse> getHistory(UUID,UUID)
+}
+
+class ru.taskflow.telegram.infrastructure.client.TelegramMessageSender {
+- TelegramApiClient apiClient
++ void sendMessage(long,String)
++ void sendMessage(long,String,List<List<InlineButton>>)
++ void answerCallback(String,String)
++ void sendMessageWithWebApp(long,String,String,String)
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.TelegramMessageSender$InlineButton {
+- String text
+- String callbackData
++ String text()
++ String callbackData()
+}
+
+
+class ru.taskflow.notificationworker.infrastructure.db.PendingNotification {
+- UUID id
+- Long telegramChatId
+- String payloadType
+- String payload
++ UUID id()
++ String payloadType()
++ Long telegramChatId()
++ String payload()
+}
+
+
+class ru.taskflow.task.application.TaskServiceImpl {
+- TaskRepository taskRepository
+- GroupRepository groupRepository
+- TagRepository tagRepository
+- TaskMapper taskMapper
+- NotificationService notificationService
+- AuditService auditService
++ TaskResponse create(UUID,CreateTaskRequest)
++ TaskResponse findById(UUID,UUID)
++ Page<TaskResponse> findAll(UUID,TaskFilterRequest,Pageable)
++ TaskResponse update(UUID,UUID,UpdateTaskRequest)
++ void complete(UUID,UUID)
++ void delete(UUID,UUID)
++ TaskResponse confirmDraft(UUID,UUID)
++ TaskResponse updateDraftTask(UUID,UUID,UpdateTaskRequest)
+- List<TagJpaEntity> resolveOrCreateTags(UUID,List<String>)
+- GroupJpaEntity resolveGroup(UUID,UUID,String)
+- Map<String,Object> buildDelta(TaskJpaEntity,UpdateTaskRequest)
++ FocusResponse getFocusTasks(UUID)
++ DigestResponse getDigest(UUID,LocalDate)
++ TaskResponse createQuick(UUID,CreateTaskRequest)
++ List<String> findGroupNames(UUID)
+}
+
+
+class ru.taskflow.task.api.dto.TaskFilterRequest {
+- UUID groupId
+- TaskStatus status
+- TaskPriority priority
+- String tag
++ String tag()
++ UUID groupId()
++ TaskPriority priority()
++ TaskStatus status()
+}
+
+
+class ru.taskflow.task.infrastructure.persistence.RecurrenceJpaEntity {
+- UUID taskId
+- TaskJpaEntity task
+- RecurrenceType type
+- int intervalN
+- String daysOfWeek
+- Integer dayOfMonth
+- OffsetDateTime endsAt
+}
+
+enum ru.taskflow.task.api.TaskPriority {
++  LOW
++  MEDIUM
++  HIGH
++  URGENT
+}
+
+class ru.taskflow.telegram.application.BotCommandRouter {
+- TaskService taskService
+- TelegramMessageSender sender
+- String miniappUrl
++ void handle(TelegramMessage,UUID)
+- void sendWelcome(long,String)
+- void sendHelp(long)
+- void sendTaskList(long,UUID)
+- {static} String parseCommand(String)
+}
+
+
+class ru.taskflow.nlp.infrastructure.groq.RestClientConfig {
+- GroqConfig groqConfig
++ RestClient restClient()
+}
+
+
+class ru.taskflow.telegram.BotCommandRouterTest {
+- TaskService taskService
+- TelegramMessageSender sender
+- BotCommandRouter router
+~ void startCommand_sendsWelcome()
+~ void helpCommand_sendsHelp()
+~ void todayCommand_sendsTaskList()
+- {static} TelegramMessage command(String,String)
+}
+
+
+class ru.taskflow.nlp.domain.ParsedTasks {
+- List<ParsedTask> tasks
++ List<ParsedTask> tasks()
+}
+
+
+interface ru.taskflow.task.api.TaskService {
+~ TaskResponse create(UUID,CreateTaskRequest)
+~ TaskResponse findById(UUID,UUID)
+~ Page<TaskResponse> findAll(UUID,TaskFilterRequest,Pageable)
+~ TaskResponse update(UUID,UUID,UpdateTaskRequest)
+~ void complete(UUID,UUID)
+~ void delete(UUID,UUID)
+~ TaskResponse confirmDraft(UUID,UUID)
+~ TaskResponse updateDraftTask(UUID,UUID,UpdateTaskRequest)
+~ FocusResponse getFocusTasks(UUID)
+~ DigestResponse getDigest(UUID,LocalDate)
+~ TaskResponse createQuick(UUID,CreateTaskRequest)
+~ List<String> findGroupNames(UUID)
+}
+
+enum ru.taskflow.task.api.RecurrenceType {
++  DAILY
++  WEEKLY
++  MONTHLY
++  WEEKDAYS
++  CUSTOM
+}
+
+class ru.taskflow.task.application.GroupService {
+- GroupRepository groupRepository
++ List<GroupResponse> findAll(UUID)
++ GroupResponse create(UUID,CreateGroupRequest)
++ void delete(UUID,UUID)
+}
+
+
+class ru.taskflow.user.infrastructure.persistence.UserSettingsJpaEntity {
+- UUID userId
+- UserJpaEntity user
+- boolean notificationsEnabled
+- int defaultReminderMinutes
+- boolean urgentExtraReminder
+- String preferredLlm
+}
+
+interface ru.taskflow.nlp.api.NlpGatewayService {
+~ NlpParseResult parseText(String,String,List<String>)
+~ NlpParseResult parseVoice(byte[],String,List<String>)
+}
+
+class ru.taskflow.notificationworker.application.TelegramNotificationSender {
+- RestClient restClient
+- ObjectMapper objectMapper
+- String botToken
+- String apiBaseUrl
+- {static} ZoneId MOSCOW
+- {static} DateTimeFormatter DEADLINE_FMT
++ void sendTaskReminder(Long,String,String)
+- String formatDeadline(String)
+- void sendMessage(Long,String)
+}
+
+
+class ru.taskflow.task.infrastructure.web.TaskController {
+- TaskService taskService
+- NlpGatewayService nlpGatewayService
++ TaskResponse create(CreateTaskRequest,AuthenticatedUser)
++ TaskResponse findById(java.util.UUID,AuthenticatedUser)
++ Page<TaskResponse> findAll(AuthenticatedUser,java.util.UUID,TaskStatus,TaskPriority,String,Pageable)
++ TaskResponse update(java.util.UUID,UpdateTaskRequest,AuthenticatedUser)
++ void complete(java.util.UUID,AuthenticatedUser)
++ void delete(java.util.UUID,AuthenticatedUser)
++ FocusResponse getFocusTasks(AuthenticatedUser)
++ DigestResponse getDigest(AuthenticatedUser,LocalDate)
++ TaskResponse createQuick(CreateTaskRequest,AuthenticatedUser)
++ Map<String,Object> parseText(Map<String,String>,AuthenticatedUser)
+}
+
+
+class ru.taskflow.telegram.application.CallbackHandler {
+- TaskService taskService
+- TelegramMessageSender sender
++ void handle(TelegramCallbackQuery,UUID)
+}
+
+
+class ru.taskflow.telegram.UpdateRouterTest {
+- UserService userService
+- BotCommandRouter commandRouter
+- TextMessageHandler textHandler
+- VoiceMessageHandler voiceHandler
+- CallbackHandler callbackHandler
+- UpdateRouter router
+~ void textMessage_callsTextHandler()
+~ void command_callsCommandRouter()
+~ void voiceMessage_callsVoiceHandler()
+~ void callbackQuery_callsCallbackHandler()
+- UUID stubUser()
+- {static} TelegramMessage textMessage(String)
+- {static} TelegramMessage voiceMessage()
+}
+
+
+class ru.taskflow.task.infrastructure.persistence.TaskMapperImpl {
++ TaskResponse toResponse(TaskJpaEntity)
+- UUID entityGroupId(TaskJpaEntity)
+- String entityGroupName(TaskJpaEntity)
+}
+
+class ru.taskflow.task.api.dto.CreateGroupRequest {
+- String name
+- String color
+- String icon
++ String color()
++ String icon()
++ String name()
+}
+
+
+class ru.taskflow.telegram.VoiceMessageHandlerTest {
+- TelegramApiClient apiClient
+- TelegramMessageSender sender
+~ Path tempDir
+~ void voiceMessage_downloadsFile_andSendsAck()
+}
+
+
+class ru.taskflow.nlp.infrastructure.RestClientConfig {
+- NlpGatewayConfig nlpGatewayConfig
++ RestClient restClient()
+}
+
+
+class ru.taskflow.shared.security.TelegramLoginWidgetValidatorTest {
+- {static} String BOT_TOKEN
+- {static} long MAX_AGE
+- TelegramLoginWidgetValidator validator
+~ void setUp()
+~ void validFields_returnsTrue()
+~ void tamperedField_returnsFalse()
+~ void expiredAuthDate_returnsFalse()
+~ void missingHash_returnsFalse()
+- {static} String computeWidgetHash(TreeMap<String,String>,String)
+}
+
+
+class ru.taskflow.user.infrastructure.web.dto.TelegramMiniAppAuthRequest {
+- String initData
++ String initData()
+}
+
+
+enum ru.taskflow.audit.api.AuditEventType {
++  CREATED
++  UPDATED
++  STATUS_CHANGED
++  DELETED
+}
+
+class ru.taskflow.telegram.application.TextMessageHandler {
+- TaskService taskService
+- TelegramMessageSender sender
+- NlpGatewayService nlpGatewayService
++ void handle(TelegramMessage,UUID)
+- TaskPriority parsePriority(String)
+}
+
+
+class ru.taskflow.nlp.infrastructure.web.dto.ParseTextRequest {
+- String text
+- String userTimezone
+- String userLanguage
+- List<String> existingGroups
++ List<String> existingGroups()
++ String userTimezone()
++ String text()
++ String userLanguage()
+}
+
+
+class ru.taskflow.telegram.TextMessageHandlerTest {
+- TaskService taskService
+- TelegramMessageSender sender
+- TextMessageHandler handler
+~ void plainText_createsTask()
+~ void plainText_sendsConfirmation()
+- {static} TelegramMessage message(String)
+- {static} TaskResponse taskResponse(UUID,String)
+}
+
+
+interface ru.taskflow.task.infrastructure.persistence.TaskMapper {
+~ TaskResponse toResponse(TaskJpaEntity)
+~ List<String> tagNames(TaskJpaEntity)
+}
+
+class ru.taskflow.telegram.infrastructure.client.dto.TelegramUpdate {
+- long updateId
+- TelegramMessage message
+- TelegramCallbackQuery callbackQuery
++ TelegramMessage message()
++ long updateId()
++ TelegramCallbackQuery callbackQuery()
+}
+
+
+enum ru.taskflow.task.api.TaskSource {
++  MANUAL
++  BOT_TEXT
++  BOT_VOICE
++  WEB
+}
+
+class ru.taskflow.user.infrastructure.web.dto.RefreshRequest {
+- String refreshToken
++ String refreshToken()
+}
+
+
+class ru.taskflow.telegram.application.UpdateIdempotencyService {
+- StringRedisTemplate redis
++ boolean isAlreadyProcessed(long)
+}
+
+
+class ru.taskflow.user.application.RefreshTokenService {
+- {static} Duration TTL
+- {static} String PREFIX
+- StringRedisTemplate redis
++ String issue(UUID)
++ Optional<UUID> resolve(String)
++ void revoke(String)
+}
+
+
+class ru.taskflow.task.api.dto.TaskResponse {
+- UUID id
+- String title
+- String description
+- TaskPriority priority
+- TaskStatus status
+- OffsetDateTime deadline
+- Integer estimateMinutes
+- boolean isDraft
+- TaskSource source
+- UUID groupId
+- String groupName
+- List<String> tags
+- OffsetDateTime createdAt
+- OffsetDateTime updatedAt
+- OffsetDateTime completedAt
++ OffsetDateTime completedAt()
++ String description()
++ UUID groupId()
++ boolean isDraft()
++ String groupName()
++ Integer estimateMinutes()
++ List<String> tags()
++ UUID id()
++ TaskSource source()
++ OffsetDateTime createdAt()
++ OffsetDateTime deadline()
++ TaskPriority priority()
++ String title()
++ TaskStatus status()
++ OffsetDateTime updatedAt()
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.dto.TelegramVoice {
+- String fileId
+- int duration
++ String fileId()
++ int duration()
+}
+
+
+interface ru.taskflow.audit.infrastructure.persistence.TaskEventRepository {
+~ List<TaskEventJpaEntity> findByTaskIdOrderByOccurredAtDesc(UUID)
+}
+
+class ru.taskflow.shared.exception.AccessDeniedException {
+}
+class ru.taskflow.task.application.TaskServiceTest {
+- TaskRepository taskRepository
+- GroupRepository groupRepository
+- TagRepository tagRepository
+- TaskMapper taskMapper
+- TaskServiceImpl taskService
+- UUID userId
+- UUID taskId
+~ void create_savesAndReturnsResponse()
+~ void findById_returnsTask_whenExists()
+~ void findById_throwsNotFound_whenMissing()
+~ void update_changesTitle()
+~ void complete_setsStatusDone()
+~ void delete_marksAsDeleted()
+~ void delete_throwsNotFound_whenMissing()
+- TaskJpaEntity taskEntity()
+- TaskResponse mockResponse(UUID,String)
+}
+
+
+class ru.taskflow.nlp.infrastructure.groq.GroqWhisperProvider {
+- GroqConfig config
+- RestClient restClient
++ String transcribeAudio(byte[])
+}
+
+
+class ru.taskflow.shared.security.JwtAuthenticationFilter {
+- JwtService jwtService
+# void doFilterInternal(HttpServletRequest,HttpServletResponse,FilterChain)
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.dto.TelegramCallbackQuery {
+- String id
+- TelegramUser from
+- TelegramMessage message
+- String data
++ TelegramUser from()
++ String data()
++ String id()
++ TelegramMessage message()
+}
+
+
+class ru.taskflow.nlp.api.NlpParsedTask {
+- String title
+- String description
+- String priority
+- Instant deadline
+- String group
+- List<String> tags
+- String recurrence
++ List<String> tags()
++ String recurrence()
++ Instant deadline()
++ String description()
++ String title()
++ String priority()
++ String group()
+}
+
+
+class ru.taskflow.app.TaskFlowApplication {
++ {static} void main(String[])
+}
+
+class ru.taskflow.nlp.infrastructure.yandex.YandexGptConfig {
+- String apiKey
+- String baseUrl
+- String model
+- String folderId
+- boolean enabled
+- int connectTimeoutSeconds
+- int readTimeoutSeconds
+}
+
+class ru.taskflow.user.api.UserDto {
+- UUID id
+- long telegramId
+- String username
+- String firstName
+- String lastName
++ String lastName()
++ UUID id()
++ long telegramId()
++ String firstName()
++ String username()
+}
+
+
+class ru.taskflow.audit.application.AuditServiceImpl {
+- TaskEventRepository taskEventRepository
+- ObjectMapper objectMapper
++ void record(UUID,UUID,AuditEventType,Map<String,Object>)
++ List<TaskEventResponse> getHistory(UUID,UUID)
+- Map<String,Object> deserializeDelta(String)
+}
+
+
+interface ru.taskflow.nlp.domain.SpeechToTextProvider {
+~ String transcribeAudio(byte[])
+}
+
+class ru.taskflow.telegram.TelegramWebhookControllerTest {
+- UpdateIdempotencyService idempotencyService
+- UpdateRouter updateRouter
+- MockMvc mockMvc
+~ void setUp()
+~ void correctSecret_returns200_andRoutesUpdate()
+~ void wrongSecret_returns403()
+~ void duplicateUpdate_returns200_withoutRouting()
+- {static} String updateJson(long)
+}
+
+
+interface ru.taskflow.task.infrastructure.persistence.GroupRepository {
+~ Optional<GroupJpaEntity> findByIdAndUserId(UUID,UUID)
+~ Optional<GroupJpaEntity> findByUserIdAndName(UUID,String)
+~ List<GroupJpaEntity> findAllByUserId(UUID)
+}
+
+class ru.taskflow.telegram.CallbackHandlerTest {
+- TaskService taskService
+- TelegramMessageSender sender
+- CallbackHandler handler
+~ void completeCallback_completesTask()
+~ void deleteCallback_deletesTask()
+~ void invalidCallbackData_answersWithError()
+- {static} TelegramCallbackQuery callback(String)
+}
+
+
+class ru.taskflow.nlp.application.NlpGatewayServiceImpl {
+- NlpWorkerClient nlpWorkerClient
++ NlpParseResult parseText(String,String,java.util.List<String>)
++ NlpParseResult parseVoice(byte[],String,java.util.List<String>)
+}
+
+
+class ru.taskflow.notificationworker.infrastructure.db.ScheduledNotificationPoller {
+- JdbcTemplate jdbcTemplate
+- int batchSize
+- int maxRetries
++ List<PendingNotification> pollPending()
++ void markAsSent(UUID)
++ void incrementRetryCount(UUID)
+}
+
+
+interface ru.taskflow.notify.infrastructure.persistence.ScheduledNotificationRepository {
+~ void deleteUnsentByTaskId(UUID)
+}
+
+class ru.taskflow.user.application.UserServiceImpl {
+- UserRepository userRepository
++ UserDto findOrCreateByTelegram(long,String,String,String)
++ UserDto findById(UUID)
+- UserDto toDto(UserJpaEntity)
+}
+
+
+class ru.taskflow.task.api.exception.TaskNotFoundException {
+}
+class ru.taskflow.nlp.api.NlpParseResult {
+- List<NlpParsedTask> tasks
++ List<NlpParsedTask> tasks()
+}
+
+
+class ru.taskflow.shared.security.TelegramInitDataValidatorTest {
+- {static} String BOT_TOKEN
+- {static} long MAX_AGE
+- TelegramInitDataValidator validator
+~ void setUp()
+~ void validInitData_returnsTrue()
+~ void tamperedData_returnsFalse()
+~ void wrongBotToken_returnsFalse()
+~ void missingHash_returnsFalse()
+~ void expiredAuthDate_returnsFalse()
+~ void emptyInitData_returnsFalse()
+- {static} String computeInitDataHash(TreeMap<String,String>,String)
+- {static} String buildInitData(TreeMap<String,String>,String)
+}
+
+
+class ru.taskflow.notify.infrastructure.persistence.ScheduledNotificationJpaEntity {
+- UUID id
+- UUID userId
+- UUID taskId
+- Long telegramChatId
+- OffsetDateTime fireAt
+- String payloadType
+- String payload
+- Boolean sent
+- OffsetDateTime sentAt
+- Integer retryCount
+- OffsetDateTime createdAt
+~ void prePersist()
+}
+
+
+class ru.taskflow.nlp.infrastructure.NlpGatewayConfig {
+- String workerUrl
+- int connectTimeoutSeconds
+- int readTimeoutSeconds
+}
+
+class ru.taskflow.audit.infrastructure.persistence.TaskEventJpaEntity {
+- UUID id
+- UUID taskId
+- UUID userId
+- String eventType
+- String delta
+- OffsetDateTime occurredAt
+~ void prePersist()
+}
+
+
+class ru.taskflow.shared.security.SecurityConfig {
++ JwtService jwtService(String,long)
++ TelegramInitDataValidator telegramInitDataValidator(String,long)
++ TelegramLoginWidgetValidator telegramLoginWidgetValidator(String,long)
++ JwtAuthenticationFilter jwtAuthenticationFilter(JwtService)
++ CorsConfigurationSource corsConfigurationSource(List<String>)
++ SecurityFilterChain securityFilterChain(HttpSecurity,JwtAuthenticationFilter,CorsConfigurationSource)
+}
+
+class ru.taskflow.nlp.NlpWorkerApplication {
++ {static} void main(String[])
+}
+
+class ru.taskflow.task.infrastructure.persistence.TagJpaEntity {
+- UUID id
+- UUID userId
+- String name
+- String color
+}
+
+interface ru.taskflow.user.infrastructure.persistence.UserSettingsRepository {
+~ Optional<UserSettingsJpaEntity> findByUserId(UUID)
+}
+
+interface ru.taskflow.user.infrastructure.persistence.UserRepository {
+~ Optional<UserJpaEntity> findByTelegramId(long)
+}
+
+class ru.taskflow.shared.security.TelegramLoginWidgetValidator {
+- String botToken
+- long maxAgeSeconds
++ boolean validate(Map<String,String>)
+}
+
+
+class ru.taskflow.task.infrastructure.web.GroupController {
+- GroupService groupService
++ List<GroupResponse> list(AuthenticatedUser)
++ GroupResponse create(AuthenticatedUser,CreateGroupRequest)
++ void delete(AuthenticatedUser,UUID)
+}
+
+
+interface ru.taskflow.user.api.UserService {
+~ UserDto findOrCreateByTelegram(long,String,String,String)
+~ UserDto findById(UUID)
+}
+
+class ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider {
+- YandexGptConfig config
+- ObjectMapper objectMapper
+- RestClient restClient
++ ParsedTasks parseTasksFromText(String,String,String,List<String>)
+- ParsedTasks callYandexGptApi(String,String,String,List<String>)
+- ParsedTasks parseJsonResponse(String,String)
+- String buildSystemPrompt(List<String>)
+}
+
+
+class ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$YandexGptResponse {
+- Result result
++ Result result()
+}
+
+
+class ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$Result {
+- List<Alternative> alternatives
++ List<Alternative> alternatives()
+}
+
+
+class ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$Alternative {
+- Message message
++ Message message()
+}
+
+
+class ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$Message {
+- String text
++ String text()
+}
+
+
+class ru.taskflow.task.api.dto.UpdateTaskRequest {
+- String title
+- String description
+- TaskPriority priority
+- TaskStatus status
+- OffsetDateTime deadline
+- UUID groupId
+- List<String> tags
+- Integer estimateMinutes
++ List<String> tags()
++ String description()
++ OffsetDateTime deadline()
++ UUID groupId()
++ TaskPriority priority()
++ String title()
++ TaskStatus status()
++ Integer estimateMinutes()
+}
+
+
+class ru.taskflow.task.infrastructure.persistence.GroupJpaEntity {
+- UUID id
+- UUID userId
+- String name
+- String color
+- String icon
+- int sortOrder
+- OffsetDateTime createdAt
+~ void prePersist()
+}
+
+
+class ru.taskflow.shared.security.AuthenticatedUser {
+- UUID userId
+- String telegramUsername
++ UUID userId()
++ String telegramUsername()
+}
+
+
+class ru.taskflow.notificationworker.NotificationWorkerApplication {
++ {static} void main(String[])
++ ObjectMapper objectMapper()
++ RestClient restClient()
+}
+
+class ru.taskflow.audit.api.dto.TaskEventResponse {
+- UUID id
+- UUID taskId
+- UUID userId
+- String eventType
+- Map<String,Object> delta
+- OffsetDateTime occurredAt
++ UUID id()
++ UUID userId()
++ String eventType()
++ Map<String,Object> delta()
++ UUID taskId()
++ OffsetDateTime occurredAt()
+}
+
+
+class ru.taskflow.nlp.infrastructure.NlpWorkerClient {
+- NlpGatewayConfig config
+- RestClient restClient
++ NlpParseResult parseText(String,String,String,List<String>)
++ NlpParseResult parseVoice(byte[],String,String,List<String>)
++ NlpParseResult parseTextFallback(String,String,String,List<String>,Exception)
++ NlpParseResult parseVoiceFallback(byte[],String,String,List<String>,Exception)
+}
+
+
+class ru.taskflow.nlp.infrastructure.NlpWorkerClient$NlpWorkerResponse {
+- List<NlpParsedTask> tasks
++ List<NlpParsedTask> tasks()
+}
+
+
+class ru.taskflow.telegram.infrastructure.client.dto.TelegramMessage {
+- long messageId
+- TelegramUser from
+- TelegramChat chat
+- String text
+- TelegramVoice voice
++ String text()
++ TelegramUser from()
++ TelegramChat chat()
++ TelegramVoice voice()
++ long messageId()
+}
+
+
+
+
+ru.taskflow.telegram.infrastructure.client.TelegramApiClient +.. ru.taskflow.telegram.infrastructure.client.TelegramApiClient$GetFileResponse
+ru.taskflow.telegram.infrastructure.client.TelegramApiClient +.. ru.taskflow.telegram.infrastructure.client.TelegramApiClient$FileInfo
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.task.infrastructure.persistence.TagRepository
+ru.taskflow.nlp.infrastructure.config.LlmProviderConfiguration +.. ru.taskflow.nlp.infrastructure.config.LlmProviderConfiguration$FallbackLlmProvider
+ru.taskflow.nlp.infrastructure.config.LlmProvider <|.. ru.taskflow.nlp.infrastructure.config.LlmProviderConfiguration$FallbackLlmProvider
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.task.infrastructure.persistence.TaskRepository
+ru.taskflow.notify.api.NotificationService <|.. ru.taskflow.notify.application.NotificationServiceImpl
+ru.taskflow.nlp.domain.LlmProvider <|.. ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider
+ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider +.. ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider$GroqCompletionResponse
+ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider +.. ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider$Choice
+ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider +.. ru.taskflow.nlp.infrastructure.groq.GroqLlmProvider$Message
+ru.taskflow.user.infrastructure.web.AuthController +.. ru.taskflow.user.infrastructure.web.AuthController$TelegramUser
+ru.taskflow.shared.exception.RuntimeException <|-- ru.taskflow.shared.exception.NotFoundException
+ru.taskflow.shared.exception.NotFoundException <|-- ru.taskflow.task.api.exception.GroupNotFoundException
+ru.taskflow.telegram.infrastructure.client.TelegramMessageSender +.. ru.taskflow.telegram.infrastructure.client.TelegramMessageSender$InlineButton
+ru.taskflow.task.api.TaskService <|.. ru.taskflow.task.application.TaskServiceImpl
+ru.taskflow.task.infrastructure.persistence.TaskMapper <|.. ru.taskflow.task.infrastructure.persistence.TaskMapperImpl
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.audit.infrastructure.persistence.TaskEventRepository
+ru.taskflow.shared.exception.RuntimeException <|-- ru.taskflow.shared.exception.AccessDeniedException
+ru.taskflow.nlp.domain.SpeechToTextProvider <|.. ru.taskflow.nlp.infrastructure.groq.GroqWhisperProvider
+org.springframework.web.filter.OncePerRequestFilter <|-- ru.taskflow.shared.security.JwtAuthenticationFilter
+ru.taskflow.audit.api.AuditService <|.. ru.taskflow.audit.application.AuditServiceImpl
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.task.infrastructure.persistence.GroupRepository
+ru.taskflow.nlp.api.NlpGatewayService <|.. ru.taskflow.nlp.application.NlpGatewayServiceImpl
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.notify.infrastructure.persistence.ScheduledNotificationRepository
+ru.taskflow.user.api.UserService <|.. ru.taskflow.user.application.UserServiceImpl
+ru.taskflow.shared.exception.NotFoundException <|-- ru.taskflow.task.api.exception.TaskNotFoundException
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.user.infrastructure.persistence.UserSettingsRepository
+org.springframework.data.jpa.repository.JpaRepository <|-- ru.taskflow.user.infrastructure.persistence.UserRepository
+ru.taskflow.nlp.domain.LlmProvider <|.. ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider
+ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider +.. ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$YandexGptResponse
+ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider +.. ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$Result
+ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider +.. ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$Alternative
+ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider +.. ru.taskflow.nlp.infrastructure.yandex.YandexGptLlmProvider$Message
+ru.taskflow.nlp.infrastructure.NlpWorkerClient +.. ru.taskflow.nlp.infrastructure.NlpWorkerClient$NlpWorkerResponse
+@enduml
