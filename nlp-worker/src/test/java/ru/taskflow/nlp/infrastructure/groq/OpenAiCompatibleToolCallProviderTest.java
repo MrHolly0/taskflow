@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.http.client.MockClientHttpRequest;
@@ -129,6 +131,35 @@ class OpenAiCompatibleToolCallProviderTest {
                 List.of()
         ))).isInstanceOf(IllegalStateException.class);
 
+        server.verify();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{}", "{\"choices\":[]}", "{\"choices\":null}", "{\"choices\":{}}",
+            "{\"choices\":[{}]}", "{\"choices\":[{\"message\":null}]}",
+            "{\"choices\":[{\"message\":\"text\"}]}", "null"
+    })
+    void call_rejectsIncompleteResponse(String body) {
+        server.expect(requestTo(COMPLETIONS_URL))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> provider.call(new ToolCallRequest(
+                List.of(ToolCallMessage.user("привет")), List.of())))
+                .isInstanceOf(IllegalStateException.class);
+
+        server.verify();
+    }
+
+    @Test
+    void call_acceptsEmptyMessage() {
+        server.expect(requestTo(COMPLETIONS_URL))
+                .andRespond(withSuccess("{\"choices\":[{\"message\":{}}]}", MediaType.APPLICATION_JSON));
+
+        ToolCallResult result = provider.call(new ToolCallRequest(
+                List.of(ToolCallMessage.user("привет")), List.of()));
+
+        assertThat(result).isEqualTo(ToolCallResult.empty());
         server.verify();
     }
 

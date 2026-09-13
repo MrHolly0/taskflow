@@ -87,14 +87,14 @@ public class OpenAiCompatibleToolCallProvider implements ToolCallProvider {
 
     private ToolCallResult parseResponse(String rawBody) throws JsonProcessingException {
         JsonNode root = objectMapper.readTree(rawBody);
-        JsonNode choices = root.get("choices");
+        JsonNode choices = root != null ? root.get("choices") : null;
         if (choices == null || !choices.isArray() || choices.isEmpty()) {
-            return ToolCallResult.empty();
+            throw new IllegalStateException("Ответ поставщика не содержит choices");
         }
 
         JsonNode message = choices.get(0).get("message");
-        if (message == null) {
-            return ToolCallResult.empty();
+        if (message == null || !message.isObject()) {
+            throw new IllegalStateException("Ответ поставщика не содержит message");
         }
 
         List<RawToolCall> toolCalls = new ArrayList<>();

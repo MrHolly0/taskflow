@@ -2,13 +2,21 @@ package ru.taskflow.nlp.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.resilience4j.springboot3.circuitbreaker.autoconfigure.CircuitBreakerAutoConfiguration;
+import io.github.resilience4j.springboot3.retry.autoconfigure.RetryAutoConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.aop.AopAutoConfiguration;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.mock.http.client.MockClientHttpRequest;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.HttpServerErrorException;
 import ru.taskflow.nlp.api.LlmMessage;
 import ru.taskflow.nlp.api.LlmToolCall;
 import ru.taskflow.nlp.api.LlmToolRequest;
@@ -21,9 +29,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class NlpWorkerClientTest {
 
@@ -83,6 +93,44 @@ class NlpWorkerClientTest {
         assertThat(response.outputTokens()).isEqualTo(20);
 
         server.verify();
+    }
+
+    @Test
+    void callWithTools_throwsOnServiceUnavailableWithoutProxy() {
+        server.expect(requestTo(TOOL_CALL_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThatThrownBy(() -> client.callWithTools(new LlmToolRequest(
+                List.of(LlmMessage.user("купи молоко")), List.of())))
+                .isInstanceOf(HttpServerErrorException.ServiceUnavailable.class);
+
+        server.verify();
+    }
+
+    @Test
+    void callWithTools_serviceUnavailableTriggersFallback() {
+        server.expect(requestTo(TOOL_CALL_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AopAutoConfiguration.class,
+                        CircuitBreakerAutoConfiguration.class, RetryAutoConfiguration.class))
+                .withPropertyValues("resilience4j.retry.instances.nlp-worker-tools.max-attempts=1")
+                .withBean(NlpWorkerClient.class, () -> client)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    NlpWorkerClient proxiedClient = context.getBean(NlpWorkerClient.class);
+                    assertThat(AopUtils.isAopProxy(proxiedClient)).isTrue();
+
+                    LlmToolResponse response = proxiedClient.callWithTools(new LlmToolRequest(
+                            List.of(LlmMessage.user("купи молоко")), List.of()));
+
+                    assertThat(response.failed()).isTrue();
+                    assertThat(response).isEqualTo(LlmToolResponse.unavailable());
+                    server.verify();
+                });
     }
 
     @Test

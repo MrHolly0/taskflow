@@ -1,7 +1,10 @@
 package ru.taskflow.nlp.infrastructure.web;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,6 +17,7 @@ import ru.taskflow.nlp.domain.ParsedTasks;
 import ru.taskflow.nlp.domain.ToolCallProvider;
 import ru.taskflow.nlp.domain.ToolCallRequest;
 import ru.taskflow.nlp.domain.ToolCallResult;
+import ru.taskflow.nlp.infrastructure.config.ToolCallProvidersUnavailableException;
 import ru.taskflow.nlp.infrastructure.web.dto.ParseTextRequest;
 import ru.taskflow.nlp.infrastructure.web.dto.ParseTextResponse;
 import ru.taskflow.nlp.infrastructure.web.dto.TranscribeResponse;
@@ -66,5 +70,11 @@ public class NlpController {
     @PostMapping("/tool-call")
     public ToolCallResult toolCall(@RequestBody ToolCallRequest request) {
         return toolCallProvider.call(request);
+    }
+
+    @ExceptionHandler(ToolCallProvidersUnavailableException.class)
+    public ProblemDetail handleToolCallProvidersUnavailable() {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "Поставщики модели недоступны");
     }
 }

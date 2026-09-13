@@ -37,12 +37,8 @@ public class FallbackToolCallProvider implements ToolCallProvider {
                 return result;
             } catch (Exception e) {
                 log.warn("{} failed: {}", provider.name(), e.getMessage());
-                if (i == providers.size() - 1) {
-                    log.error("All tool-call providers exhausted, returning empty result");
-                    return ToolCallResult.empty();
-                }
             }
         }
-        return ToolCallResult.empty();
+        throw new ToolCallProvidersUnavailableException();
     }
 }

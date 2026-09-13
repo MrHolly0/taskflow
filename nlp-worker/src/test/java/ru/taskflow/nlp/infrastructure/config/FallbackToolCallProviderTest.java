@@ -10,6 +10,7 @@ import ru.taskflow.nlp.domain.ToolCallResult;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -66,7 +67,7 @@ class FallbackToolCallProviderTest {
     }
 
     @Test
-    void call_returnsEmptyWhenAllProvidersFail() {
+    void call_throwsWhenAllProvidersFail() {
         ToolCallProvider primary = mock(ToolCallProvider.class);
         ToolCallProvider secondary = mock(ToolCallProvider.class);
         when(primary.name()).thenReturn("groq");
@@ -74,15 +75,15 @@ class FallbackToolCallProviderTest {
         when(primary.call(request)).thenThrow(new RuntimeException("недоступен"));
         when(secondary.call(request)).thenThrow(new RuntimeException("тоже недоступен"));
 
-        ToolCallResult result = new FallbackToolCallProvider(List.of(primary, secondary)).call(request);
-
-        assertThat(result).isEqualTo(ToolCallResult.empty());
+        assertThatThrownBy(() -> new FallbackToolCallProvider(List.of(primary, secondary)).call(request))
+                .isInstanceOf(ToolCallProvidersUnavailableException.class);
+        verify(primary).call(request);
+        verify(secondary).call(request);
     }
 
     @Test
-    void call_returnsEmptyForEmptyProviderList() {
-        ToolCallResult result = new FallbackToolCallProvider(List.of()).call(request);
-
-        assertThat(result).isEqualTo(ToolCallResult.empty());
+    void call_throwsForEmptyProviderList() {
+        assertThatThrownBy(() -> new FallbackToolCallProvider(List.of()).call(request))
+                .isInstanceOf(ToolCallProvidersUnavailableException.class);
     }
 }
