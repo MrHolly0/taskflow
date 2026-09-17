@@ -141,7 +141,7 @@ function FocusTaskCard({
             {task.deadline && (
               <div className="flex items-center gap-1.5">
                 <IconClock className="h-3.5 w-3.5" />
-                <span>{formatDeadline(task.deadline, timezone)}</span>
+                <span>{formatDeadline(task.deadline, timezone, task.status)}</span>
               </div>
             )}
             {task.groupName && (

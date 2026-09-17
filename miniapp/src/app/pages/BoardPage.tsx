@@ -124,7 +124,7 @@ function DraggableTaskCard({
               {task.deadline && timezoneReady && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <IconClock className="h-3 w-3" />
-                  {formatDeadline(task.deadline, timezone)}
+                  {formatDeadline(task.deadline, timezone, task.status)}
                 </span>
               )}
               {task.group && (

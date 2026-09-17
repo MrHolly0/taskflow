@@ -34,8 +34,22 @@ export function endOfZonedDay(daysFromNow: number, timezone: string, now: Date =
   return fromZonedTime(wallClockEnd, timezone);
 }
 
-export function formatDeadline(deadline: string, timezone: string): string {
+/**
+ * Для выполненной или отменённой задачи срок — уже не действующее
+ * обязательство, поэтому относительные подписи («Просрочено», «Завтра»)
+ * не подходят: только нейтральная дата.
+ */
+export function formatDeadline(deadline: string, timezone: string, status: string): string {
   const date = new Date(deadline);
+
+  if (status === 'DONE' || status === 'CANCELLED') {
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'long',
+      timeZone: timezone,
+    });
+  }
+
   const now = new Date();
   const diff = date.getTime() - now.getTime();
   const hours = Math.floor(diff / (1000 * 60 * 60));
