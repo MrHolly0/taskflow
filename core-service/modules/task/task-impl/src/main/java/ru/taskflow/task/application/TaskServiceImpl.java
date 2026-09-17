@@ -638,7 +638,7 @@ public class TaskServiceImpl implements TaskService {
         var now = OffsetDateTime.now(clock);
         var zone = userService.getTimezone(userId);
         var endOfToday = endOfToday(zone);
-        var candidates = taskRepository.findFocusTasks(userId, TaskStatus.DONE, endOfToday);
+        var candidates = taskRepository.findFocusTasks(userId, endOfToday);
         var entities = focusTaskRanker.rank(candidates, now).stream()
                 .filter(t -> fitsAvailableTime(t, availableMinutes))
                 .filter(t -> passesHoursGate(t, now, zone))
@@ -721,7 +721,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     public FocusResponse getUpcomingFocusTasks(UUID userId, Integer availableMinutes) {
         var endOfToday = endOfToday(userService.getTimezone(userId));
-        var entities = taskRepository.findUpcomingFocusTasks(userId, TaskStatus.DONE, endOfToday)
+        var entities = taskRepository.findUpcomingFocusTasks(userId, endOfToday)
                 .stream()
                 .filter(t -> fitsAvailableTime(t, availableMinutes))
                 .limit(3)
@@ -792,7 +792,7 @@ public class TaskServiceImpl implements TaskService {
         var zone = userService.getTimezone(userId);
         var now = OffsetDateTime.now(clock);
         var startOfDay = date.atStartOfDay(zone).toOffsetDateTime();
-        var allTasks = taskRepository.findDigestTasks(userId, startOfDay, TaskStatus.DONE);
+        var allTasks = taskRepository.findDigestTasks(userId, startOfDay);
 
         var topTasks = allTasks.stream()
                 .limit(5)

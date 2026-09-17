@@ -934,7 +934,7 @@ class TaskServiceTest {
         var entity = taskEntity();
         var response = mockResponse(taskId, "задача на следующей неделе");
 
-        when(taskRepository.findUpcomingFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findUpcomingFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(entity));
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -946,7 +946,7 @@ class TaskServiceTest {
     @Test
     void getUpcomingFocusTasks_capsAtThree() {
         var entities = List.of(taskEntity(), taskEntity(), taskEntity(), taskEntity());
-        when(taskRepository.findUpcomingFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findUpcomingFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(entities);
         when(taskMapper.toResponse(any())).thenReturn(mockResponse(taskId, "задача"));
 
@@ -961,7 +961,7 @@ class TaskServiceTest {
     void getFocusTasks_withoutAvailableMinutes_includesTasksRegardlessOfEstimate() {
         var withEstimate = taskEntity();
         withEstimate.setEstimateMinutes(120);
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(withEstimate));
         when(taskMapper.toResponse(withEstimate)).thenReturn(mockResponse(taskId, "задача"));
 
@@ -974,7 +974,7 @@ class TaskServiceTest {
     void getFocusTasks_withAvailableMinutes_excludesTaskThatDoesNotFit() {
         var longTask = taskEntity();
         longTask.setEstimateMinutes(120);
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(longTask));
 
         var result = taskService.getFocusTasks(userId, 15);
@@ -985,7 +985,7 @@ class TaskServiceTest {
     @Test
     void getFocusTasks_withAvailableMinutes_neverExcludesTaskWithoutEstimate() {
         var noEstimate = taskEntity();
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(noEstimate));
         when(taskMapper.toResponse(noEstimate)).thenReturn(mockResponse(taskId, "задача"));
 
@@ -998,7 +998,7 @@ class TaskServiceTest {
     void getFocusTasks_embedsReminders_notJustEmptyList() {
         var entity = taskEntity();
         entity.setId(taskId);
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(entity));
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
         var reminderEntity = new ReminderJpaEntity();
@@ -1018,7 +1018,7 @@ class TaskServiceTest {
     @Test
     void getFocusTasks_marksReturnedTasksAsShownNow() {
         var shown = taskEntity();
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(shown));
         when(taskMapper.toResponse(shown)).thenReturn(mockResponse(taskId, "задача"));
 
@@ -1039,7 +1039,7 @@ class TaskServiceTest {
         var excluded = taskEntity();
         List<TaskJpaEntity> all = new ArrayList<>(shownEntities);
         all.add(excluded);
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(all);
         when(taskMapper.toResponse(any())).thenReturn(mockResponse(taskId, "задача"));
 
@@ -1066,7 +1066,7 @@ class TaskServiceTest {
                 focusPlannedDateGenerator);
         var tied = taskEntity();
         tied.setTitle("Позвонить в банк");
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(tied));
 
         var result = gated.getFocusTasks(userId, null);
@@ -1087,7 +1087,7 @@ class TaskServiceTest {
                 focusPlannedDateGenerator);
         var tied = taskEntity();
         tied.setTitle("Позвонить в банк");
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(tied));
         when(taskMapper.toResponse(tied)).thenReturn(mockResponse(taskId, "Позвонить в банк"));
 
@@ -1107,7 +1107,7 @@ class TaskServiceTest {
                 focusPlannedDateGenerator);
         var untied = taskEntity();
         untied.setTitle("купить молоко");
-        when(taskRepository.findFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(untied));
         when(taskMapper.toResponse(untied)).thenReturn(mockResponse(taskId, "купить молоко"));
 
@@ -1126,7 +1126,7 @@ class TaskServiceTest {
                 focusPlannedDateGenerator);
         var tied = taskEntity();
         tied.setTitle("Позвонить в банк");
-        when(taskRepository.findUpcomingFocusTasks(eq(userId), eq(TaskStatus.DONE), any(OffsetDateTime.class)))
+        when(taskRepository.findUpcomingFocusTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(tied));
         when(taskMapper.toResponse(tied)).thenReturn(mockResponse(taskId, "Позвонить в банк"));
 
@@ -1141,7 +1141,7 @@ class TaskServiceTest {
     void getDigest_taskWithOnlyPastPlannedDate_doesNotCountAsOverdue() {
         var entity = taskEntity();
         entity.setPlannedDate(OffsetDateTime.now(ZoneOffset.UTC).minusDays(3));
-        when(taskRepository.findDigestTasks(eq(userId), any(OffsetDateTime.class), eq(TaskStatus.DONE)))
+        when(taskRepository.findDigestTasks(eq(userId), any(OffsetDateTime.class)))
                 .thenReturn(List.of(entity));
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
 

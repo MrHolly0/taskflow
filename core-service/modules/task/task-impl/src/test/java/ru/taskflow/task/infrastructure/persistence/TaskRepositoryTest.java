@@ -127,7 +127,7 @@ class TaskRepositoryTest {
         repository.saveAndFlush(task);
         entityManager.clear();
 
-        var found = repository.findFocusTasks(userId, TaskStatus.DONE, endOfToday);
+        var found = repository.findFocusTasks(userId, endOfToday);
 
         assertThat(found).extracting(TaskJpaEntity::getTitle).containsExactly("позвонить юристу");
     }
@@ -141,7 +141,7 @@ class TaskRepositoryTest {
         repository.saveAndFlush(task);
         entityManager.clear();
 
-        var found = repository.findFocusTasks(userId, TaskStatus.DONE, endOfToday);
+        var found = repository.findFocusTasks(userId, endOfToday);
 
         assertThat(found).isEmpty();
     }
@@ -154,9 +154,39 @@ class TaskRepositoryTest {
         repository.saveAndFlush(task);
         entityManager.clear();
 
-        var found = repository.findFocusTasks(userId, TaskStatus.DONE, endOfToday);
+        var found = repository.findFocusTasks(userId, endOfToday);
 
         assertThat(found).extracting(TaskJpaEntity::getTitle).containsExactly("без срока и без дня");
+    }
+
+    @Test
+    void findFocusTasks_excludesCancelledTask() {
+        var userId = UUID.randomUUID();
+        var endOfToday = OffsetDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(0);
+        var task = newTask(userId, "отменённая задача", null);
+        task.setDeadline(endOfToday.minusHours(2));
+        task.setStatus(TaskStatus.CANCELLED);
+        repository.saveAndFlush(task);
+        entityManager.clear();
+
+        var found = repository.findFocusTasks(userId, endOfToday);
+
+        assertThat(found).isEmpty();
+    }
+
+    @Test
+    void findUpcomingFocusTasks_excludesCancelledTask() {
+        var userId = UUID.randomUUID();
+        var endOfToday = OffsetDateTime.now().withHour(23).withMinute(59).withSecond(59).withNano(0);
+        var task = newTask(userId, "отменённая задача на неделю", null);
+        task.setDeadline(endOfToday.plusDays(7));
+        task.setStatus(TaskStatus.CANCELLED);
+        repository.saveAndFlush(task);
+        entityManager.clear();
+
+        var found = repository.findUpcomingFocusTasks(userId, endOfToday);
+
+        assertThat(found).isEmpty();
     }
 
     @Test

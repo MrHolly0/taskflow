@@ -87,7 +87,7 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             LEFT JOIN FETCH t.group
             LEFT JOIN FETCH t.tags
             WHERE t.userId = :userId
-              AND t.status != :done
+              AND t.status IN (ru.taskflow.task.api.TaskStatus.TODO, ru.taskflow.task.api.TaskStatus.IN_PROGRESS)
               AND t.isDeleted = false
               AND (
                 (t.plannedDate IS NULL AND (t.deadline IS NULL OR t.deadline <= :endOfToday))
@@ -96,7 +96,6 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             """)
     List<TaskJpaEntity> findFocusTasks(
             @Param("userId") UUID userId,
-            @Param("done") TaskStatus done,
             @Param("endOfToday") OffsetDateTime endOfToday
     );
 
@@ -105,7 +104,7 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             LEFT JOIN FETCH t.group
             LEFT JOIN FETCH t.tags
             WHERE t.userId = :userId
-              AND t.status != :done
+              AND t.status IN (ru.taskflow.task.api.TaskStatus.TODO, ru.taskflow.task.api.TaskStatus.IN_PROGRESS)
               AND t.isDeleted = false
               AND t.deadline > :endOfToday
             ORDER BY CASE t.priority
@@ -118,7 +117,6 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             """)
     List<TaskJpaEntity> findUpcomingFocusTasks(
             @Param("userId") UUID userId,
-            @Param("done") TaskStatus done,
             @Param("endOfToday") OffsetDateTime endOfToday
     );
 
@@ -138,7 +136,7 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             LEFT JOIN FETCH t.group
             LEFT JOIN FETCH t.tags
             WHERE t.userId = :userId
-              AND t.status != :done
+              AND t.status IN (ru.taskflow.task.api.TaskStatus.TODO, ru.taskflow.task.api.TaskStatus.IN_PROGRESS)
               AND t.isDeleted = false
               AND (DATE(t.deadline) = DATE(:date) OR (t.deadline IS NULL))
             ORDER BY CASE t.priority
@@ -151,8 +149,7 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             """)
     List<TaskJpaEntity> findDigestTasks(
             @Param("userId") UUID userId,
-            @Param("date") OffsetDateTime date,
-            @Param("done") TaskStatus done
+            @Param("date") OffsetDateTime date
     );
 
     @Query(value = """
