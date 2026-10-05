@@ -317,3 +317,39 @@ body:not([data-page="focus"]):not([data-page="assistant"]) .toast { bottom: calc
 }
 
 .select-value-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Общие размеры и состояния действий */
+@media (min-width: 1024px) { html { scrollbar-gutter: stable; } }
+.action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; line-height: 1.3; }
+.action > .icon { width: 18px; height: 18px; flex-shrink: 0; }
+.search-field:focus-within { outline: none; border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.select-search input:focus-visible { outline: none; }
+.select-search:focus-within { box-shadow: inset 0 0 0 1px var(--text); border-radius: 7px; }
+#tasks .task-controls { gap: 6px; margin-left: 0; margin-top: 6px; }
+#tasks .text-action { font-size: 13px; padding: 7px 12px; border-radius: 9px; line-height: 1.3; }
+#tasks .text-action[data-action="start"], #tasks .text-action[data-action="done"] { min-width: 84px; }
+#tasks .task:not(:first-child) .text-action[data-action="start"] { border: 1px solid var(--line); color: var(--text); }
+#tasks .edit .icon { width: 18px; height: 18px; }
+.focus-menu-hint { color: var(--muted); font-size: 11px; margin-top: 12px; }
+.focus-menu-hint .mouse-tip { display: none; }
+.task.is-revealed { border-radius: 12px; background: var(--raised); box-shadow: inset 0 0 0 1px var(--muted); animation: task-reveal 3.2s ease-out both; }
+.is-menu-lifted { position: relative; z-index: 20; transform: translateY(-4px); border-radius: 12px; background: var(--background); box-shadow: 0 10px 26px #0002; }
+#tasks .task, .list-record, .folder-task { transition: transform 180ms cubic-bezier(.16,1,.3,1), box-shadow 180ms; }
+@media (pointer: coarse) { [data-record-id] { -webkit-touch-callout: none; } .record-open,.task-title { user-select: none; } }
+@media (hover: hover) and (pointer: fine) { .focus-menu-hint .mouse-tip { display: inline; } .focus-menu-hint .touch-tip { display: none; } }
+@media (min-width: 1024px) {
+  #tasks .text-action { min-height: 36px; }
+  .group-emblem svg { width: 24px; height: 24px; stroke-width: 2; }
+  .folder-tile[aria-expanded="true"] .group-emblem:not(.is-folder) svg, .folder-tile.is-drag-target .group-emblem:not(.is-folder) svg { transform: none; }
+}
+.folder-stage { overflow-anchor: none; }
+.folder-hover-preview { min-height: 0; overflow: hidden; }
+.folder-hover-preview .folder-stage-head { background: none; border-radius: 0; border-bottom: 1px solid var(--line); padding: 0 0 18px; }
+.preview-tools { visibility: hidden; pointer-events: none; }
+.folder-drag-rest { top: 154px; justify-content: flex-start; padding-top: 32px; }
+.folder-drag-rest .group-emblem { width: 42px; height: 42px; }
+.folder-drag-rest .group-emblem svg { width: 24px; height: 24px; }
+.is-drop-revealed { animation: task-drop 1.6s ease-out; }
+@keyframes task-reveal { 0%,25% { background: var(--raised); box-shadow: inset 0 0 0 1px var(--muted); } 100% { background: var(--background); box-shadow: inset 0 0 0 1px transparent; } }
+@keyframes task-drop { from { background: var(--raised); box-shadow: inset 0 0 0 1px var(--muted); } to { background: var(--background); box-shadow: inset 0 0 0 1px transparent; } }
+@media (prefers-reduced-motion: reduce) { #tasks .task,.list-record,.folder-task { transition: none; } .task.is-revealed,.is-drop-revealed { animation: none; } .is-menu-lifted { transform: none; } }

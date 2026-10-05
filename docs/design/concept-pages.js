@@ -30,7 +30,7 @@
     section('all', `${head('Все задачи', '', addButton('Добавить', 'data-new-task'))}
       <form class="inline-form" id="new-task-form" hidden><h2>Новая задача</h2><div class="form-grid">${field('Название', 'new-task-title', 'text', 'required maxlength="500"')}<label>Группа<select class="field-control" id="new-task-group"></select></label></div><div class="actions"><button class="action primary">Добавить</button><button class="action" type="button" data-close-new>Отмена</button></div></form>
       <div class="task-workbar"><div class="filter-strip" aria-label="Период задач">${[['now','Сейчас'],['today','Сегодня'],['week','Неделя'],['all','Все']].map(([key, label]) => `<button data-period="${key}" aria-pressed="${key === 'all'}">${label}</button>`).join('')}</div><label class="search-field">${icon('search')}<input type="search" id="task-search" aria-label="Поиск задач" placeholder="Найти задачу"></label><button class="tool-button filter-button" data-toggle-filters aria-expanded="false" aria-label="Фильтры">${icon('settings')}<span>Фильтры</span></button><button class="tool-button selection-button" data-toggle-selection aria-pressed="false" aria-label="Выбрать несколько задач">${icon('check')}<span>Выбрать</span></button></div>
-      <div class="list-filters" id="list-filters" hidden><label>Группа<select class="field-control" id="list-group" aria-label="Фильтр по группе"></select></label><label>Статус<select class="field-control" id="list-status" aria-label="Фильтр по статусу"><option value="">Все статусы</option>${statusOptions()}</select></label><label>Порядок<select class="field-control" id="list-order"><option value="default">По статусу</option><option value="deadline">По сроку</option><option value="title">По названию</option></select></label></div>
+      <div class="list-filters" id="list-filters" hidden><label>Группа<select class="field-control" id="list-group" aria-label="Фильтр по группе"></select></label><label>Статус<select class="field-control" id="list-status" aria-label="Фильтр по статусу"><option value="">Все статусы</option>${statusOptions()}</select></label><label>Порядок<select class="field-control" id="list-order"><option value="default">По статусу</option><option value="deadline">По сроку</option><option value="title">По названию</option></select></label><button class="tool-button" data-clear-filters>Сбросить</button></div>
       <div class="list-summary"><span id="list-caption"></span><span class="mouse-tip">ПКМ или ⋯: действия</span><span class="touch-tip">Действия в ⋯</span></div><div class="mass-toolbar" id="mass-toolbar" hidden></div><div id="all-list"></div><nav class="list-pager" id="task-pagination" aria-label="Страницы задач"></nav>`),
     section('board', `${head('Доска', 'Три состояния. Двигай задачи в своём темпе.', addButton('Задача', 'data-new-task'))}<div class="filter-strip board-mobile-tabs" id="lane-tabs" aria-label="Колонка доски"></div><div class="board-grid" id="board-grid"></div>`),
     section('groups', `${head('Группы', '', addButton('Группа', 'data-new-group'))}<form class="inline-form" id="group-form" hidden><h2 id="group-form-heading">Новая группа</h2><div class="form-grid">${field('Название', 'group-name', 'text', 'required maxlength="100"')}<div><p class="page-note">Значок</p><select id="group-symbol" hidden data-icon-source>${Object.entries(groupIcons).map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select><div class="group-icon-picker" role="group" aria-label="Значок группы">${Object.entries(groupIcons).map(([key,label])=>`<button type="button" data-group-symbol="${key}" aria-label="${label}" aria-pressed="false"><svg class="icon" aria-hidden="true"><use href="#group-${key}"/></svg></button>`).join('')}</div></div><div class="wide"><p class="page-note">Цвет метки</p><div class="color-choices">${colors.map((color, index) => `<button type="button" class="color-choice" data-group-color="${color}" style="--group-color:${color}" aria-label="${colorNames[index]}" aria-pressed="${index === 0}"><span></span></button>`).join('')}</div></div></div><p class="field-error" id="group-error" role="alert" hidden></p><div class="actions"><button class="action primary">Сохранить</button><button class="action" type="button" data-close-group>Отмена</button></div></form><div class="group-hints"><span id="groups-count"></span><span class="mouse-tip">ЛКМ: открыть · ПКМ: управлять · задачи можно перетаскивать</span><span class="touch-tip">Управление в ⋯</span></div><div id="group-list" class="groups-workspace"><aside class="folder-index"><label class="search-field">${icon('search')}<input id="folder-search" type="search" aria-label="Найти группу" placeholder="Найти группу"></label><div id="folder-rail" class="folder-rail"></div><div id="folder-index-caption" class="index-caption"></div></aside><div class="folder-stage"><div id="group-canvas"></div><div id="folder-drag-rest" class="folder-drag-rest" hidden></div><div id="folder-hover-preview" class="folder-hover-preview" hidden></div></div></div>`),
@@ -105,6 +105,7 @@
   }
   function renderList() {
     $('list-group').innerHTML = groupOptions('Все группы'); $('list-group').value = groupFilter;
+    document.querySelectorAll('[data-clear-filters]').forEach((button)=>{if(button.closest('#list-filters'))button.disabled=period==='all' && !search && !groupFilter && !statusFilter && $('list-order').value==='default';});
     const matched = tasks.filter(listMatches), pending = matched.filter(active), history = matched.filter((task) => !active(task));
     const showHistory = historyOpen || !!search || ['done','cancelled'].includes(statusFilter);
     const items = matched.filter((task) => active(task) || showHistory);
@@ -145,14 +146,16 @@
     const items = preview || !folderHistory ? pending : historical, limit=12, pages=Math.max(1,Math.ceil(items.length/limit));
     if (!preview) folderPage=Math.min(pages,Math.max(1,folderPage));
     const page = preview ? 1 : folderPage;
-    return `${preview ? '' : `<button class="folder-back" data-folder-back>${icon('arrow')}Все группы</button>`}<header class="folder-stage-head">${folderEmblem(group,true)}<div><h2 id="${preview ? 'group-preview-title' : 'group-view-title'}" tabindex="-1">${e(group.name)}</h2><p>${preview ? 'Отпусти, чтобы перенести сюда' : `${pending.length} активных · ${historical.length} в истории`}</p></div>${preview ? '' : `<button class="record-menu" data-group-menu="${e(group.name)}" aria-label="Управлять группой ${e(group.name)}" aria-haspopup="menu">${icon('more')}</button>`}</header>${preview ? '' : `<div class="folder-tools"><button class="action" data-new-task data-task-group="${e(group.name)}">${icon('plus')} Задача</button><button class="text-action" data-folder-history>${folderHistory ? 'Активные' : 'Завершённые и отменённые'}</button></div>`}<div class="folder-task-grid">${items.slice((page-1)*limit,page*limit).map((task)=>folderTask(task,preview)).join('')}</div>${items.length ? pages>1 && !preview ? `<nav class="list-pager" aria-label="Страницы задач группы"><span>${(page-1)*limit+1}–${Math.min(page*limit,items.length)} из ${items.length}</span><button class="quiet-icon previous" data-folder-page="${page-1}" aria-label="Предыдущая страница группы" ${page===1 ? 'disabled' : ''}>${icon('arrow')}</button><button class="quiet-icon" data-folder-page="${page+1}" aria-label="Следующая страница группы" ${page===pages ? 'disabled' : ''}>${icon('arrow')}</button></nav>` : '' : `<div class="empty-state"><h2>${preview ? 'Здесь есть место' : folderHistory ? 'История пока пуста' : 'Папка свободна'}</h2><p>${preview ? 'Задача появится в этой группе после переноса.' : folderHistory ? 'Завершённые задачи появятся здесь.' : 'Добавь задачу или перенеси её из другой группы.'}</p></div>`}`;
+    return `${preview ? '' : `<button class="folder-back" data-folder-back>${icon('arrow')}Все группы</button>`}<header class="folder-stage-head">${folderEmblem(group,true)}<div><h2 id="${preview ? 'group-preview-title' : 'group-view-title'}" tabindex="-1">${e(group.name)}</h2><p>${preview ? 'Отпусти, чтобы перенести сюда' : `${pending.length} активных · ${historical.length} в истории`}</p></div><button class="record-menu ${preview ? 'preview-tools' : ''}" data-group-menu="${e(group.name)}" aria-label="Управлять группой ${e(group.name)}" aria-haspopup="menu">${icon('more')}</button></header><div class="folder-tools ${preview ? 'preview-tools' : ''}"><button class="action" data-new-task data-task-group="${e(group.name)}">${icon('plus')} Задача</button><button class="text-action" data-folder-history>${folderHistory ? 'Активные' : 'Завершённые и отменённые'}</button></div><div class="folder-task-grid">${items.slice((page-1)*limit,page*limit).map((task)=>folderTask(task,preview)).join('')}</div>${items.length ? pages>1 && !preview ? `<nav class="list-pager" aria-label="Страницы задач группы"><span>${(page-1)*limit+1}–${Math.min(page*limit,items.length)} из ${items.length}</span><button class="quiet-icon previous" data-folder-page="${page-1}" aria-label="Предыдущая страница группы" ${page===1 ? 'disabled' : ''}>${icon('arrow')}</button><button class="quiet-icon" data-folder-page="${page+1}" aria-label="Следующая страница группы" ${page===pages ? 'disabled' : ''}>${icon('arrow')}</button></nav>` : '' : `<div class="empty-state"><h2>${preview ? 'Здесь есть место' : folderHistory ? 'История пока пуста' : 'Папка свободна'}</h2><p>${preview ? 'Задача появится в этой группе после переноса.' : folderHistory ? 'Завершённые задачи появятся здесь.' : 'Добавь задачу или перенеси её из другой группы.'}</p></div>`}`;
   }
   function renderGroups() {
     if (folderDragId !== null) return;
     if (!groups.some((group)=>group.name===expandedGroup)) expandedGroup=groups[0]?.name || null;
     const filtered=groups.filter((group)=>group.name.toLocaleLowerCase('ru').includes(folderSearch.toLocaleLowerCase('ru'))), visible=folderSearch ? filtered : filtered.slice(0,folderLimit);
     $('groups-count').textContent=`${groups.length} ${groups.length===1 ? 'группа' : groups.length>=2 && groups.length<=4 ? 'группы' : 'групп'}`;
+    const railScroll=$('folder-rail').scrollTop;
     $('folder-rail').innerHTML=visible.length ? visible.map((group)=>{const pending=tasks.filter((task)=>active(task) && task.group===group.name).length;return `<button class="folder-tile" data-open-folder="${e(group.name)}" data-drop-folder="${e(group.name)}" aria-expanded="${expandedGroup===group.name}" title="${e(group.name)} · ПКМ: управление" style="--folder-color:${group.color}">${folderEmblem(group)}<span class="folder-count">${pending}</span><strong>${e(group.name)}</strong><small>${pending ? 'в планах' : 'нет активных задач'}</small></button>`;}).join('') : '<p class="page-note">Группа не найдена.</p>';
+    $('folder-rail').scrollTop=railScroll;
     $('folder-index-caption').innerHTML=`<span>${visible.length} из ${filtered.length}</span>${visible.length<filtered.length ? '<button data-more-folders>Ещё группы</button>' : ''}`;
     $('group-list').classList.toggle('folder-focused',folderOpened);
     const group=groups.find((item)=>item.name===expandedGroup);
@@ -190,7 +193,7 @@
   function renderIdentities() {
     const total=Object.values(identities).filter(Boolean).length;
     $('access-note').innerHTML=`${icon(total>=2 ? 'check' : 'plug')}<span>${total>=2 ? 'Запасной способ входа подключён.' : `${identities.telegram ? 'Telegram подключён' : identities.email ? 'Почта подключена' : 'Телефон подключён'}. Добавь запасной способ входа.`}</span>`;
-    $('provider-list').innerHTML=[['telegram','Telegram','chat','Вход через Telegram'],['email','Почта','mail','Код в письме'],['phone','Телефон','phone','Подтверждение звонком']].map(([key,name,symbol,note])=>{const connected=identities[key],opened=binding?.key===key;return `<section class="identity-row"><div class="identity-summary">${icon(symbol)}<div><h2>${name}</h2><p class="${connected ? 'identity-state' : ''}">${connected ? e(connected) : note}</p></div>${opened ? '' : `<button class="action ${!connected && key==='email' && total===1 ? 'primary' : ''}" data-bind="${key}" aria-label="${connected ? 'Отключить' : 'Подключить'} ${key==='email' ? 'почту' : key==='phone' ? 'телефон' : 'Telegram'}" ${connected && total===1 ? 'disabled title="Единственный способ входа"' : ''}>${connected ? 'Отключить' : 'Подключить'}</button>`}</div>${identityForm(key)}</section>`;}).join('');
+    $('provider-list').innerHTML=[['telegram','Telegram','chat','Вход через Telegram'],['email','Почта','mail','Код в письме'],['phone','Телефон','phone','Подтверждение звонком']].map(([key,name,symbol,note])=>{const connected=identities[key],opened=binding?.key===key;return `<section class="identity-row"><div class="identity-summary">${icon(symbol)}<div><h2>${name}</h2><p class="${connected ? 'identity-state' : ''}">${connected ? e(connected) : note}</p></div>${opened ? '' : `<button class="action" data-bind="${key}" aria-label="${connected ? 'Отключить' : 'Подключить'} ${key==='email' ? 'почту' : key==='phone' ? 'телефон' : 'Telegram'}" ${connected && total===1 ? 'disabled title="Единственный способ входа"' : ''}>${connected ? 'Отключить' : 'Подключить'}</button>`}</div>${identityForm(key)}</section>`;}).join('');
     $('identity-protection').textContent=total===1 ? 'Единственный способ входа нельзя отключить. Сначала подключи ещё один.' : '';
     $('identity-help-text').innerHTML=`При подключении почты или Telegram можно перенести задачи из прежнего аккаунта. Перенос требует отдельного подтверждения.${!identities.email ? '<br><button data-merge-example>Посмотреть пример переноса</button>' : ''}`;
     syncNotificationAvailability();
@@ -205,7 +208,9 @@
   const originalRender = render, originalShowPage = showPage, originalReset = reset;
   render = (revealNext = false) => { observeTasks(); originalRender(revealNext); refreshPages(); };
   showPage = (page) => {
-    if (!labels[page]) return; closeQuickMenu(false); finishFolderDrag();
+    if (!labels[page]) return; cancelTaskHold(); closeQuickMenu(false); finishFolderDrag();
+    if(page!=='focus'){focusRevealId=null;originalRender();}
+    if(page!=='groups')document.querySelector('.folder-stage').style.minHeight='';
     originalShowPage(page);
     document.querySelectorAll('.workspace > section.content').forEach((element) => { element.hidden = element.id !== `${page}-page`; });
     $('top-label').textContent = labels[page];
@@ -237,7 +242,7 @@
     if ('newTask' in data) newTask(data.taskGroup);
     if ('closeNew' in data) { $('new-task-form').hidden = true; document.querySelector('#all-page [data-new-task]').focus(); }
     if (data.period) { period = data.period; listPage = 1; document.querySelectorAll('[data-period]').forEach((item) => item.setAttribute('aria-pressed', String(item.dataset.period === period))); renderList(); }
-    if ('clearFilters' in data) { period = 'all'; search = ''; groupFilter = ''; statusFilter = ''; $('task-search').value = ''; $('list-status').value = ''; document.querySelectorAll('[data-period]').forEach((item) => item.setAttribute('aria-pressed', String(item.dataset.period === 'all'))); renderList(); $('task-search').focus(); }
+    if ('clearFilters' in data) { period='all';search='';groupFilter='';statusFilter='';listPage=1;historyOpen=false;$('task-search').value='';$('list-status').value='';$('list-order').value='default';document.querySelectorAll('[data-period]').forEach((item)=>item.setAttribute('aria-pressed',String(item.dataset.period==='all')));render();$('task-search').focus({preventScroll:true}); }
     if (data.lane) { lane = data.lane; renderBoard(); document.querySelector(`[data-lane="${lane}"]`).focus(); }
     if ('newGroup' in data) openGroup();
     if (data.editGroup) openGroup(data.editGroup);
@@ -301,10 +306,12 @@
     if(!motionPreference.matches) element.animate([{opacity:0,transform:'translateY(7px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.16,1,.3,1)'});
   }
   function openFolder(name) {
+    document.querySelector('.folder-stage').style.minHeight='';
     expandedGroup=name;folderOpened=true;folderPage=1;folderHistory=false;renderGroups();animateFolder();
     $('group-view-title')?.focus({preventScroll:true});if(innerWidth<1024)window.scrollTo({top:0,behavior:'instant'});
   }
   function closeQuickMenu(restoreFocus=true) {
+    document.querySelectorAll('.is-menu-lifted').forEach((card)=>card.classList.remove('is-menu-lifted'));
     $('quick-menu').hidden=true; menuOpener?.setAttribute('aria-expanded','false');
     if(restoreFocus && menuOpener?.isConnected) menuOpener.focus({preventScroll:true});
     menuState=null;menuOpener=null;
@@ -369,15 +376,39 @@
     if(action==='tomorrow') changeTasks([task],(item)=>{setTaskStatus(item,'moved');item.plannedDate='2026-10-06';item.meta=taskMeta(item);counts.moved++;},'День исполнения перенесён на завтра.');
     if(action==='cancel') changeTasks([task],(item)=>setTaskStatus(item,'cancelled'),'Задача отменена.');
     if(action==='archive') changeTasks([task],(item)=>{item.archived=true;},'Задача убрана из списка.');
-    document.querySelector(`#${document.body.dataset.page}-page [data-record-id="${task.id}"] .record-open`)?.focus({preventScroll:true});
+    document.querySelector(`#${document.body.dataset.page}-page [data-record-id="${task.id}"]`)?.querySelector('.record-open,.task-title')?.focus({preventScroll:true});
   }
   document.addEventListener('contextmenu',(event)=>{
-    const record=event.target.closest('.list-record[data-record-id], .folder-task[data-record-id]'), folder=event.target.closest('[data-open-folder]');
+    const record=event.target.closest('.task[data-record-id], .list-record[data-record-id], .folder-task[data-record-id]'), folder=event.target.closest('[data-open-folder]');
     if(!record && !folder)return;event.preventDefault();
+    if(suppressTaskClick)return;
     openQuickMenu(record ? {kind:'task',id:Number(record.dataset.recordId)} : {kind:'group',name:folder.dataset.openFolder},event.clientX,event.clientY,record?.querySelector('.record-menu') || folder);
   });
   document.addEventListener('pointerdown',(event)=>{if(!$('quick-menu').hidden && !$('quick-menu').contains(event.target) && !menuOpener?.contains(event.target))closeQuickMenu(false);});
+  let taskHold=null, suppressTaskClick=false;
+  function cancelTaskHold() {if(taskHold)clearTimeout(taskHold.timer);taskHold=null;}
+  document.addEventListener('pointerdown',(event)=>{
+    cancelTaskHold();
+    if(event.pointerType!=='touch' || !event.isPrimary || event.target.closest('.completion-hit,.task-check,.record-menu,.task-controls'))return;
+    const card=event.target.closest('.task[data-record-id],.list-record[data-record-id],.folder-task[data-record-id]');
+    if(!card || card.closest('#folder-hover-preview'))return;
+    const hold={id:event.pointerId,x:event.clientX,y:event.clientY,card,timer:null};taskHold=hold;
+    hold.timer=setTimeout(()=>{if(taskHold!==hold || !card.isConnected)return;const rect=card.getBoundingClientRect();suppressTaskClick=true;openQuickMenu({kind:'task',id:Number(card.dataset.recordId)},rect.left,rect.bottom+8,card.querySelector('.record-menu'));card.classList.add('is-menu-lifted');},480);
+  });
+  document.addEventListener('pointermove',(event)=>{if(taskHold && (event.pointerId!==taskHold.id || Math.hypot(event.clientX-taskHold.x,event.clientY-taskHold.y)>10))cancelTaskHold();},{passive:true});
+  document.addEventListener('pointerup',()=>{cancelTaskHold();setTimeout(()=>{suppressTaskClick=false;},400);});
+  document.addEventListener('pointercancel',()=>{cancelTaskHold();suppressTaskClick=false;});
+  document.addEventListener('scroll',()=>cancelTaskHold(),{capture:true,passive:true});
+  document.addEventListener('click',(event)=>{if(suppressTaskClick && event.target.closest('[data-record-id]')){event.preventDefault();event.stopImmediatePropagation();}},{capture:true});
+  document.addEventListener('pointerdown',(event)=>{
+    if(event.target.closest('.select-popover') || $('edit-dialog').open)return;
+    for(const [id,trigger] of [['new-task-form','[data-new-task]'],['group-form','[data-new-group],[data-edit-group],[data-group-menu]']]){const form=$(id);if(!form.hidden && !form.contains(event.target) && !event.target.closest(trigger))form.hidden=true;}
+    if(goalEditorOpen && !$('goal-editor').contains(event.target) && !event.target.closest('[data-edit-goal]')){goalEditorOpen=false;renderStats();}
+    const identity=document.querySelector('.identity-form');
+    if(binding && identity && !identity.contains(event.target) && !event.target.closest('[data-bind],[data-merge-example]')){binding=null;renderIdentities();}
+  });
   document.addEventListener('keydown',(event)=>{
+    if(event.key==='Escape'){cancelTaskHold();for(const [id,trigger] of [['new-task-form','#all-page [data-new-task]'],['group-form','#groups-page [data-new-group]']]){if(!$(id).hidden){const focused=$(id).contains(document.activeElement);$(id).hidden=true;if(focused)document.querySelector(trigger)?.focus({preventScroll:true});}}if(goalEditorOpen){goalEditorOpen=false;renderStats();document.querySelector('[data-edit-goal]')?.focus({preventScroll:true});}if(binding){const key=binding.key;binding=null;renderIdentities();document.querySelector(`[data-bind="${key}"]`)?.focus({preventScroll:true});}}
     if(event.key==='Escape' && folderPointer){event.preventDefault();finishFolderDrag();renderGroups();return;}
     if((event.shiftKey && event.key==='F10') || event.key==='ContextMenu') {
       const record=document.activeElement?.closest('[data-record-id]'), folder=document.activeElement?.closest('[data-open-folder]');if(!record&&!folder)return;
@@ -415,7 +446,6 @@
     if('bulkDone' in data) {const items=tasks.filter((task)=>selectedIds.has(task.id));changeTasks(items,(task)=>setTaskStatus(task,'done'),`Завершено ${items.length} ${doneWord(items.length)}.`);selecting=false;selectedIds.clear();renderList();}
     if('toggleHistory' in data) {historyOpen=!historyOpen;listPage=1;renderList();document.querySelector('[data-toggle-history]')?.focus({preventScroll:true});}
     if(data.listPage) {listPage=Number(data.listPage);renderList();$('all-list').scrollIntoView({block:'start'});$('task-search').focus({preventScroll:true});}
-    if('clearFilters' in data) {listPage=1;renderList();}
     if(data.openFolder) openFolder(data.openFolder);
     if('folderBack' in data) {folderOpened=false;renderGroups();$('folder-search').focus({preventScroll:true});window.scrollTo({top:0,behavior:'instant'});}
     if('folderHistory' in data) {folderHistory=!folderHistory;folderPage=1;renderGroups();}
@@ -426,7 +456,16 @@
     if('allReceipts' in data) {receiptDay=null;renderStats();document.querySelector('[data-all-receipts]').focus({preventScroll:true});}
     if('toggleStatDetails' in data) {statsDetailsOpen=!statsDetailsOpen;renderStats();}
     if(data.statGroup) {showPage('groups');openFolder(data.statGroup);}
-    if(data.statNext) {const task=tasks.find((item)=>item.id===Number(data.statNext));if(task.status!=='started') {setTaskStatus(task,'started');render();}showPage('focus');notice(`В работе: «${task.title}».`);}
+    if(data.statNext) {
+      const task=tasks.find((item)=>item.id===Number(data.statNext));if(!task)return;
+      if(task.status!=='started')setTaskStatus(task,'started');
+      if(budget && (task.minutes===null || task.minutes>budget)){budget=null;document.querySelectorAll('[data-minutes]').forEach((item)=>item.setAttribute('aria-pressed','false'));}
+      focusRevealId=task.id;render();showPage('focus');
+      const card=$('tasks').querySelector(`[data-record-id="${task.id}"]`);
+      card?.classList.add('is-revealed');card?.querySelector('.task-title').focus({preventScroll:true});
+      card?.scrollIntoView({block:'nearest',behavior:motionPreference.matches ? 'instant' : 'smooth'});
+      setTimeout(()=>card?.classList.remove('is-revealed'),3200);notice(`В работе: «${task.title}».`);
+    }
     if(data.statsPanel){statsPanel=data.statsPanel;renderStats();}
     if('toggleIdentityHelp' in data) {$('identity-help-text').hidden=!$('identity-help-text').hidden;button.setAttribute('aria-expanded',String(!$('identity-help-text').hidden));}
     if('demoCallConfirm' in data && binding) {identities.phone=binding.value;binding=null;renderIdentities();notice('Телефон подключён в примере.');}
@@ -443,6 +482,7 @@
   let folderPointer=null;
   function beginFolderDrag(id) {
     closeQuickMenu(false);folderDragId=id;
+    const stage=document.querySelector('.folder-stage');stage.style.minHeight=`${Math.ceil(stage.getBoundingClientRect().height)}px`;stage.style.overflowAnchor='none';
     const task=tasks.find((item)=>item.id===id),group=groups.find((item)=>item.name===task.group);
     $('folder-drag-rest').innerHTML=`${folderEmblem(group)}<span>${e(group?.name || 'Группа')} закрыта</span><small>Наведи задачу на другую папку</small>`;
     $('folder-drag-rest').hidden=false;$('group-list').classList.add('is-dragging');
@@ -475,7 +515,8 @@
     folderPointer=null;finishFolderDrag();
     if(!task || !groups.some((group)=>group.name===name)){renderGroups();return;}
     expandedGroup=name;folderOpened=true;folderPage=1;folderHistory=false;
-    if(task.group!==name)changeTasks([task],(item)=>{item.group=name;},`Задача перенесена: ${name}.`);else renderGroups();animateFolder();
+    if(task.group!==name)changeTasks([task],(item)=>{item.group=name;},`Задача перенесена: ${name}.`);else renderGroups();
+    const transferred=$('group-canvas').querySelector(`[data-record-id="${task.id}"]`);transferred?.classList.add('is-drop-revealed');setTimeout(()=>transferred?.classList.remove('is-drop-revealed'),1600);
   }
   $('group-list').addEventListener('pointerup',(event)=>endFolderPointer(event));
   $('group-list').addEventListener('pointercancel',(event)=>endFolderPointer(event,true));
@@ -490,6 +531,7 @@
   });
 
   reset = () => {
+    focusRevealId=null;cancelTaskHold();suppressTaskClick=false;document.querySelector('.folder-stage').style.minHeight='';
     knownTasks.clear(); groups = [{name:'Учёба',color:colors[0],symbol:'school'},{name:'Личное',color:colors[2],symbol:'users'},{name:'Работа',color:colors[3],symbol:'briefcase'},{name:'Идеи',color:colors[1],symbol:'palette'}];
     period = 'all'; search = ''; groupFilter = ''; statusFilter = ''; expandedGroup = null;
     listPage = 1; selecting = false; selectedIds.clear(); historyOpen = false; folderSearch = ''; folderOpened = false; folderPage = 1; folderHistory = false; folderLimit = 12; weeklyGoal = 5; statsPanel='results'; receiptDay = null; goalEditorOpen = false; statsDetailsOpen = false; denseExample = false; closeQuickMenu(false); finishFolderDrag(); lane = 'todo'; selectedDay = 6; binding = null; identities = {telegram:'@sasha',email:'',phone:''};

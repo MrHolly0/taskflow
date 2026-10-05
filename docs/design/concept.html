@@ -354,7 +354,7 @@
             <div class="budget" role="group" aria-label="Сколько времени есть?"><span class="budget-label">Сколько времени есть?</span><button class="chip" data-minutes="15" aria-pressed="false">15 мин</button><button class="chip" data-minutes="30" aria-pressed="false">30 мин</button><button class="chip" data-minutes="60" aria-pressed="false">1 час</button></div>
             <div class="section-head"><h2>Фокус сейчас</h2><button class="day-progress" id="day-progress" aria-expanded="false" aria-controls="day-detail"><svg class="icon" aria-hidden="true"><use href="#check"/></svg><span id="day-progress-note" aria-live="polite">2 готово · следующее — ~30 мин</span><svg class="icon chevron" aria-hidden="true"><use href="#chevron"/></svg></button></div>
             <section class="day-detail" id="day-detail" aria-labelledby="day-detail-title" hidden><h3 id="day-detail-title">Что уже получилось сегодня</h3><ul id="completed-items"></ul><p id="day-extra"></p></section>
-            <div id="tasks"></div>
+            <div id="tasks"></div><p class="focus-menu-hint"><span class="mouse-tip">ПКМ по задаче</span><span class="touch-tip">Удерживай задачу</span> или нажми ⋯ для быстрых действий</p>
             <div id="empty" class="empty" hidden><h3>Можно выдохнуть.</h3><p>В этой подборке больше нет задач. Можно выбрать другой бюджет времени или рассказать о новых делах.</p></div>
           </div>
           <aside class="aside" aria-label="Ввод">
@@ -385,6 +385,7 @@
       { id: 2, title: 'Отправить документы в деканат', group: 'Учёба', minutes: 15, meta: 'День исполнения: сегодня', status: 'todo' },
       { id: 3, title: 'Разобрать заметки за неделю', group: 'Личное', minutes: 15, meta: 'Без срока', status: 'started' }
     ];
+    let focusRevealId = null;
     let tasks = [], budget = null, counts = {}, completedToday = [], editingId = null, toastTimer;
     let chatEntries = [], nextChatId = 1, nextTaskId = 4;
     const tasksElement = document.getElementById('tasks');
@@ -392,10 +393,13 @@
     const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
     const doneWord = (number) => number % 10 === 1 && number % 100 !== 11 ? 'дело' : number % 10 >= 2 && number % 10 <= 4 && (number % 100 < 12 || number % 100 > 14) ? 'дела' : 'дел';
     function render(revealNext = false) {
-      const visible = tasks.filter((task) => !task.archived && !['done', 'moved', 'cancelled'].includes(task.status) && (!budget || task.minutes !== null && task.minutes <= budget)).slice(0, 3);
-      tasksElement.innerHTML = visible.map((task, index) => `<article class="task${revealNext && index === 0 ? ' is-next' : ''}" aria-labelledby="title-${task.id}">
+      const eligible = tasks.filter((task) => !task.archived && !['done', 'moved', 'cancelled'].includes(task.status));
+      const requested = eligible.find((task) => task.id === focusRevealId);
+      const pool = eligible.filter((task) => !budget || task.minutes !== null && task.minutes <= budget);
+      const visible = (requested ? [requested, ...pool.filter((task) => task.id !== requested.id)] : pool).slice(0, 3);
+      tasksElement.innerHTML = visible.map((task, index) => `<article class="task${revealNext && index === 0 ? ' is-next' : ''}" data-record-id="${task.id}" aria-labelledby="title-${task.id}">
         <button class="task-check" data-action="done" data-id="${task.id}" aria-label="Сделано: ${escapeHtml(task.title)}" title="Отметить как выполненную"><span class="check-ring">${icon('check')}</span></button>
-        <div class="task-body"><div class="task-heading"><h3 id="title-${task.id}"><button class="task-title" data-action="edit" data-id="${task.id}">${escapeHtml(task.title)}</button></h3><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
+        <div class="task-body"><div class="task-heading"><h3 id="title-${task.id}"><button class="task-title" data-action="edit" data-id="${task.id}">${escapeHtml(task.title)}</button></h3><button class="edit record-menu" data-task-menu="${task.id}" aria-label="Действия: ${escapeHtml(task.title)}" aria-haspopup="menu" aria-expanded="false">${icon('more')}</button></div>
         <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes === null ? 'Без оценки' : `${task.minutes} мин`}</span><span>${escapeHtml(task.group)}</span>${task.status === 'started' ? '<span class="task-status">В работе</span>' : ''}</div>
         <div class="task-controls">${task.status === 'todo' ? `<button class="text-action" data-action="start" data-id="${task.id}">Начать</button>` : `<button class="text-action" data-action="done" data-id="${task.id}" aria-label="Завершить: ${escapeHtml(task.title)}">Завершить</button><button class="text-action" data-action="todo" data-id="${task.id}">Вернуть в список</button>`}<button class="text-action" data-action="snooze" data-id="${task.id}">Отложить</button></div></div>
       </article>`).join('');
@@ -450,6 +454,7 @@
     }
     document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
     document.querySelectorAll('[data-minutes]').forEach((button) => button.addEventListener('click', () => {
+      focusRevealId = null;
       const minutes = Number(button.dataset.minutes); budget = budget === minutes ? null : minutes;
       document.querySelectorAll('[data-minutes]').forEach((item) => item.setAttribute('aria-pressed', String(Number(item.dataset.minutes) === budget)));
       render();
@@ -473,6 +478,11 @@
       const sameTask = tasksElement.querySelector(`[data-id="${task.id}"][data-action="${task.status === 'started' ? 'todo' : 'start'}"]`);
       const nextControl = sameTask || tasksElement.querySelector('[data-action="done"]') || document.querySelector('[data-minutes]'); nextControl.focus();
     });
+    const editDialog = document.getElementById('edit-dialog');
+    let backdropPressed = false;
+    const outsideDialog = (event) => { const rect=editDialog.getBoundingClientRect(); return event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom; };
+    editDialog.addEventListener('pointerdown', (event) => { backdropPressed=event.target===editDialog && outsideDialog(event); });
+    editDialog.addEventListener('click', (event) => { if(backdropPressed && event.target===editDialog && outsideDialog(event))editDialog.close(); backdropPressed=false; });
     document.getElementById('cancel-edit').addEventListener('click', () => document.getElementById('edit-dialog').close());
     document.getElementById('day-progress').addEventListener('click', () => {
       const trigger = document.getElementById('day-progress');
