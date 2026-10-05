@@ -1,233 +1,361 @@
-import { useState } from 'react';
-import { IconSearch, IconPlus, IconClock, IconInbox, IconBell, IconRepeat } from '@tabler/icons-react';
-import { Status } from '@/lib/store';
-import { formatDeadline, formatReminderTime, endOfZonedDay, cn } from '@/lib/utils';
-import { getStatusLabel } from '@/lib/store';
-import { useTasksList, RecurrenceRule } from '@/lib/hooks/useTasks';
+import { useEffect, useState } from 'react';
+import { IconSearch, IconPlus, IconAdjustmentsHorizontal, IconX } from '@tabler/icons-react';
+import { useTasksList, useGroups, useCompleteTask, useUpdateTask } from '@/lib/hooks/useTasks';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
 import { useMinuteTick } from '@/lib/hooks/useMinuteTick';
+import { endOfZonedDay } from '@/lib/utils';
+import { useTaskUi, isActiveTask } from '@/lib/task-ui';
+import { toast } from 'sonner';
 import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/app/components/ui/select';
+import { TaskRow } from '@/app/components/TaskRow';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
-import { QuickInputModal } from '@/app/components/QuickInputModal';
-
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  priority: string;
-  status: string;
-  deadline?: string;
-  estimateMinutes?: number;
-  groupId?: string;
-  groupName?: string;
-  reminders?: { id: string; fireAt: string; status: string }[];
-  recurrence?: RecurrenceRule;
-}
+import { CreateTaskDialog } from '@/app/components/CreateTaskDialog';
 
 type Context = 'now' | 'today' | 'week' | 'all';
-
-const PRIORITY_DOT: Record<string, string> = {
-  URGENT: 'bg-red-500',
-  HIGH: 'bg-orange-500',
-  MEDIUM: 'bg-blue-500',
-  LOW: 'bg-gray-400',
-};
-
-const STATUS_COLOR: Record<Status, string> = {
-  TODO: 'bg-muted text-muted-foreground',
-  IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
-  DONE: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
-  CANCELLED: 'bg-muted text-muted-foreground line-through',
-};
-
 export function AllTasksPage() {
-  const [context, setContext] = useState<Context>('today');
+  const [context, setContext] = useState<Context>('all');
   const [search, setSearch] = useState('');
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
-  const [quickInputOpen, setQuickInputOpen] = useState(false);
-
-  const { data: allTasks = [], isLoading, error } = useTasksList();
-  const { timezone, isReady: timezoneReady } = useUserTimezone();
+  const [group, setGroup] = useState('all');
+  const [status, setStatus] = useState('active');
+  const [order, setOrder] = useState('default');
+  const [filters, setFilters] = useState(false);
+  const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [selection, setSelection] = useState<string[]>([]);
+  const { data: all = [], isLoading, error, refetch } = useTasksList();
+  const { data: groups = [] } = useGroups();
+  const complete = useCompleteTask();
+  const update = useUpdateTask();
+  const { timezone, isReady, error: timezoneError, refetch: refetchTimezone } = useUserTimezone();
+  const revealIds = useTaskUi((s) => s.revealIds);
+  const revealedAt = useTaskUi((s) => s.revealedAt);
   useMinuteTick();
-
-  const filteredTasks = (allTasks || []).filter((task) => {
-    if (search && !task.title.toLowerCase().includes(search.toLowerCase())) return false;
-
-    const now = new Date();
-    const deadline = task.deadline ? new Date(task.deadline) : null;
-
-    if (context === 'now') {
-      return (
-        task.status !== 'DONE' && task.status !== 'CANCELLED' &&
-        (task.priority === 'URGENT' || task.status === 'IN_PROGRESS' ||
-          (deadline !== null && deadline < now))
-      );
+  useEffect(() => {
+    setPage(1);
+  }, [context, search, group, status, order]);
+  useEffect(() => {
+    if (revealedAt && Date.now() - revealedAt < 8000) {
+      setContext('all');
+      setSearch('');
+      setGroup('all');
+      setStatus('active');
+      setOrder('default');
+      setPage(1);
     }
-    if (context === 'today') {
-      const endOfToday = endOfZonedDay(0, timezone, now);
-      return task.status !== 'DONE' && task.status !== 'CANCELLED' &&
-        (deadline === null || deadline <= endOfToday);
-    }
-    if (context === 'week') {
-      const endOfWeek = endOfZonedDay(6, timezone, now);
-      return task.status !== 'DONE' && task.status !== 'CANCELLED' &&
-        (deadline === null || deadline <= endOfWeek);
-    }
-    return true;
-  });
-
-  const handleOpenTask = (task: Task) => {
-    setSelectedTask(task);
-    setTaskModalOpen(true);
+  }, [revealedAt]);
+  const filtered = (() => {
+    const endToday = endOfZonedDay(0, timezone),
+      endWeek = endOfZonedDay(6, timezone);
+    return all
+      .filter((task) => {
+        if (search && !task.title.toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')))
+          return false;
+        if (group !== 'all' && (group === 'none' ? Boolean(task.groupId) : task.groupId !== group))
+          return false;
+        if (status === 'active' && !isActiveTask(task)) return false;
+        if (status === 'history' && isActiveTask(task)) return false;
+        if (!['active', 'history', 'all'].includes(status) && task.status !== status) return false;
+        const target = task.plannedDate || task.deadline;
+        if (context === 'now')
+          return (
+            isActiveTask(task) &&
+            (task.priority === 'URGENT' ||
+              task.status === 'IN_PROGRESS' ||
+              Boolean(task.deadline && new Date(task.deadline) < new Date()))
+          );
+        if (context === 'today')
+          return isActiveTask(task) && (!target || new Date(target) <= endToday);
+        if (context === 'week')
+          return isActiveTask(task) && (!target || new Date(target) <= endWeek);
+        return true;
+      })
+      .sort((a, b) => {
+        if (order === 'default' && Date.now() - revealedAt < 8000) {
+          const ai = revealIds.indexOf(a.id),
+            bi = revealIds.indexOf(b.id);
+          if (ai !== bi) return (ai < 0 ? 1000 : ai) - (bi < 0 ? 1000 : bi);
+        }
+        if (order === 'deadline')
+          return (
+            (a.deadline ? Date.parse(a.deadline) : Infinity) -
+            (b.deadline ? Date.parse(b.deadline) : Infinity)
+          );
+        if (order === 'priority') {
+          const p = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
+          return p.indexOf(a.priority) - p.indexOf(b.priority);
+        }
+        if (order === 'status')
+          return Number(b.status === 'IN_PROGRESS') - Number(a.status === 'IN_PROGRESS');
+        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+      });
+  })();
+  const pages = Math.max(1, Math.ceil(filtered.length / 20)),
+    current = Math.min(page, pages),
+    visible = filtered.slice((current - 1) * 20, current * 20);
+  const reset = () => {
+    setContext('all');
+    setSearch('');
+    setGroup('all');
+    setStatus('active');
+    setOrder('default');
+    setPage(1);
   };
-
-  if (isLoading || !timezoneReady) {
-    return (
-      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
-        <p className="text-muted-foreground">Загружаем задачи...</p>
-      </div>
+  const bulk = async (done: boolean) => {
+    const results = await Promise.allSettled(
+      selection.map((id) =>
+        done ? complete.mutateAsync(id) : update.mutateAsync({ id, status: 'CANCELLED' })
+      )
     );
-  }
-
-  if (error) {
-    return (
-      <div className="max-w-4xl mx-auto flex items-center justify-center min-h-[60vh]">
-        <p className="text-destructive">Ошибка загрузки задач</p>
-      </div>
-    );
-  }
-
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    failed
+      ? toast.error(`Не изменилось ${failed} задач. Попробуй ещё раз.`)
+      : toast.success(done ? 'Выбранные дела завершены.' : 'Выбранные дела отменены.');
+    setSelection([]);
+    setSelecting(false);
+  };
   return (
-    <>
-      <div className="max-w-4xl mx-auto space-y-5">
-        {/* Header */}
-        <h1 className="text-2xl font-semibold">Все задачи</h1>
-
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex items-center gap-2">
-            <Tabs value={context} onValueChange={(v) => setContext(v as Context)} className="flex-1 sm:flex-initial">
-              <TabsList className="h-9 w-full sm:w-auto gap-1 p-1">
-                <TabsTrigger value="now" className="text-xs px-3 cursor-pointer flex-1 sm:flex-initial">Сейчас</TabsTrigger>
-                <TabsTrigger value="today" className="text-xs px-3 cursor-pointer flex-1 sm:flex-initial">Сегодня</TabsTrigger>
-                <TabsTrigger value="week" className="text-xs px-3 cursor-pointer flex-1 sm:flex-initial">Неделя</TabsTrigger>
-                <TabsTrigger value="all" className="text-xs px-3 cursor-pointer flex-1 sm:flex-initial">Всё</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <Button
-              size="icon"
-              variant="outline"
-              className="h-9 w-9 flex-shrink-0 sm:hidden"
-              onClick={() => setQuickInputOpen(true)}
-              title="Новая задача"
-            >
-              <IconPlus className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="relative flex-1 sm:max-w-60">
-            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Поиск..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 text-sm"
-            />
-          </div>
-        </div>
-
-        {/* Count */}
-        <div className="text-sm text-muted-foreground">
-          {filteredTasks.length} {filteredTasks.length === 1 ? 'задача' : 'задач'}
-        </div>
-
-        {/* Tasks list */}
-        <div className="space-y-1.5">
-          {filteredTasks.map((task) => (
-            <button
-              key={task.id}
-              onClick={() => handleOpenTask(task)}
-              className={cn(
-                'w-full text-left group cursor-pointer',
-                'border border-border/60 rounded-xl p-4 hover:bg-accent/40 transition-colors',
-                task.status === 'DONE' && 'opacity-60'
-              )}
-            >
-              <div className="flex items-center gap-3">
-                {/* Priority dot */}
-                <div
-                  className={cn(
-                    'w-2 h-2 rounded-full flex-shrink-0 mt-0.5',
-                    PRIORITY_DOT[task.priority]
-                  )}
-                />
-
-                {/* Main content */}
-                <div className="flex-1 min-w-0 space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn(
-                      'font-medium text-sm',
-                      task.status === 'DONE' && 'line-through text-muted-foreground'
-                    )}>
-                      {task.title}
-                    </span>
-                    <span className={cn(
-                      'text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0',
-                      STATUS_COLOR[task.status as Status]
-                    )}>
-                      {getStatusLabel(task.status as Status)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                    {task.deadline && (
-                      <span className="flex items-center gap-1">
-                        <IconClock className="h-3 w-3" />
-                        {formatDeadline(task.deadline, timezone, task.status)}
-                      </span>
-                    )}
-                    {task.groupName && <span>{task.groupName}</span>}
-                    {task.estimateMinutes && <span>~{task.estimateMinutes} мин</span>}
-                    {task.recurrence && (
-                      <span className="flex items-center gap-1" title="Повторяется">
-                        <IconRepeat className="h-3 w-3" />
-                      </span>
-                    )}
-                    {task.reminders && task.reminders.length > 0 && (
-                      <span className="flex items-center gap-1">
-                        <IconBell className="h-3 w-3" />
-                        {formatReminderTime(task.reminders[0].fireAt, timezone)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Arrow */}
-                              </div>
+    <div className="munin-page">
+      <header className="munin-page-head">
+        <h1>Все задачи</h1>
+        <Button onClick={() => setCreateOpen(true)} className="gap-2">
+          <IconPlus />
+          Добавить
+        </Button>
+      </header>
+      <div className="task-workbar">
+        <div className="task-contexts" role="group" aria-label="Период задач">
+          {(
+            [
+              ['now', 'Сейчас'],
+              ['today', 'Сегодня'],
+              ['week', 'Неделя'],
+              ['all', 'Все'],
+            ] as const
+          ).map(([v, l]) => (
+            <button key={v} aria-pressed={context === v} onClick={() => setContext(v)}>
+              {l}
             </button>
           ))}
         </div>
-
-        {filteredTasks.length === 0 && (
-          <div className="text-center py-16 space-y-3">
-            <IconInbox className="h-10 w-10 mx-auto text-muted-foreground/60" />
-            <p className="text-muted-foreground">В этом контексте задач нет</p>
-            <Button variant="outline" onClick={() => setQuickInputOpen(true)} className="gap-2">
-              <IconPlus className="h-4 w-4" />
-              Добавить задачу
-            </Button>
-          </div>
-        )}
+        <label className="munin-search">
+          <IconSearch />
+          <input
+            type="search"
+            aria-label="Найти задачу"
+            placeholder="Найти задачу"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </label>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label="Фильтры задач"
+          aria-expanded={filters}
+          onClick={() => setFilters(!filters)}
+        >
+          <IconAdjustmentsHorizontal />
+        </Button>
       </div>
-
-      <TaskDetailModal
-        task={selectedTask}
-        open={taskModalOpen}
-        onClose={() => setTaskModalOpen(false)}
+      {filters && (
+        <div className="task-list-filters">
+          <label>
+            Группа
+            <Select value={group} onValueChange={setGroup}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Все группы</SelectItem>
+                <SelectItem value="none">Без группы</SelectItem>
+                {groups.map((g) => (
+                  <SelectItem value={g.id} key={g.id}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label>
+            Статус
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[
+                  ['active', 'Активные'],
+                  ['all', 'Все статусы'],
+                  ['TODO', 'В планах'],
+                  ['IN_PROGRESS', 'В работе'],
+                  ['history', 'Завершённые и отменённые'],
+                ].map(([v, l]) => (
+                  <SelectItem value={v} key={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <label>
+            Порядок
+            <Select value={order} onValueChange={setOrder}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[
+                  ['default', 'Новые сначала'],
+                  ['deadline', 'По сроку'],
+                  ['priority', 'По приоритету'],
+                  ['status', 'В работе сначала'],
+                ].map(([v, l]) => (
+                  <SelectItem value={v} key={v}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+          <button className="text-button" onClick={reset}>
+            <IconX />
+            Сбросить
+          </button>
+        </div>
+      )}
+      <div className="task-list-caption">
+        <span>
+          {all.filter(isActiveTask).length} активных · {all.filter((t) => !isActiveTask(t)).length}{' '}
+          в истории
+        </span>
+        <button
+          className="text-button"
+          onClick={() => {
+            setSelecting(!selecting);
+            setSelection([]);
+          }}
+        >
+          {selecting ? 'Отменить выбор' : 'Выбрать несколько'}
+        </button>
+      </div>
+      {selecting && (
+        <div className="task-selection-bar">
+          <span>Выбрано {selection.length}</span>
+          <Button
+            size="sm"
+            disabled={!selection.length || complete.isPending || update.isPending}
+            onClick={() => void bulk(true)}
+          >
+            Завершить
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!selection.length || complete.isPending || update.isPending}
+            onClick={() => void bulk(false)}
+          >
+            Отменить задачи
+          </Button>
+        </div>
+      )}
+      {error || timezoneError ? (
+        <div className="page-state">
+          <p>Не удалось загрузить задачи.</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void refetch();
+              void refetchTimezone();
+            }}
+          >
+            Повторить
+          </Button>
+        </div>
+      ) : isLoading || !isReady ? (
+        <div className="page-state">Загружаем задачи…</div>
+      ) : (
+        <>
+          <div>
+            {visible.map((task) => (
+              <div key={task.id} className={selecting ? 'task-select-row' : ''}>
+                {selecting && (
+                  <input
+                    type="checkbox"
+                    aria-label={`Выбрать: ${task.title}`}
+                    checked={selection.includes(task.id)}
+                    onChange={(e) =>
+                      setSelection(
+                        e.target.checked
+                          ? [...selection, task.id]
+                          : selection.filter((id) => id !== task.id)
+                      )
+                    }
+                  />
+                )}
+                <TaskRow task={task} onOpen={() => setSelectedId(task.id)} />
+              </div>
+            ))}
+          </div>
+          {!visible.length && (
+            <div className="empty-task-list">
+              <h2>{all.length ? 'По этим условиям ничего нет' : 'Здесь появятся твои задачи'}</h2>
+              <button
+                className="text-button"
+                onClick={all.length ? reset : () => setCreateOpen(true)}
+              >
+                {all.length ? 'Сбросить фильтры' : 'Добавить первое дело'}
+              </button>
+            </div>
+          )}
+          {pages > 1 && (
+            <nav className="munin-pager" aria-label="Страницы задач">
+              <span>
+                {(current - 1) * 20 + 1}–{Math.min(current * 20, filtered.length)} из{' '}
+                {filtered.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current === 1}
+                onClick={() => setPage(current - 1)}
+              >
+                Назад
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={current === pages}
+                onClick={() => setPage(current + 1)}
+              >
+                Далее
+              </Button>
+            </nav>
+          )}
+          <p className="task-interaction-hint">
+            <span className="mouse-hint">ПКМ по задаче или ⋯ для быстрых действий</span>
+            <span className="touch-hint">Удерживай задачу или нажми ⋯</span>
+          </p>
+        </>
+      )}
+      <CreateTaskDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        groupId={group !== 'all' && group !== 'none' ? group : undefined}
       />
-      <QuickInputModal open={quickInputOpen} onClose={() => setQuickInputOpen(false)} />
-    </>
+      <TaskDetailModal
+        task={all.find((t) => t.id === selectedId) || null}
+        open={Boolean(selectedId)}
+        onClose={() => setSelectedId(null)}
+      />
+    </div>
   );
 }
