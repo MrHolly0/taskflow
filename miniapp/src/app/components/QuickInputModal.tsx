@@ -18,6 +18,7 @@ import {
 } from '@/app/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { shortcutLabel } from '@/lib/shortcuts';
+import { useTaskUi } from '@/lib/task-ui';
 
 type Phase = 'input' | 'processing' | 'confirm' | 'done';
 
@@ -55,38 +56,46 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   const [doneLabel, setDoneLabel] = useState('Добавлено!');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const successTimer = useRef<ReturnType<typeof setTimeout>>();
+  const sending = useRef(false);
+  const reveal = useTaskUi(s => s.reveal);
   const voiceMode = useEffectiveVoiceMode();
   const recording = useVoiceRecording(voiceMode, (file) => send({ file }));
 
   useEffect(() => {
-    if (open) {
+    if (open && phase === 'done') {
       setPhase('input');
       setText('');
       setProposal(null);
       setError(null);
-      setTimeout(() => textareaRef.current?.focus(), 100);
     }
+    const focusTimer = open ? setTimeout(() => textareaRef.current?.focus(), 100) : undefined;
+    return () => { clearTimeout(focusTimer); clearTimeout(successTimer.current); };
   }, [open]);
 
-  const closeWithSuccess = (label: string) => {
+  const closeWithSuccess = (label: string, ids: string[]) => {
     setDoneLabel(label);
     setPhase('done');
-    setTimeout(() => onClose(), 1500);
+    successTimer.current = setTimeout(() => { onClose(); reveal(ids); }, 1500);
   };
 
   const send = (payload: { text?: string; file?: File }) => {
+    if (sending.current) return;
+    sending.current = true;
     setPhase('processing');
     setError(null);
     quickAdd.mutate(payload, {
       onSuccess: (result) => {
+        sending.current = false;
         if (result.applied) {
-          closeWithSuccess('Добавлено!');
+          closeWithSuccess('Добавлено!', result.applied.outcomes.filter(o => o.success && o.taskId).map(o => o.taskId!));
         } else {
           setProposal(result.proposal);
           setPhase('confirm');
         }
       },
       onError: (err) => {
+        sending.current = false;
         setError(errorMessage(err));
         setPhase('input');
       },
@@ -141,7 +150,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
     if (!proposal?.id) return;
     applyProposal.mutate(proposal.id, {
       onSuccess: (result) => {
-        closeWithSuccess('Применено!');
+        closeWithSuccess('Применено!', result.outcomes.filter(o => o.success && o.taskId).map(o => o.taskId!));
         for (const outcome of result.outcomes) {
           if (outcome.success && outcome.taskId && persistentOrdinals.includes(outcome.ordinal)) {
             updateTask.mutate({ id: outcome.taskId, persistentReminder: true });
@@ -166,7 +175,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit();
   };
 
-  const handleClose = () => { onClose(); };
+  const handleClose = () => { recording.finishCancel(); onClose(); };
 
   return (
     <Dialog open={open} onOpenChange={(o: boolean) => !o && handleClose()}>
@@ -198,6 +207,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                   >
                     <Textarea
                       ref={textareaRef}
+                      aria-label="Рассказ о задачах"
                       value={text}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => { setText(e.target.value); setError(null); }}
                       onKeyDown={handleKeyDown}
@@ -239,6 +249,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                     <Button
                       key="file"
                       variant="outline"
+                      aria-label="Прикрепить аудиофайл"
                       onClick={() => fileInputRef.current?.click()}
                       className="gap-2 h-11 w-11 sm:w-auto sm:px-4"
                     >

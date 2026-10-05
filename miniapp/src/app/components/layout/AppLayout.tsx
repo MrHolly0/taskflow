@@ -9,12 +9,9 @@ import {
   IconChartBar,
   IconSettings,
   IconPlug,
-  IconPlus,
-  IconMoon,
-  IconSun,
+  IconArrowRight,
   IconLogout,
 } from '@tabler/icons-react';
-import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/lib/store';
 import { useDisplayName } from '@/lib/hooks/useSettings';
@@ -33,7 +30,9 @@ import {
   DropdownMenuTrigger,
 } from '@/app/components/ui/dropdown-menu';
 import { QuickInputModal } from '@/app/components/QuickInputModal';
-import { MuninLogo } from '@/app/components/MuninLogo';
+import { MuninLogo, MuninBird } from '@/app/components/MuninLogo';
+import { useTaskUi } from '@/lib/task-ui';
+import { SoundWave } from '@/app/components/CaptureCard';
 import { NotificationChannelPrompt } from '@/app/components/NotificationChannelPrompt';
 
 interface NavItem {
@@ -55,16 +54,18 @@ const navItems: NavItem[] = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { theme, setTheme } = useTheme();
-  const [quickInputOpen, setQuickInputOpen] = useState(false);
+  const quickInputOpen = useTaskUi(s => s.captureOpen);
+  const openCapture = useTaskUi(s => s.openCapture);
+  const closeCapture = useTaskUi(s => s.closeCapture);
+  const [moreOpen, setMoreOpen] = useState(false);
   const user = useStore((s) => s.user);
   const logout = useStore((s) => s.logout);
   const displayName = useDisplayName();
 
   return (
-    <div className="flex h-dvh bg-background pl-[var(--safe-left)] pr-[var(--safe-right)]">
+    <div className="munin-shell flex h-dvh bg-background pl-[var(--safe-left)] pr-[var(--safe-right)]">
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex lg:w-56 lg:flex-col border-r border-border">
+      <aside className="munin-sidebar hidden lg:flex lg:w-56 lg:flex-col border-r border-border">
         <div className="flex h-14 items-center border-b border-border px-5 flex-shrink-0">
           <MuninLogo variant="header" className="h-5 w-auto text-foreground" />
         </div>
@@ -72,16 +73,16 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Quick action */}
         <div className="px-3 pt-3 flex-shrink-0">
           <Button
-            className="w-full justify-start gap-2.5 h-10"
-            onClick={() => setQuickInputOpen(true)}
+            variant="outline" className="sidebar-capture w-full justify-center gap-2 h-11"
+            onClick={openCapture}
           >
-            <IconPlus className="h-4 w-4 flex-shrink-0" />
-            <span>Новая задача</span>
+            <MuninBird className="h-5 w-5 flex-shrink-0" />
+            <span>Рассказать Мунину</span>
           </Button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+        <nav className="munin-side-nav flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.href;
@@ -115,23 +116,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              title="Сменить тему"
-            >
-              {theme === 'dark' ? (
-                <IconSun className="h-4 w-4" />
-              ) : (
-                <IconMoon className="h-4 w-4" />
-              )}
-            </Button>
             {user && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="h-9 w-9 rounded-full bg-primary/15 hover:bg-primary/25 transition-colors flex items-center justify-center text-sm font-semibold text-primary flex-shrink-0 cursor-pointer">
+                  <button aria-label="Меню аккаунта" className="h-9 w-9 rounded-full bg-primary/15 hover:bg-primary/25 transition-colors flex items-center justify-center text-sm font-semibold text-primary flex-shrink-0 cursor-pointer">
                     {displayName.charAt(0)}
                   </button>
                 </DropdownMenuTrigger>
@@ -158,20 +146,17 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-[calc(6rem+var(--safe-bottom))] lg:pb-8">
+        <main className={cn("munin-main flex-1 overflow-y-auto", location.pathname === "/assistant" && "munin-main-chat")}>
           <NotificationChannelPrompt />
           {children}
         </main>
 
-        {/* Mobile FAB — скрыт на /assistant: там свой ввод внизу экрана,
-            и в узком вьюпорте плавающая кнопка перекрывает кнопку отправки чата */}
         {location.pathname !== '/assistant' && (
-          <button
-            onClick={() => setQuickInputOpen(true)}
-            className="lg:hidden fixed bottom-[calc(5rem+var(--safe-bottom))] right-4 z-40 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
-          >
-            <IconPlus className="h-6 w-6" />
-          </button>
+          <div className={cn('mobile-capture-dock', location.pathname === '/' && 'mobile-capture-focus')}>
+            <button onClick={openCapture} aria-label="Рассказать Мунину" className="mobile-capture-button">
+              {location.pathname === '/' ? <><SoundWave /><span>Рассказать Мунину</span><IconArrowRight /></> : <MuninBird />}
+            </button>
+          </div>
         )}
 
         {/* Mobile Bottom Navigation */}
@@ -200,7 +185,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           })}
 
           {/* More */}
-          <Sheet>
+          <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
             <SheetTrigger asChild>
               <button className="flex-1 flex flex-col items-center gap-1 py-3 text-xs text-muted-foreground cursor-pointer">
                 <IconSettings className="h-5 w-5" />
@@ -217,6 +202,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <Link
                     key={href}
                     to={href}
+                    onClick={() => setMoreOpen(false)}
                     className="flex items-center gap-3 rounded-xl px-4 py-3 hover:bg-accent transition-colors"
                   >
                     <Icon className="h-5 w-5 text-muted-foreground" />
@@ -239,7 +225,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Quick Input Modal */}
-      <QuickInputModal open={quickInputOpen} onClose={() => setQuickInputOpen(false)} />
+      <QuickInputModal open={quickInputOpen} onClose={closeCapture} />
     </div>
   );
 }
