@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>Мунин · концепт интерфейса</title>
-  <link rel="stylesheet" href="concept-pages.css">
+  <link rel="stylesheet" href="concept-pages.css?v=20261006-6">
   <style>
     :root {
       --background: oklch(0.21 0.01 260); --surface: oklch(0.245 0.01 260);
@@ -238,7 +238,7 @@
     @keyframes next-task { from { opacity: .45; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes completed-mark { 50% { transform: scale(1.25); color: var(--text); } }
   </style>
-  <link rel="stylesheet" href="concept-detail.css">
+  <link rel="stylesheet" href="concept-detail.css?v=20261006-6">
 </head>
 <body>
   <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -250,6 +250,8 @@
     <symbol id="stats" viewBox="0 0 24 24"><path d="M4 20h16M6 16v-4M12 16V4M18 16V8"/></symbol>
     <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
     <symbol id="moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 01-10-10 8 8 0 1010 10z"/></symbol>
+    <symbol id="paperclip" viewBox="0 0 24 24"><path d="M15 7l-6.5 6.5a1.5 1.5 0 0 0 3 3l6.5 -6.5a3 3 0 0 0 -6 -6l-6.5 6.5a4.5 4.5 0 0 0 9 9l6.5 -6.5"/></symbol>
+    <clipPath id="munin-bird-clip"><circle cx="10.0068" cy="10" r="10"/></clipPath><symbol id="munin-bird" viewBox="0 0 20 20"><path fill="currentColor" stroke="none" fill-rule="evenodd" clip-rule="evenodd" clip-path="url(#munin-bird-clip)" d="M3.14831 9.11969C2.20003 9.57814 0.289024 11.132 0.0146484 13.6511C1.81975 18.4141 9.41563 22.8587 16.405 18.0232C12.6071 16.9145 11.3281 13.9878 11.3281 12.4121C11.2219 12.5473 10.0806 13.0516 9.10556 13.2581C8.13051 13.4646 7.38967 13.8306 7.14112 13.9878C7.66409 13.6391 8.14898 13.3513 8.50586 13.1444C10.2676 12.1744 11.3218 11.161 11.755 10.3503C13.5111 6.77147 16.8575 7.2666 18.3112 7.96151C17.9877 5.47141 15.7407 4.54969 14.6577 4.40009C13.2598 1.1456 7.60572 2.33949 4.95342 3.34325L6.3253 3.87891C3.42557 5.12975 1.61277 8.5406 1.06883 10.0897C1.63491 9.499 2.69102 9.19691 3.14831 9.11969ZM12.6071 4.67516C11.9255 4.13082 10.4265 4.37114 9.76221 4.55934L10.4409 4.79098C10.6431 5.14809 11.2092 5.81018 11.8561 5.60171C12.5031 5.39324 12.6263 4.89715 12.6071 4.67516Z"/></symbol>
     <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0014 0v-2M12 19v3M8 22h8"/></symbol>
     <symbol id="pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
     <symbol id="play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></symbol>
@@ -311,6 +313,7 @@
       <path d="M61.5853 0H66.9471L61.4455 14.8718C60.7927 16.8091 59.8136 18.1481 58.5081 18.8889C57.156 19.6296 55.1512 20 52.4936 20C52.074 20 51.6077 20 51.0949 19.9715V17.1795C51.3746 17.208 51.6544 17.208 51.8875 17.208C53.9389 17.208 55.2444 16.9231 55.6174 15.5556L55.664 15.3846L48.5771 0H53.6592L56.4567 6.80912L58.0419 11.4815L59.2541 6.83761L61.5853 0Z" fill="currentColor" />
       <path d="M26.0068 0H33.1404L36.9169 14.1595L40.4138 0H47.5473V19.943H42.6984V5.64103L39.1549 19.943H34.306L30.4828 5.84046V19.943H26.0068V0Z" fill="currentColor" />
     </svg></div>
+      <button class="action sidebar-capture" data-quick-input><svg class="icon bird-icon" aria-hidden="true"><use href="#munin-bird"/></svg>Рассказать Мунину</button>
       <nav class="side-nav" aria-label="Основная навигация">
         <button class="nav-item" data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button>
         <button class="nav-item" data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button>
@@ -346,7 +349,7 @@
       <path d="M78.8483 11.396H73.0203V19.943H67.8916V0H73.0203V8.54701H78.8483V0H84.0702V19.943H78.8483V11.396Z" fill="currentColor" />
       <path d="M61.5853 0H66.9471L61.4455 14.8718C60.7927 16.8091 59.8136 18.1481 58.5081 18.8889C57.156 19.6296 55.1512 20 52.4936 20C52.074 20 51.6077 20 51.0949 19.9715V17.1795C51.3746 17.208 51.6544 17.208 51.8875 17.208C53.9389 17.208 55.2444 16.9231 55.6174 15.5556L55.664 15.3846L48.5771 0H53.6592L56.4567 6.80912L58.0419 11.4815L59.2541 6.83761L61.5853 0Z" fill="currentColor" />
       <path d="M26.0068 0H33.1404L36.9169 14.1595L40.4138 0H47.5473V19.943H42.6984V5.64103L39.1549 19.943H34.306L30.4828 5.84046V19.943H26.0068V0Z" fill="currentColor" />
-    </svg></div><button class="theme" id="theme" aria-label="Переключить на тёмную тему"><svg class="icon"><use href="#moon"/></svg><span id="theme-label">День</span></button></header>
+    </svg></div><button class="theme" id="theme" hidden aria-label="Переключить на тёмную тему"><svg class="icon"><use href="#moon"/></svg><span id="theme-label">День</span></button><button class="profile-button" data-profile-menu aria-label="Меню аккаунта" aria-haspopup="menu" aria-expanded="false"><span class="avatar" aria-hidden="true">С</span></button></header>
       <section class="content" id="focus-page" aria-labelledby="focus-title">
         <div class="columns">
           <div class="focus-column">
@@ -358,7 +361,7 @@
             <div id="empty" class="empty" hidden><h3>Можно выдохнуть.</h3><p>В этой подборке больше нет задач. Можно выбрать другой бюджет времени или рассказать о новых делах.</p></div>
           </div>
           <aside class="aside" aria-label="Ввод">
-            <div class="capture"><div class="module-heading"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg>Расскажи Мунину</div><h2>Расскажи, что<br>нужно сделать.</h2><p class="transcript"><span class="faded">Макет отправил, Саше позвонил.</span> Ещё надо записаться к стоматологу.</p><button class="wave-player" aria-label="Приостановить волну"><span class="wave" aria-hidden="true"></span><svg class="icon" aria-hidden="true"><use href="#pause"/></svg></button><button class="capture-action" data-page="assistant">Текст или голос<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button><small>Пример обращения. Запись не подключена.</small></div>
+            <div class="capture"><div class="module-heading"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg>Расскажи Мунину</div><h2>Расскажи, что нужно сделать.</h2><p class="transcript"><span class="faded">Макет отправил, Саше позвонил.</span> Ещё надо записаться к стоматологу.</p><button class="wave-player" aria-label="Приостановить волну"><span class="wave" aria-hidden="true"></span><svg class="icon" aria-hidden="true"><use href="#pause"/></svg></button><button class="capture-action" data-quick-input>Текст или голос<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button><small>Пример обращения. Запись не подключена.</small></div>
           </aside>
         </div>
       </section>
@@ -373,7 +376,7 @@
       </section>
     </main>
   </div>
-  <div class="capture-dock" id="capture-dock"><button class="mobile-capture" id="mobile-capture" data-page="assistant"><span class="mini-wave" aria-hidden="true"></span>Рассказать Мунину<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+  <div class="capture-dock" id="capture-dock"><button class="mobile-capture" id="mobile-capture" data-quick-input aria-label="Рассказать Мунину"><span class="mini-wave" aria-hidden="true"></span><span class="capture-label">Рассказать Мунину</span><svg class="icon capture-arrow" aria-hidden="true"><use href="#arrow"/></svg><svg class="icon bird-icon capture-fab-icon" aria-hidden="true"><use href="#munin-bird"/></svg></button></div>
   <nav class="bottom-nav" aria-label="Нижняя навигация">
     <button data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button><button data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button><button data-page="all"><svg class="icon"><use href="#list"/></svg>Задачи</button><button data-page="board"><svg class="icon"><use href="#board"/></svg>Доска</button><button data-page="groups"><svg class="icon"><use href="#groups"/></svg>Группы</button><button data-page="more"><svg class="icon"><use href="#more"/></svg>Ещё</button>
   </nav>
@@ -444,7 +447,7 @@
     function showPage(page) {
       dismissToast();
       document.body.dataset.page = page;
-      document.getElementById('capture-dock').hidden = page !== 'focus';
+      document.getElementById('capture-dock').hidden = page === 'assistant';
       document.getElementById('focus-page').hidden = page !== 'focus'; document.getElementById('assistant-page').hidden = page !== 'assistant';
       document.querySelectorAll('nav [data-page]').forEach((button) => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
       document.getElementById('top-label').textContent = page === 'focus' ? 'Сейчас' : 'Ассистент';
@@ -640,7 +643,8 @@
     syncWaves();
     reset();
   </script>
-  <script src="concept-pages.js"></script>
-  <script src="concept-controls.js"></script>
+  <script src="concept-pages.js?v=20261006-6"></script>
+  <script src="concept-controls.js?v=20261006-6"></script>
+  <script src="concept-capture.js?v=20261006-6"></script>
 </body>
 </html>
