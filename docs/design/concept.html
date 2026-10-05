@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" data-theme="dark">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,24 +7,20 @@
   <title>Мунин · концепт интерфейса</title>
   <style>
     :root {
-      --background: oklch(from #141019 l c h); --surface: oklch(from #211B29 l c h);
-      --raised: oklch(from #2D2436 l c h); --text: oklch(from #F4F0F8 l c h);
-      --muted: oklch(from #B4AABB l c h); --line: oklch(from #403449 l c h);
-      --accent: oklch(from #D8B8F4 l c h); --accent-ink: oklch(from #30203E l c h);
-      --selected: oklch(from #3B2C4C l c h); --capture: oklch(from #BCE4F2 l c h);
-      --capture-ink: oklch(from #203F4C l c h); --progress: oklch(from #E6D6F1 l c h);
-      --urgent: oklch(from #FFB59D l c h); --success: oklch(from #BDE0CE l c h);
+      --background: oklch(0.21 0.01 260); --surface: oklch(0.245 0.01 260);
+      --raised: oklch(0.30 0.01 260); --text: oklch(0.96 0 0);
+      --muted: oklch(0.72 0 0); --line: oklch(0.34 0.01 260);
+      --accent: var(--text); --accent-ink: var(--background); --selected: var(--raised);
+      --capture: oklch(0.94 0.002 260); --capture-ink: oklch(0.22 0.006 260);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       color-scheme: dark;
     }
     [data-theme="light"] {
-      --background: oklch(from #F7F5FA l c h); --surface: oklch(from #EFEBF3 l c h);
-      --raised: oklch(from #E6DFEC l c h); --text: oklch(from #251B32 l c h);
-      --muted: oklch(from #6B6077 l c h); --line: oklch(from #C8BDCF l c h);
-      --accent: oklch(from #68408D l c h); --accent-ink: oklch(from #F8F2FC l c h);
-      --selected: oklch(from #E5D8F0 l c h); --capture: oklch(from #D3EDF6 l c h);
-      --urgent: oklch(from #8D3320 l c h); --success: oklch(from #235E43 l c h);
+      --background: oklch(0.995 0.001 260); --surface: oklch(0.975 0.002 260);
+      --raised: oklch(0.95 0.0058 264.53); --text: oklch(0.145 0 0);
+      --muted: oklch(0.53 0.012 260); --line: oklch(0.88 0.004 260);
+      --capture: oklch(0.95 0.0058 264.53); --capture-ink: var(--text);
       color-scheme: light;
     }
     * { box-sizing: border-box; }
@@ -34,17 +30,17 @@
     button { cursor: pointer; color: inherit; }
     button:disabled { cursor: default; opacity: .48; }
     button, a, input, textarea { outline-offset: 4px; }
-    :focus-visible { outline: 3px solid var(--accent); }
+    :focus-visible { outline: 2px solid var(--text); }
     [hidden] { display: none !important; }
     svg { flex: 0 0 auto; }
     .icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
     h1, h2, h3, p { margin: 0; }
     a { color: inherit; }
-    .studybar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 24px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 13px; }
+    .studybar { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 24px; border-bottom: 1px solid var(--line); font-size: 12px; }
     .studybar p { color: var(--muted); }
     .studybar strong { color: var(--text); font-weight: 500; }
-    .studybar button { background: none; border: 0; text-decoration: underline; min-height: 32px; font-size: 13px; }
-    .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100dvh - 48px); }
+    .studybar button { background: none; border: 0; text-decoration: underline; min-height: 32px; font-size: 12px; }
+    .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100dvh - 40px); }
     .sidebar { border-right: 1px solid var(--line); padding: 36px 18px 24px; display: flex; flex-direction: column; gap: 32px; }
     .brand { display: flex; align-items: center; padding: 0 12px; }
     .brand svg { width: 124px; height: 21px; }
@@ -57,58 +53,72 @@
     .avatar { width: 36px; height: 36px; display: grid; place-items: center; background: var(--selected); border-radius: 50%; color: var(--text); }
     .sidebar-bottom small { display: block; color: var(--muted); }
     .workspace { padding: 28px 48px 64px; min-width: 0; }
-    .top { display: flex; align-items: center; justify-content: space-between; max-width: 1120px; margin: 0 auto 24px; min-height: 44px; }
+    .top { display: flex; align-items: center; justify-content: space-between; max-width: 1056px; margin: 0 auto 48px; min-height: 44px; }
     .top-label { font-size: 14px; color: var(--muted); }
     .mobile-brand { display: none; padding: 0; }
     .theme { display: inline-flex; align-items: center; gap: 8px; background: none; border: 1px solid var(--line); border-radius: 100px; padding: 8px 14px; min-height: 44px; font-size: 13px; }
-    .content { max-width: 1120px; margin: auto; }
-    .greeting { margin-bottom: 24px; }
-    .greeting h1 { font-size: 36px; font-weight: 600; letter-spacing: -1.3px; line-height: 1.15; }
-    .greeting p { color: var(--muted); margin-top: 10px; font-size: 14px; }
-    .columns { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 36px; align-items: start; }
+    .content { max-width: 1056px; margin: auto; }
+    .columns { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 64px; align-items: start; }
     .focus-column { min-width: 0; }
-    .budget { margin: 0 0 28px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-    .budget-label { font-size: 14px; color: var(--muted); margin-right: 4px; }
-    .chip { border: 1px solid var(--line); background: none; min-height: 44px; padding: 8px 14px; border-radius: 100px; font-size: 13px; }
-    .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    .section-head h2 { font-size: 16px; font-weight: 500; }
-    .section-head span { font-size: 13px; color: var(--muted); }
-    .task { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px 24px; margin-bottom: 14px; }
-    .task.featured { background: oklch(from #D8B8F4 l c h); color: oklch(from #30203E l c h); border-color: transparent; padding: 26px; border-radius: 26px; }
-    .task-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-    .task-label { font-size: 13px; display: inline-flex; align-items: center; gap: 7px; }
-    .task-label .icon { width: 16px; height: 16px; }
-    .task .edit { width: 44px; height: 44px; border: 0; display: grid; place-items: center; background: transparent; border-radius: 12px; margin: -10px -10px -10px 0; }
-    .task .edit:hover { background: color-mix(in oklch, currentColor 8%, transparent); }
-    .task h3 { font-size: 19px; font-weight: 550; line-height: 1.3; overflow-wrap: anywhere; }
-    .featured h3 { font-size: 24px; font-weight: 600; letter-spacing: -.6px; }
-    .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); margin-top: 12px; }
-    .featured .meta { color: oklch(from #584465 l c h); }
+    .greeting { margin-bottom: 30px; }
+    .greeting .lead-name { font-size: 14px; color: var(--muted); margin-bottom: 14px; }
+    .greeting h1 { font-size: 40px; font-weight: 400; letter-spacing: -1.2px; line-height: 1.16; }
+    .greeting h1 strong { font-weight: 650; }
+    .greeting .date { color: var(--muted); margin-top: 16px; font-size: 13px; }
+    .budget { margin: 0 0 30px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .budget-label { font-size: 13px; color: var(--muted); margin-right: 4px; }
+    .chip { border: 0; background: var(--raised); min-height: 44px; padding: 8px 14px; border-radius: 12px; font-size: 13px; }
+    .chip[aria-pressed="true"] { background: var(--text); color: var(--background); }
+    .section-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+    .section-head h2 { font-size: 14px; font-weight: 500; }
+    .section-head span { font-size: 12px; color: var(--muted); }
+    .task { display: flex; align-items: flex-start; gap: 14px; border-bottom: 1px solid var(--line); padding: 20px 0 12px; }
+    .task-check { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border: 0; background: none; border-radius: 50%; margin: -8px -6px 0 -9px; }
+    .task-check .check-ring { display: grid; place-items: center; width: 23px; height: 23px; border: 1.5px solid var(--muted); border-radius: 50%; }
+    .task-check .icon { width: 15px; height: 15px; opacity: 0; }
+    .task-check:hover .check-ring { background: var(--text); border-color: var(--text); color: var(--background); }
+    .task-check:hover .icon { opacity: 1; }
+    .task-body { flex: 1; min-width: 0; }
+    .task-heading { display: flex; align-items: flex-start; gap: 8px; }
+    .task h3 { flex: 1; font-size: 18px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+    .task:first-child h3 { font-weight: 600; }
+    .task-title { text-align: left; padding: 0; border: 0; background: none; font: inherit; }
+    .task-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+    .task .edit { width: 44px; height: 44px; border: 0; display: grid; place-items: center; background: transparent; border-radius: 12px; margin: -8px -8px 0 0; color: var(--muted); }
+    .task .edit:hover { background: var(--raised); color: var(--text); }
+    .task .edit .icon { width: 16px; height: 16px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--muted); margin-top: 4px; }
     .meta span { display: inline-flex; gap: 5px; align-items: center; }
-    .meta .icon { width: 15px; height: 15px; }
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .meta .icon { width: 14px; height: 14px; }
+    .task-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 0 -8px; }
+    .text-action { min-height: 44px; background: none; border: 0; padding: 8px; border-radius: 10px; font-size: 12px; color: var(--muted); }
+    .text-action:hover { background: var(--raised); color: var(--text); }
+    .task-status { font-size: 12px; color: var(--text); margin: 0 8px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
     .action { min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: none; padding: 9px 14px; font-size: 14px; }
-    .action.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-    .featured .action { border-color: oklch(from #80668F l c h); }
-    .featured .action.primary { background: oklch(from #30203E l c h); color: oklch(from #F4EAFB l c h); border-color: transparent; }
-    .action:enabled:hover { filter: brightness(.94); }
-    .aside { padding-top: 2px; display: grid; gap: 16px; }
-    .capture { padding: 26px; background: var(--capture); color: var(--capture-ink); border-radius: 26px; }
-    .capture-symbol { width: 44px; height: 44px; border-radius: 50%; background: color-mix(in oklch, var(--capture-ink) 10%, transparent); display: grid; place-items: center; margin-bottom: 20px; }
-    .capture h2 { font-size: 23px; line-height: 1.2; font-weight: 600; letter-spacing: -.5px; }
-    .capture p { font-size: 14px; margin: 12px 0 22px; line-height: 1.6; }
-    .capture button { width: 100%; border: 1px solid color-mix(in oklch, var(--capture-ink) 45%, transparent); border-radius: 14px; background: none; padding: 12px; min-height: 48px; font-size: 14px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .progress { padding: 24px; background: var(--progress); color: oklch(from #30203E l c h); border-radius: 24px; }
-    .progress h2 { font-size: 16px; font-weight: 550; }
-    .progress p { font-size: 13px; margin-top: 4px; color: oklch(from #584465 l c h); }
-    .progress-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 24px; }
-    .progress-stats strong { display: block; font-size: 27px; font-weight: 550; line-height: 1.2; }
-    .progress-stats span { display: block; font-size: 11px; margin-top: 7px; }
-    .aside-note { font-size: 13px; color: var(--muted); padding: 6px 5px; }
-    .mobile-capture { display: none; }
+    .action.primary { background: var(--text); color: var(--background); border-color: transparent; }
+    .aside { display: grid; gap: 16px; padding-top: 0; }
+    .capture { padding: 24px; background: var(--capture); color: var(--capture-ink); border-radius: 26px; }
+    .module-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 13px; font-weight: 500; }
+    .module-heading .icon { width: 17px; height: 17px; }
+    .capture h2 { font-size: 23px; line-height: 1.2; font-weight: 500; letter-spacing: -.5px; }
+    .capture .transcript { font-size: 16px; margin: 18px 0 8px; line-height: 1.65; letter-spacing: -.2px; }
+    .capture .transcript .faded { opacity: .55; }
+    .wave { display: flex; align-items: center; gap: 4px; height: 42px; overflow: hidden; }
+    .wave i { display: block; width: 3px; flex-shrink: 0; border-radius: 3px; background: currentColor; opacity: .7; }
+    .capture button { width: 100%; border: 0; border-radius: 100px; background: var(--capture-ink); color: var(--capture); padding: 12px 16px; min-height: 48px; font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 20px; }
+    .capture small { display: block; font-size: 11px; margin-top: 14px; opacity: .7; }
+    .progress { padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; }
+    .progress h2 { font-size: 14px; font-weight: 500; }
+    .progress-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .progress-stats div { display: inline-flex; align-items: baseline; gap: 6px; padding: 8px 10px; border-radius: 10px; background: var(--raised); }
+    .progress-stats strong { font-size: 16px; font-weight: 600; }
+    .progress-stats span { font-size: 12px; color: var(--muted); }
+    .progress-stats div:first-child { background: var(--text); color: var(--background); }
+    .progress-stats div:first-child span { color: inherit; }
+    .progress p { font-size: 12px; color: var(--muted); margin-top: 16px; }
     .bottom-nav { display: none; }
-    .empty { border: 1px solid var(--line); border-radius: 24px; padding: 32px; }
+    .empty { padding: 24px 0; }
     .empty h3 { font-size: 22px; margin-bottom: 8px; }
     .empty p { color: var(--muted); font-size: 14px; }
     .conversation { max-width: 730px; }
@@ -118,71 +128,56 @@
     .proposal h2 { font-size: 20px; font-weight: 550; }
     .proposal > p { color: var(--muted); font-size: 14px; margin: 8px 0 20px; }
     .proposal-row { display: flex; align-items: start; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
-    .proposal-row input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--accent); flex-shrink: 0; }
+    .proposal-row input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--text); flex-shrink: 0; }
     .proposal-row strong { display: block; font-weight: 500; }
     .proposal-row small { color: var(--muted); }
     .composer { margin-top: 28px; border-radius: 22px; background: var(--capture); color: var(--capture-ink); padding: 20px; }
     .composer p { font-size: 14px; }
-    .composer .wave { display: flex; align-items: center; gap: 5px; height: 42px; margin-top: 15px; }
-    .wave i { display: block; width: 3px; border-radius: 3px; background: currentColor; opacity: .65; height: 14px; }
+    .composer .wave { margin-top: 15px; }
     .composer small { display: block; font-size: 12px; margin-top: 8px; }
     .result { padding: 24px; background: var(--selected); border: 1px solid var(--line); border-radius: 24px; }
     .result p { margin-top: 8px; color: var(--muted); }
     dialog { width: min(560px, calc(100% - 32px)); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 28px; }
-    dialog::backdrop { background: oklch(from #141019 l c h / .72); }
+    dialog::backdrop { background: oklch(0.15 0.005 260 / .72); }
     dialog h2 { font-size: 22px; margin-bottom: 20px; }
     dialog label { display: block; font-size: 14px; }
     dialog input { width: 100%; min-height: 48px; background: var(--background); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 8px; }
     .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--background); padding: 12px 18px; border-radius: 14px; max-width: calc(100% - 32px); width: max-content; font-size: 14px; z-index: 10; }
-    @media (min-width: 1600px) { .workspace { padding-top: 36px; } .top { margin-bottom: 56px; } }
-    @media (max-width: 1199px) {
-      .workspace { padding: 24px 28px 48px; }
-      .columns { grid-template-columns: minmax(0, 1fr); }
-      .aside { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .aside-note { grid-column: 1 / -1; }
-    }
+    @media (max-width: 1199px) { .workspace { padding: 24px 28px 48px; } .columns { gap: 36px; grid-template-columns: minmax(0, 1fr) 270px; } }
     @media (max-width: 1023px) {
       .shell { grid-template-columns: minmax(0, 1fr); }
-      .sidebar { display: none; }
-      .mobile-brand { display: flex; }
-      .top-label { display: none; }
+      .sidebar { display: none; } .mobile-brand { display: flex; padding: 0; } .top-label { display: none; }
       .workspace { padding: 22px 24px calc(104px + var(--safe-bottom)); }
-      .top { margin-bottom: 32px; }
-      .content { max-width: 680px; }
+      .top { margin-bottom: 32px; } .content { max-width: 680px; }
+      .columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+      .aside { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
       .bottom-nav { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 4px calc(8px + var(--safe-bottom)); background: var(--background); border-top: 1px solid var(--line); z-index: 5; }
       .bottom-nav button { min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: var(--muted); border-radius: 12px; font-size: 10px; }
       .bottom-nav button[aria-current="page"] { background: var(--selected); color: var(--text); }
       .toast { bottom: calc(90px + var(--safe-bottom)); }
     }
     @media (max-width: 599px) {
-      .studybar { padding: 8px 16px; gap: 8px; font-size: 11px; }
-      .studybar button { font-size: 11px; }
-      .workspace { padding: 20px 18px calc(104px + var(--safe-bottom)); }
-      .theme { padding: 8px 10px; }
-      .greeting { margin-bottom: 24px; }
-      .greeting h1 { font-size: 28px; letter-spacing: -.8px; }
-      .greeting p { font-size: 13px; }
-      .budget { gap: 8px; margin-bottom: 24px; }
-      .budget-label { width: 100%; margin-bottom: 2px; }
-      .task { padding: 18px; border-radius: 20px; }
-      .task.featured { padding: 22px; border-radius: 24px; }
-      .featured h3 { font-size: 21px; }
-      .task h3 { overflow-wrap: anywhere; }
-      .actions { gap: 8px; }
-      .action { padding: 9px 12px; }
-      .actions .action.primary { flex-basis: auto; }
-      .actions .action:not(.primary) { flex: 1; }
+      .studybar { padding: 4px 16px; gap: 8px; font-size: 10px; } .studybar button { font-size: 10px; }
+      .workspace { padding: 20px 20px calc(104px + var(--safe-bottom)); }
+      .theme { padding: 8px 10px; } .top { margin-bottom: 26px; }
+      .greeting { margin-bottom: 24px; } .greeting h1 { font-size: 32px; letter-spacing: -.8px; }
+      .greeting .lead-name { margin-bottom: 10px; } .greeting .date { margin-top: 12px; }
+      .budget { gap: 6px; margin-bottom: 20px; } .budget-label { width: 100%; margin-bottom: 2px; }
+      .chip { padding: 8px 12px; }
+      .task { gap: 10px; padding-top: 16px; padding-bottom: 8px; }
+      .task h3 { font-size: 16px; } .meta { gap: 4px 10px; }
+      .task-check { margin-left: -8px; margin-right: -6px; }
+      .task-controls { gap: 4px 10px; margin-top: 2px; }
       .aside { display: flex; flex-direction: column; gap: 14px; }
-      .capture { display: none; }
-      .progress { width: 100%; padding: 22px; }
-      .progress-stats span { font-size: 12px; }
-      .mobile-capture { display: flex; width: 100%; min-height: 52px; align-items: center; justify-content: center; gap: 10px; background: var(--capture); color: var(--capture-ink); border: 0; border-radius: 16px; }
-      .aside-note { padding: 0 4px; font-size: 12px; }
-      .user-message { max-width: 94%; padding: 18px; }
-      .proposal { padding: 20px; }
+      .capture, .progress { width: 100%; }
+      .capture { padding: 22px; border-radius: 24px; }
+      .capture .transcript { font-size: 15px; }
+      .progress { padding: 18px 20px; order: -1; }
+      .progress-stats { gap: 6px; } .progress-stats div { padding: 8px; }
+      .progress-stats strong { font-size: 15px; } .progress-stats span { font-size: 11px; }
+      .user-message { max-width: 94%; padding: 18px; } .proposal { padding: 20px; }
       .conversation-intro { font-size: 14px; }
     }
-    @media (max-width: 359px) { .task .actions .action.primary { flex-basis: 100%; } }
     @media (prefers-reduced-motion: no-preference) { button { transition: background-color 160ms ease-out, color 160ms ease-out; } }
   </style>
 </head>
@@ -201,6 +196,7 @@
     <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
     <symbol id="edit" viewBox="0 0 24 24"><path d="M4 16l12-12 4 4L8 20H4zM14 6l4 4"/></symbol>
     <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 10-13h-7z"/></symbol>
+    <symbol id="check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></symbol>
     <symbol id="plug" viewBox="0 0 24 24"><path d="M8 3v5M16 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v5"/></symbol>
   </svg>
   <div class="studybar"><p><strong>Концепт интерфейса</strong> · демоданные</p><button id="reset">Сбросить пример</button></div>
@@ -264,21 +260,19 @@
       <path d="M78.8483 11.396H73.0203V19.943H67.8916V0H73.0203V8.54701H78.8483V0H84.0702V19.943H78.8483V11.396Z" fill="currentColor" />
       <path d="M61.5853 0H66.9471L61.4455 14.8718C60.7927 16.8091 59.8136 18.1481 58.5081 18.8889C57.156 19.6296 55.1512 20 52.4936 20C52.074 20 51.6077 20 51.0949 19.9715V17.1795C51.3746 17.208 51.6544 17.208 51.8875 17.208C53.9389 17.208 55.2444 16.9231 55.6174 15.5556L55.664 15.3846L48.5771 0H53.6592L56.4567 6.80912L58.0419 11.4815L59.2541 6.83761L61.5853 0Z" fill="currentColor" />
       <path d="M26.0068 0H33.1404L36.9169 14.1595L40.4138 0H47.5473V19.943H42.6984V5.64103L39.1549 19.943H34.306L30.4828 5.84046V19.943H26.0068V0Z" fill="currentColor" />
-    </svg></div><button class="theme" id="theme" aria-label="Переключить на светлую тему"><svg class="icon"><use href="#moon"/></svg><span id="theme-label">Ночь</span></button></header>
+    </svg></div><button class="theme" id="theme" aria-label="Переключить на тёмную тему"><svg class="icon"><use href="#moon"/></svg><span id="theme-label">День</span></button></header>
       <section class="content" id="focus-page" aria-labelledby="focus-title">
-        <div class="greeting"><h1 id="focus-title">Привет, Саша.</h1><p>Понедельник, 5 октября · начнём с главного</p></div>
         <div class="columns">
           <div class="focus-column">
+            <div class="greeting"><p class="lead-name">Привет, Саша.</p><h1 id="focus-title">Сейчас у тебя<br><strong id="focus-summary">3 главных дела.</strong></h1><p class="date">Понедельник, 5 октября</p></div>
             <div class="budget" role="group" aria-label="Сколько времени есть?"><span class="budget-label">Сколько времени есть?</span><button class="chip" data-minutes="15" aria-pressed="false">15 мин</button><button class="chip" data-minutes="30" aria-pressed="false">30 мин</button><button class="chip" data-minutes="60" aria-pressed="false">1 час</button></div>
             <div class="section-head"><h2>Фокус сейчас</h2><span id="focus-count">3 задачи</span></div>
             <div id="tasks"></div>
             <div id="empty" class="empty" hidden><h3>Можно выдохнуть.</h3><p>В этой подборке больше нет задач. Можно выбрать другой бюджет времени или рассказать о новых делах.</p></div>
           </div>
           <aside class="aside" aria-label="Ввод и продвижение">
-            <div class="capture"><div class="capture-symbol"><svg class="icon"><use href="#mic"/></svg></div><h2>Что у тебя<br>на уме?</h2><p>Расскажи о делах голосом или текстом. Мунин поможет их разобрать.</p><button data-page="assistant">Рассказать Мунину<svg class="icon"><use href="#arrow"/></svg></button></div>
-            <div class="progress"><h2>Сегодня есть движение</h2><p>Каждый шаг считается.</p><div class="progress-stats"><div><strong id="done-count">2</strong><span>закрыто</span></div><div><strong id="started-count">1</strong><span>начато</span></div><div><strong id="moved-count">1</strong><span>отложено</span></div></div></div>
-            <button class="mobile-capture" data-page="assistant"><svg class="icon"><use href="#mic"/></svg>Рассказать Мунину</button>
-            <p class="aside-note">Без гонки за процентами.<br>Только то, что уже получилось.</p>
+            <div class="capture"><div class="module-heading"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg>Расскажи Мунину</div><h2>Всё, что держишь<br>в голове.</h2><p class="transcript"><span class="faded">Макет отправил, Саше позвонил.</span> Ещё надо записаться к стоматологу.</p><div class="wave" aria-hidden="true"></div><button data-page="assistant">Текст или голос<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button><small>Пример обращения. Запись не подключена.</small></div>
+            <div class="progress"><h2>Сегодня</h2><div class="progress-stats"><div><strong id="done-count">2</strong><span>закрыто</span></div><div><strong id="started-count">1</strong><span>начато</span></div><div><strong id="moved-count">1</strong><span>отложено</span></div></div><p>Уже есть движение.</p></div>
           </aside>
         </div>
       </section>
@@ -317,11 +311,13 @@
     const taskWord = (number) => number === 1 ? 'задача' : number >= 2 && number <= 4 ? 'задачи' : 'задач';
     function render() {
       const visible = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && (!budget || task.minutes <= budget));
-      tasksElement.innerHTML = visible.map((task, index) => `<article class="task ${index === 0 ? 'featured' : ''}" aria-labelledby="title-${task.id}">
-        <div class="task-top"><span class="task-label">${index === 0 ? icon('bolt') + 'Начни с этого' : task.status === 'started' ? 'В работе' : 'Дальше'} </span><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
-        <h3 id="title-${task.id}">${escapeHtml(task.title)}</h3><div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes} мин</span><span>${task.group}</span></div>
-        <div class="actions"><button class="action primary" data-action="done" data-id="${task.id}">✓ Сделано</button>${task.status === 'todo' ? `<button class="action" data-action="start" data-id="${task.id}">Начать</button>` : ''}<button class="action" data-action="snooze" data-id="${task.id}">Отложить</button></div>
+      tasksElement.innerHTML = visible.map((task) => `<article class="task" aria-labelledby="title-${task.id}">
+        <button class="task-check" data-action="done" data-id="${task.id}" aria-label="Сделано: ${escapeHtml(task.title)}" title="Отметить как выполненную"><span class="check-ring">${icon('check')}</span></button>
+        <div class="task-body"><div class="task-heading"><h3 id="title-${task.id}"><button class="task-title" data-action="edit" data-id="${task.id}">${escapeHtml(task.title)}</button></h3><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
+        <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes} мин</span><span>${task.group}</span></div>
+        <div class="task-controls">${task.status === 'todo' ? `<button class="text-action" data-action="start" data-id="${task.id}">Начать</button>` : '<span class="task-status">В работе</span>'}<button class="text-action" data-action="snooze" data-id="${task.id}">Отложить</button></div></div>
       </article>`).join('');
+      document.getElementById('focus-summary').textContent = visible.length === 1 ? '1 главное дело.' : visible.length === 0 ? 'пауза.' : `${visible.length} главных дела.`;
       document.getElementById('focus-count').textContent = `${visible.length} ${taskWord(visible.length)}`;
       document.getElementById('empty').hidden = visible.length !== 0;
       for (const key of ['done', 'started', 'moved']) document.getElementById(`${key}-count`).textContent = counts[key];
@@ -383,7 +379,7 @@
       document.getElementById('toast').hidden = true; clearTimeout(toastTimer); render(); showPage('focus');
     }
     document.getElementById('reset').addEventListener('click', reset);
-    document.querySelector('.wave').innerHTML = Array.from({length: 36}, (_, index) => `<i style="height:${8 + ((index * 17 + 9) % 32)}px"></i>`).join('');
+    document.querySelectorAll('.wave').forEach((wave) => wave.innerHTML = Array.from({length: 36}, (_, index) => `<i style="height:${8 + ((index * 17 + 9) % 32)}px"></i>`).join(''));
     reset();
   </script>
 </body>
