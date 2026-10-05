@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Мунин · концепт интерфейса</title>
+  <style>
+    :root {
+      --background: oklch(from #141019 l c h); --surface: oklch(from #211B29 l c h);
+      --raised: oklch(from #2D2436 l c h); --text: oklch(from #F4F0F8 l c h);
+      --muted: oklch(from #B4AABB l c h); --line: oklch(from #403449 l c h);
+      --accent: oklch(from #D8B8F4 l c h); --accent-ink: oklch(from #30203E l c h);
+      --selected: oklch(from #3B2C4C l c h); --capture: oklch(from #BCE4F2 l c h);
+      --capture-ink: oklch(from #203F4C l c h); --progress: oklch(from #E6D6F1 l c h);
+      --urgent: oklch(from #FFB59D l c h); --success: oklch(from #BDE0CE l c h);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color-scheme: dark;
+    }
+    [data-theme="light"] {
+      --background: oklch(from #F7F5FA l c h); --surface: oklch(from #EFEBF3 l c h);
+      --raised: oklch(from #E6DFEC l c h); --text: oklch(from #251B32 l c h);
+      --muted: oklch(from #6B6077 l c h); --line: oklch(from #C8BDCF l c h);
+      --accent: oklch(from #68408D l c h); --accent-ink: oklch(from #F8F2FC l c h);
+      --selected: oklch(from #E5D8F0 l c h); --capture: oklch(from #D3EDF6 l c h);
+      --urgent: oklch(from #8D3320 l c h); --success: oklch(from #235E43 l c h);
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--background); color: var(--text); font-size: 16px; line-height: 1.5; }
+    button, input, textarea { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { cursor: pointer; color: inherit; }
+    button:disabled { cursor: default; opacity: .48; }
+    button, a, input, textarea { outline-offset: 4px; }
+    :focus-visible { outline: 3px solid var(--accent); }
+    [hidden] { display: none !important; }
+    svg { flex: 0 0 auto; }
+    .icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
+    h1, h2, h3, p { margin: 0; }
+    a { color: inherit; }
+    .studybar { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 24px; background: var(--surface); border-bottom: 1px solid var(--line); font-size: 13px; }
+    .studybar p { color: var(--muted); }
+    .studybar strong { color: var(--text); font-weight: 500; }
+    .studybar button { background: none; border: 0; text-decoration: underline; min-height: 32px; font-size: 13px; }
+    .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100dvh - 48px); }
+    .sidebar { border-right: 1px solid var(--line); padding: 36px 18px 24px; display: flex; flex-direction: column; gap: 32px; }
+    .brand { display: flex; align-items: center; padding: 0 12px; }
+    .brand svg { width: 124px; height: 21px; }
+    .side-nav { display: grid; gap: 6px; }
+    .nav-item { display: flex; align-items: center; gap: 12px; min-height: 46px; border: 0; border-radius: 12px; background: none; padding: 10px 12px; text-align: left; color: var(--muted); font-size: 14px; }
+    .nav-item[aria-current="page"] { background: var(--selected); color: var(--text); }
+    .nav-item:enabled:hover { background: var(--raised); }
+    .nav-note { color: var(--muted); font-size: 12px; padding: 0 12px; }
+    .sidebar-bottom { margin-top: auto; padding: 36px 12px 0; display: flex; align-items: center; gap: 12px; }
+    .avatar { width: 36px; height: 36px; display: grid; place-items: center; background: var(--selected); border-radius: 50%; color: var(--text); }
+    .sidebar-bottom small { display: block; color: var(--muted); }
+    .workspace { padding: 28px 48px 64px; min-width: 0; }
+    .top { display: flex; align-items: center; justify-content: space-between; max-width: 1120px; margin: 0 auto 24px; min-height: 44px; }
+    .top-label { font-size: 14px; color: var(--muted); }
+    .mobile-brand { display: none; padding: 0; }
+    .theme { display: inline-flex; align-items: center; gap: 8px; background: none; border: 1px solid var(--line); border-radius: 100px; padding: 8px 14px; min-height: 44px; font-size: 13px; }
+    .content { max-width: 1120px; margin: auto; }
+    .greeting { margin-bottom: 24px; }
+    .greeting h1 { font-size: 36px; font-weight: 600; letter-spacing: -1.3px; line-height: 1.15; }
+    .greeting p { color: var(--muted); margin-top: 10px; font-size: 14px; }
+    .columns { display: grid; grid-template-columns: minmax(0, 1fr) 292px; gap: 36px; align-items: start; }
+    .focus-column { min-width: 0; }
+    .budget { margin: 0 0 28px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .budget-label { font-size: 14px; color: var(--muted); margin-right: 4px; }
+    .chip { border: 1px solid var(--line); background: none; min-height: 44px; padding: 8px 14px; border-radius: 100px; font-size: 13px; }
+    .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .section-head h2 { font-size: 16px; font-weight: 500; }
+    .section-head span { font-size: 13px; color: var(--muted); }
+    .task { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 22px 24px; margin-bottom: 14px; }
+    .task.featured { background: oklch(from #D8B8F4 l c h); color: oklch(from #30203E l c h); border-color: transparent; padding: 26px; border-radius: 26px; }
+    .task-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .task-label { font-size: 13px; display: inline-flex; align-items: center; gap: 7px; }
+    .task-label .icon { width: 16px; height: 16px; }
+    .task .edit { width: 44px; height: 44px; border: 0; display: grid; place-items: center; background: transparent; border-radius: 12px; margin: -10px -10px -10px 0; }
+    .task .edit:hover { background: color-mix(in oklch, currentColor 8%, transparent); }
+    .task h3 { font-size: 19px; font-weight: 550; line-height: 1.3; overflow-wrap: anywhere; }
+    .featured h3 { font-size: 24px; font-weight: 600; letter-spacing: -.6px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); margin-top: 12px; }
+    .featured .meta { color: oklch(from #584465 l c h); }
+    .meta span { display: inline-flex; gap: 5px; align-items: center; }
+    .meta .icon { width: 15px; height: 15px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .action { min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: none; padding: 9px 14px; font-size: 14px; }
+    .action.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+    .featured .action { border-color: oklch(from #80668F l c h); }
+    .featured .action.primary { background: oklch(from #30203E l c h); color: oklch(from #F4EAFB l c h); border-color: transparent; }
+    .action:enabled:hover { filter: brightness(.94); }
+    .aside { padding-top: 2px; display: grid; gap: 16px; }
+    .capture { padding: 26px; background: var(--capture); color: var(--capture-ink); border-radius: 26px; }
+    .capture-symbol { width: 44px; height: 44px; border-radius: 50%; background: color-mix(in oklch, var(--capture-ink) 10%, transparent); display: grid; place-items: center; margin-bottom: 20px; }
+    .capture h2 { font-size: 23px; line-height: 1.2; font-weight: 600; letter-spacing: -.5px; }
+    .capture p { font-size: 14px; margin: 12px 0 22px; line-height: 1.6; }
+    .capture button { width: 100%; border: 1px solid color-mix(in oklch, var(--capture-ink) 45%, transparent); border-radius: 14px; background: none; padding: 12px; min-height: 48px; font-size: 14px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .progress { padding: 24px; background: var(--progress); color: oklch(from #30203E l c h); border-radius: 24px; }
+    .progress h2 { font-size: 16px; font-weight: 550; }
+    .progress p { font-size: 13px; margin-top: 4px; color: oklch(from #584465 l c h); }
+    .progress-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 24px; }
+    .progress-stats strong { display: block; font-size: 27px; font-weight: 550; line-height: 1.2; }
+    .progress-stats span { display: block; font-size: 11px; margin-top: 7px; }
+    .aside-note { font-size: 13px; color: var(--muted); padding: 6px 5px; }
+    .mobile-capture { display: none; }
+    .bottom-nav { display: none; }
+    .empty { border: 1px solid var(--line); border-radius: 24px; padding: 32px; }
+    .empty h3 { font-size: 22px; margin-bottom: 8px; }
+    .empty p { color: var(--muted); font-size: 14px; }
+    .conversation { max-width: 730px; }
+    .conversation-intro { color: var(--muted); font-size: 16px; max-width: 55ch; margin-bottom: 32px; }
+    .user-message { background: var(--selected); border-radius: 22px 22px 6px 22px; padding: 20px 24px; max-width: 85%; margin: 0 0 24px auto; font-size: 16px; }
+    .proposal { border: 1px solid var(--line); border-radius: 24px; padding: 24px; background: var(--surface); }
+    .proposal h2 { font-size: 20px; font-weight: 550; }
+    .proposal > p { color: var(--muted); font-size: 14px; margin: 8px 0 20px; }
+    .proposal-row { display: flex; align-items: start; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .proposal-row input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--accent); flex-shrink: 0; }
+    .proposal-row strong { display: block; font-weight: 500; }
+    .proposal-row small { color: var(--muted); }
+    .composer { margin-top: 28px; border-radius: 22px; background: var(--capture); color: var(--capture-ink); padding: 20px; }
+    .composer p { font-size: 14px; }
+    .composer .wave { display: flex; align-items: center; gap: 5px; height: 42px; margin-top: 15px; }
+    .wave i { display: block; width: 3px; border-radius: 3px; background: currentColor; opacity: .65; height: 14px; }
+    .composer small { display: block; font-size: 12px; margin-top: 8px; }
+    .result { padding: 24px; background: var(--selected); border: 1px solid var(--line); border-radius: 24px; }
+    .result p { margin-top: 8px; color: var(--muted); }
+    dialog { width: min(560px, calc(100% - 32px)); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 28px; }
+    dialog::backdrop { background: oklch(from #141019 l c h / .72); }
+    dialog h2 { font-size: 22px; margin-bottom: 20px; }
+    dialog label { display: block; font-size: 14px; }
+    dialog input { width: 100%; min-height: 48px; background: var(--background); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 8px; }
+    .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--background); padding: 12px 18px; border-radius: 14px; max-width: calc(100% - 32px); width: max-content; font-size: 14px; z-index: 10; }
+    @media (min-width: 1600px) { .workspace { padding-top: 36px; } .top { margin-bottom: 56px; } }
+    @media (max-width: 1199px) {
+      .workspace { padding: 24px 28px 48px; }
+      .columns { grid-template-columns: minmax(0, 1fr); }
+      .aside { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .aside-note { grid-column: 1 / -1; }
+    }
+    @media (max-width: 1023px) {
+      .shell { grid-template-columns: minmax(0, 1fr); }
+      .sidebar { display: none; }
+      .mobile-brand { display: flex; }
+      .top-label { display: none; }
+      .workspace { padding: 22px 24px calc(104px + var(--safe-bottom)); }
+      .top { margin-bottom: 32px; }
+      .content { max-width: 680px; }
+      .bottom-nav { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 4px calc(8px + var(--safe-bottom)); background: var(--background); border-top: 1px solid var(--line); z-index: 5; }
+      .bottom-nav button { min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: var(--muted); border-radius: 12px; font-size: 10px; }
+      .bottom-nav button[aria-current="page"] { background: var(--selected); color: var(--text); }
+      .toast { bottom: calc(90px + var(--safe-bottom)); }
+    }
+    @media (max-width: 599px) {
+      .studybar { padding: 8px 16px; gap: 8px; font-size: 11px; }
+      .studybar button { font-size: 11px; }
+      .workspace { padding: 20px 18px calc(104px + var(--safe-bottom)); }
+      .theme { padding: 8px 10px; }
+      .greeting { margin-bottom: 24px; }
+      .greeting h1 { font-size: 28px; letter-spacing: -.8px; }
+      .greeting p { font-size: 13px; }
+      .budget { gap: 8px; margin-bottom: 24px; }
+      .budget-label { width: 100%; margin-bottom: 2px; }
+      .task { padding: 18px; border-radius: 20px; }
+      .task.featured { padding: 22px; border-radius: 24px; }
+      .featured h3 { font-size: 21px; }
+      .task h3 { overflow-wrap: anywhere; }
+      .actions { gap: 8px; }
+      .action { padding: 9px 12px; }
+      .actions .action.primary { flex-basis: auto; }
+      .actions .action:not(.primary) { flex: 1; }
+      .aside { display: flex; flex-direction: column; gap: 14px; }
+      .capture { display: none; }
+      .progress { width: 100%; padding: 22px; }
+      .progress-stats span { font-size: 12px; }
+      .mobile-capture { display: flex; width: 100%; min-height: 52px; align-items: center; justify-content: center; gap: 10px; background: var(--capture); color: var(--capture-ink); border: 0; border-radius: 16px; }
+      .aside-note { padding: 0 4px; font-size: 12px; }
+      .user-message { max-width: 94%; padding: 18px; }
+      .proposal { padding: 20px; }
+      .conversation-intro { font-size: 14px; }
+    }
+    @media (max-width: 359px) { .task .actions .action.primary { flex-basis: 100%; } }
+    @media (prefers-reduced-motion: no-preference) { button { transition: background-color 160ms ease-out, color 160ms ease-out; } }
+  </style>
+</head>
+<body>
+  <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="chat" viewBox="0 0 24 24"><path d="M5 18l-2 3V7a4 4 0 014-4h10a4 4 0 014 4v7a4 4 0 01-4 4z"/><path d="M7 8h10M7 12h6"/></symbol>
+    <symbol id="list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/></symbol>
+    <symbol id="board" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></symbol>
+    <symbol id="groups" viewBox="0 0 24 24"><path d="M3 7V5h7l2 3h9v12H3z"/></symbol>
+    <symbol id="stats" viewBox="0 0 24 24"><path d="M4 20h16M6 16v-4M12 16V4M18 16V8"/></symbol>
+    <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 01-10-10 8 8 0 1010 10z"/></symbol>
+    <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0014 0v-2M12 19v3M8 22h8"/></symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+    <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="edit" viewBox="0 0 24 24"><path d="M4 16l12-12 4 4L8 20H4zM14 6l4 4"/></symbol>
+    <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 10-13h-7z"/></symbol>
+    <symbol id="plug" viewBox="0 0 24 24"><path d="M8 3v5M16 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v5"/></symbol>
+  </svg>
+  <div class="studybar"><p><strong>Концепт интерфейса</strong> · демоданные</p><button id="reset">Сбросить пример</button></div>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><svg
+      width="124"
+      height="21"
+      viewBox="0 0 124 21"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label="Мунин"
+
+
+    >
+      <mask id="munin-mark" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="21" height="20">
+        <circle cx="10.0068" cy="10" r="10" fill="currentColor" />
+      </mask>
+      <g mask="url(#munin-mark)">
+        <circle cx="10.0068" cy="10" r="10" fill="currentColor" />
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M3.14831 9.11969C2.20003 9.57814 0.289024 11.132 0.0146484 13.6511C1.81975 18.4141 9.41563 22.8587 16.405 18.0232C12.6071 16.9145 11.3281 13.9878 11.3281 12.4121C11.2219 12.5473 10.0806 13.0516 9.10556 13.2581C8.13051 13.4646 7.38967 13.8306 7.14112 13.9878C7.66409 13.6391 8.14898 13.3513 8.50586 13.1444C10.2676 12.1744 11.3218 11.161 11.755 10.3503C13.5111 6.77147 16.8575 7.2666 18.3112 7.96151C17.9877 5.47141 15.7407 4.54969 14.6577 4.40009C13.2598 1.1456 7.60572 2.33949 4.95342 3.34325L6.3253 3.87891C3.42557 5.12975 1.61277 8.5406 1.06883 10.0897C1.63491 9.499 2.69102 9.19691 3.14831 9.11969ZM12.6071 4.67516C11.9255 4.13082 10.4265 4.37114 9.76221 4.55934L10.4409 4.79098C10.6431 5.14809 11.2092 5.81018 11.8561 5.60171C12.5031 5.39324 12.6263 4.89715 12.6071 4.67516Z" fill="var(--background)" />
+      </g>
+      <path d="M116.221 11.396H110.393V19.943H105.265V0H110.393V8.54701H116.221V0H121.443V19.943H116.221V11.396Z" fill="currentColor" />
+      <path d="M98.2342 5.89744L96.1361 10.7977L91.8467 19.943H86.5781V0H91.1473V12.6211L93.0123 8.23362L97.2085 0H102.85V19.943H98.2342V5.89744Z" fill="currentColor" />
+      <path d="M78.8483 11.396H73.0203V19.943H67.8916V0H73.0203V8.54701H78.8483V0H84.0702V19.943H78.8483V11.396Z" fill="currentColor" />
+      <path d="M61.5853 0H66.9471L61.4455 14.8718C60.7927 16.8091 59.8136 18.1481 58.5081 18.8889C57.156 19.6296 55.1512 20 52.4936 20C52.074 20 51.6077 20 51.0949 19.9715V17.1795C51.3746 17.208 51.6544 17.208 51.8875 17.208C53.9389 17.208 55.2444 16.9231 55.6174 15.5556L55.664 15.3846L48.5771 0H53.6592L56.4567 6.80912L58.0419 11.4815L59.2541 6.83761L61.5853 0Z" fill="currentColor" />
+      <path d="M26.0068 0H33.1404L36.9169 14.1595L40.4138 0H47.5473V19.943H42.6984V5.64103L39.1549 19.943H34.306L30.4828 5.84046V19.943H26.0068V0Z" fill="currentColor" />
+    </svg></div>
+      <nav class="side-nav" aria-label="Основная навигация">
+        <button class="nav-item" data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button>
+        <button class="nav-item" data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button>
+        <button class="nav-item" disabled><svg class="icon"><use href="#list"/></svg>Все задачи</button>
+        <button class="nav-item" disabled><svg class="icon"><use href="#board"/></svg>Доска</button>
+        <button class="nav-item" disabled><svg class="icon"><use href="#groups"/></svg>Группы</button>
+        <button class="nav-item" disabled><svg class="icon"><use href="#stats"/></svg>Статистика</button>
+        <button class="nav-item" disabled><svg class="icon"><use href="#plug"/></svg>Интеграции</button>
+      </nav>
+      <p class="nav-note">В эскизе доступны «Сейчас» и «Ассистент».</p>
+      <div class="sidebar-bottom"><span class="avatar" aria-hidden="true">С</span><div>Саша<small>Мой Мунин</small></div></div>
+    </aside>
+    <main class="workspace">
+      <header class="top"><span class="top-label" id="top-label">Сейчас</span><div class="brand mobile-brand"><svg
+      width="124"
+      height="21"
+      viewBox="0 0 124 21"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-label="Мунин"
+
+
+    >
+      <mask id="munin-mark-mobile" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="21" height="20">
+        <circle cx="10.0068" cy="10" r="10" fill="currentColor" />
+      </mask>
+      <g mask="url(#munin-mark-mobile)">
+        <circle cx="10.0068" cy="10" r="10" fill="currentColor" />
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M3.14831 9.11969C2.20003 9.57814 0.289024 11.132 0.0146484 13.6511C1.81975 18.4141 9.41563 22.8587 16.405 18.0232C12.6071 16.9145 11.3281 13.9878 11.3281 12.4121C11.2219 12.5473 10.0806 13.0516 9.10556 13.2581C8.13051 13.4646 7.38967 13.8306 7.14112 13.9878C7.66409 13.6391 8.14898 13.3513 8.50586 13.1444C10.2676 12.1744 11.3218 11.161 11.755 10.3503C13.5111 6.77147 16.8575 7.2666 18.3112 7.96151C17.9877 5.47141 15.7407 4.54969 14.6577 4.40009C13.2598 1.1456 7.60572 2.33949 4.95342 3.34325L6.3253 3.87891C3.42557 5.12975 1.61277 8.5406 1.06883 10.0897C1.63491 9.499 2.69102 9.19691 3.14831 9.11969ZM12.6071 4.67516C11.9255 4.13082 10.4265 4.37114 9.76221 4.55934L10.4409 4.79098C10.6431 5.14809 11.2092 5.81018 11.8561 5.60171C12.5031 5.39324 12.6263 4.89715 12.6071 4.67516Z" fill="var(--background)" />
+      </g>
+      <path d="M116.221 11.396H110.393V19.943H105.265V0H110.393V8.54701H116.221V0H121.443V19.943H116.221V11.396Z" fill="currentColor" />
+      <path d="M98.2342 5.89744L96.1361 10.7977L91.8467 19.943H86.5781V0H91.1473V12.6211L93.0123 8.23362L97.2085 0H102.85V19.943H98.2342V5.89744Z" fill="currentColor" />
+      <path d="M78.8483 11.396H73.0203V19.943H67.8916V0H73.0203V8.54701H78.8483V0H84.0702V19.943H78.8483V11.396Z" fill="currentColor" />
+      <path d="M61.5853 0H66.9471L61.4455 14.8718C60.7927 16.8091 59.8136 18.1481 58.5081 18.8889C57.156 19.6296 55.1512 20 52.4936 20C52.074 20 51.6077 20 51.0949 19.9715V17.1795C51.3746 17.208 51.6544 17.208 51.8875 17.208C53.9389 17.208 55.2444 16.9231 55.6174 15.5556L55.664 15.3846L48.5771 0H53.6592L56.4567 6.80912L58.0419 11.4815L59.2541 6.83761L61.5853 0Z" fill="currentColor" />
+      <path d="M26.0068 0H33.1404L36.9169 14.1595L40.4138 0H47.5473V19.943H42.6984V5.64103L39.1549 19.943H34.306L30.4828 5.84046V19.943H26.0068V0Z" fill="currentColor" />
+    </svg></div><button class="theme" id="theme" aria-label="Переключить на светлую тему"><svg class="icon"><use href="#moon"/></svg><span id="theme-label">Ночь</span></button></header>
+      <section class="content" id="focus-page" aria-labelledby="focus-title">
+        <div class="greeting"><h1 id="focus-title">Привет, Саша.</h1><p>Понедельник, 5 октября · начнём с главного</p></div>
+        <div class="columns">
+          <div class="focus-column">
+            <div class="budget" role="group" aria-label="Сколько времени есть?"><span class="budget-label">Сколько времени есть?</span><button class="chip" data-minutes="15" aria-pressed="false">15 мин</button><button class="chip" data-minutes="30" aria-pressed="false">30 мин</button><button class="chip" data-minutes="60" aria-pressed="false">1 час</button></div>
+            <div class="section-head"><h2>Фокус сейчас</h2><span id="focus-count">3 задачи</span></div>
+            <div id="tasks"></div>
+            <div id="empty" class="empty" hidden><h3>Можно выдохнуть.</h3><p>В этой подборке больше нет задач. Можно выбрать другой бюджет времени или рассказать о новых делах.</p></div>
+          </div>
+          <aside class="aside" aria-label="Ввод и продвижение">
+            <div class="capture"><div class="capture-symbol"><svg class="icon"><use href="#mic"/></svg></div><h2>Что у тебя<br>на уме?</h2><p>Расскажи о делах голосом или текстом. Мунин поможет их разобрать.</p><button data-page="assistant">Рассказать Мунину<svg class="icon"><use href="#arrow"/></svg></button></div>
+            <div class="progress"><h2>Сегодня есть движение</h2><p>Каждый шаг считается.</p><div class="progress-stats"><div><strong id="done-count">2</strong><span>закрыто</span></div><div><strong id="started-count">1</strong><span>начато</span></div><div><strong id="moved-count">1</strong><span>отложено</span></div></div></div>
+            <button class="mobile-capture" data-page="assistant"><svg class="icon"><use href="#mic"/></svg>Рассказать Мунину</button>
+            <p class="aside-note">Без гонки за процентами.<br>Только то, что уже получилось.</p>
+          </aside>
+        </div>
+      </section>
+      <section class="content" id="assistant-page" aria-labelledby="assistant-title" hidden>
+        <div class="greeting"><h1 id="assistant-title">Разберём твои дела.</h1><p>Ассистент</p></div>
+        <div class="conversation">
+          <p class="conversation-intro">Расскажи, что изменилось. Мунин предложит действия, а ты решишь, какие применить.</p>
+          <div class="user-message">Макет отправил, Саше позвонил. Ещё надо записаться к стоматологу.</div>
+          <div class="proposal" id="proposal"><h2>Вот что можно изменить</h2><p>Сними галочку, если какое-то действие лишнее.</p>
+            <label class="proposal-row"><input type="checkbox" checked data-proposal="complete"><span><strong>Закрыть «Отправить макет»</strong><small>Выполнено</small></span></label>
+            <label class="proposal-row"><input type="checkbox" checked data-proposal="complete"><span><strong>Закрыть «Позвонить Саше»</strong><small>Выполнено</small></span></label>
+            <label class="proposal-row"><input type="checkbox" checked data-proposal="create"><span><strong>Записаться к стоматологу</strong><small>Новая задача, без срока</small></span></label>
+            <div class="actions"><button class="action primary" id="apply">Применить 3 действия</button><button class="action" id="reject">Отклонить</button></div>
+          </div>
+          <div class="result" id="proposal-result" role="status" hidden></div>
+          <div class="composer"><p>Голосовой ввод</p><div class="wave" aria-hidden="true"></div><small>В этом эскизе показан готовый пример обращения. Запись и отправка не подключены.</small></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <nav class="bottom-nav" aria-label="Нижняя навигация">
+    <button data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button><button data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button><button disabled><svg class="icon"><use href="#list"/></svg>Задачи</button><button disabled><svg class="icon"><use href="#board"/></svg>Доска</button><button disabled><svg class="icon"><use href="#groups"/></svg>Группы</button><button disabled><svg class="icon"><use href="#more"/></svg>Ещё</button>
+  </nav>
+  <dialog id="edit-dialog"><form id="edit-form"><h2>Изменить задачу</h2><label for="task-title">Название</label><input id="task-title" name="title" required maxlength="500"><div class="actions"><button class="action primary" type="submit">Сохранить</button><button class="action" type="button" id="cancel-edit">Отмена</button></div></form></dialog>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script>
+    const initialTasks = [
+      { id: 1, title: 'Подготовить структуру диплома', group: 'Учёба', minutes: 30, meta: 'Срок: сегодня, 18:00', status: 'todo' },
+      { id: 2, title: 'Отправить документы в деканат', group: 'Учёба', minutes: 15, meta: 'День исполнения: сегодня', status: 'todo' },
+      { id: 3, title: 'Разобрать заметки за неделю', group: 'Личное', minutes: 15, meta: 'Без срока', status: 'started' }
+    ];
+    let tasks = [], budget = null, counts = {}, editingId = null, toastTimer;
+    const tasksElement = document.getElementById('tasks');
+    const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
+    const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+    const taskWord = (number) => number === 1 ? 'задача' : number >= 2 && number <= 4 ? 'задачи' : 'задач';
+    function render() {
+      const visible = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && (!budget || task.minutes <= budget));
+      tasksElement.innerHTML = visible.map((task, index) => `<article class="task ${index === 0 ? 'featured' : ''}" aria-labelledby="title-${task.id}">
+        <div class="task-top"><span class="task-label">${index === 0 ? icon('bolt') + 'Начни с этого' : task.status === 'started' ? 'В работе' : 'Дальше'} </span><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
+        <h3 id="title-${task.id}">${escapeHtml(task.title)}</h3><div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes} мин</span><span>${task.group}</span></div>
+        <div class="actions"><button class="action primary" data-action="done" data-id="${task.id}">✓ Сделано</button>${task.status === 'todo' ? `<button class="action" data-action="start" data-id="${task.id}">Начать</button>` : ''}<button class="action" data-action="snooze" data-id="${task.id}">Отложить</button></div>
+      </article>`).join('');
+      document.getElementById('focus-count').textContent = `${visible.length} ${taskWord(visible.length)}`;
+      document.getElementById('empty').hidden = visible.length !== 0;
+      for (const key of ['done', 'started', 'moved']) document.getElementById(`${key}-count`).textContent = counts[key];
+    }
+    function notice(text) {
+      clearTimeout(toastTimer);
+      const toast = document.getElementById('toast'); toast.textContent = text; toast.hidden = false;
+      toastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
+    }
+    function showPage(page) {
+      document.getElementById('focus-page').hidden = page !== 'focus'; document.getElementById('assistant-page').hidden = page !== 'assistant';
+      document.querySelectorAll('nav [data-page]').forEach((button) => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
+      document.getElementById('top-label').textContent = page === 'focus' ? 'Сейчас' : 'Ассистент';
+      window.scrollTo({top: 0, behavior: 'instant'});
+    }
+    document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
+    document.querySelectorAll('[data-minutes]').forEach((button) => button.addEventListener('click', () => {
+      const minutes = Number(button.dataset.minutes); budget = budget === minutes ? null : minutes;
+      document.querySelectorAll('[data-minutes]').forEach((item) => item.setAttribute('aria-pressed', String(Number(item.dataset.minutes) === budget)));
+      render();
+    }));
+    tasksElement.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-action]'); if (!button) return;
+      const task = tasks.find((item) => item.id === Number(button.dataset.id)); if (!task) return;
+      if (button.dataset.action === 'edit') {
+        editingId = task.id; document.getElementById('task-title').value = task.title; document.getElementById('edit-dialog').showModal(); return;
+      }
+      if (button.dataset.action === 'done') { task.status = 'done'; counts.done++; notice('Задача закрыта в примере'); }
+      if (button.dataset.action === 'start') { task.status = 'started'; counts.started++; notice('Задача начата в примере'); }
+      if (button.dataset.action === 'snooze') { task.status = 'moved'; counts.moved++; notice('В примере: отложено на завтра'); }
+      render();
+      const nextControl = tasksElement.querySelector('[data-action="done"]') || document.querySelector('[data-minutes]'); nextControl.focus();
+    });
+    document.getElementById('cancel-edit').addEventListener('click', () => document.getElementById('edit-dialog').close());
+    document.getElementById('edit-form').addEventListener('submit', (event) => {
+      event.preventDefault(); const value = document.getElementById('task-title').value.trim(); if (!value) return;
+      tasks.find((task) => task.id === editingId).title = value; render(); document.getElementById('edit-dialog').close();
+      tasksElement.querySelector(`[data-action="edit"][data-id="${editingId}"]`).focus();
+    });
+    document.getElementById('theme').addEventListener('click', () => {
+      const dark = document.documentElement.dataset.theme !== 'dark'; document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      document.getElementById('theme-label').textContent = dark ? 'Ночь' : 'День'; document.getElementById('theme').setAttribute('aria-label', dark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему');
+    });
+    const proposalInputs = [...document.querySelectorAll('[data-proposal]')];
+    function updateApply() { const count = proposalInputs.filter((input) => input.checked).length; const apply = document.getElementById('apply'); apply.textContent = `Применить (${count})`; apply.disabled = count === 0; }
+    proposalInputs.forEach((input) => input.addEventListener('change', updateApply));
+    function proposalResult(text) {
+      document.getElementById('proposal').hidden = true; const result = document.getElementById('proposal-result'); result.hidden = false; result.textContent = text;
+    }
+    document.getElementById('apply').addEventListener('click', () => {
+      const selected = proposalInputs.filter((input) => input.checked); proposalResult(`В примере применено ${selected.length} из 3 действий. Реальные задачи не изменились.`);
+    });
+    document.getElementById('reject').addEventListener('click', () => proposalResult('Предложение отклонено. Ничего не изменено.'));
+    function reset() {
+      tasks = initialTasks.map((task) => ({...task})); budget = null; counts = {done: 2, started: 1, moved: 1};
+      document.querySelectorAll('[data-minutes]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+      proposalInputs.forEach((input) => { input.checked = true; }); updateApply();
+      document.getElementById('proposal').hidden = false; document.getElementById('proposal-result').hidden = true;
+      document.getElementById('toast').hidden = true; clearTimeout(toastTimer); render(); showPage('focus');
+    }
+    document.getElementById('reset').addEventListener('click', reset);
+    document.querySelector('.wave').innerHTML = Array.from({length: 36}, (_, index) => `<i style="height:${8 + ((index * 17 + 9) % 32)}px"></i>`).join('');
+    reset();
+  </script>
+</body>
+</html>

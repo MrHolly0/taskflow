@@ -3,12 +3,15 @@ AGENTS.md
 CLAUDE.md
 ARCHITECTURE_EXPLAINED.md
 .claude/
+.Codex/
+.codex/
 .cursorrules
 .cursor/
 .aider*
 .continue/
 .github/copilot-*
 *.ai-*
+Memory/
 docs/superpowers/
 .superpowers/
 
