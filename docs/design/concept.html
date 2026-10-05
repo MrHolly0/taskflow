@@ -39,11 +39,11 @@
     .icon { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
     h1, h2, h3, p { margin: 0; }
     a { color: inherit; }
-    .studybar { min-height: 40px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 24px; border-bottom: 1px solid var(--line); font-size: 12px; }
+    .studybar { min-height: 41px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 4px 24px; border-bottom: 1px solid var(--line); font-size: 12px; }
     .studybar p { color: var(--muted); }
     .studybar strong { color: var(--text); font-weight: 500; }
     .studybar button { background: none; border: 0; text-decoration: underline; min-height: 32px; font-size: 12px; }
-    .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100dvh - 40px); }
+    .shell { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: calc(100dvh - 41px); }
     .sidebar { border-right: 1px solid var(--line); padding: 36px 18px 24px; display: flex; flex-direction: column; gap: 32px; }
     .brand { display: flex; align-items: center; padding: 0 12px; }
     .brand svg { width: 124px; height: 21px; }
@@ -97,7 +97,10 @@
     .text-action { min-height: 44px; background: none; border: 0; padding: 8px; border-radius: 10px; font-size: 12px; color: var(--muted); }
     .text-action:hover { background: var(--raised); color: var(--text); }
     .task:first-child .text-action[data-action="start"] { background: var(--text); color: var(--background); padding-inline: 14px; }
+    .task .text-action[data-action="done"] { background: var(--text); color: var(--background); padding-inline: 14px; }
     .task-status { font-size: 12px; color: var(--text); margin: 0 8px; }
+    .meta .task-status { margin: 0; color: var(--text); }
+    .task-status::before { content: ''; width: 5px; height: 5px; background: currentColor; border-radius: 50%; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
     .action { min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: none; padding: 9px 14px; font-size: 14px; }
     .action.primary { background: var(--text); color: var(--background); border-color: transparent; }
@@ -138,21 +141,41 @@
     .empty { padding: 24px 0; }
     .empty h3 { font-size: 22px; margin-bottom: 8px; }
     .empty p { color: var(--muted); font-size: 14px; }
-    .conversation { max-width: 730px; }
-    .conversation-intro { color: var(--muted); font-size: 16px; max-width: 55ch; margin-bottom: 32px; }
-    .user-message { background: var(--selected); border-radius: 22px 22px 6px 22px; padding: 20px 24px; max-width: 85%; margin: 0 0 24px auto; font-size: 16px; }
+    body[data-page="assistant"] .workspace { height: calc(100dvh - 41px); display: flex; flex-direction: column; padding-bottom: 28px; }
+    body[data-page="assistant"] .top { width: 100%; flex-shrink: 0; margin-bottom: 20px; }
+    .chat-page { width: 100%; max-width: 760px; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .chat-heading { flex-shrink: 0; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+    .chat-heading h1 { font-size: 28px; font-weight: 550; letter-spacing: -.6px; }
+    .chat-heading p { margin-top: 5px; font-size: 13px; color: var(--muted); }
+    .conversation { flex: 1; min-height: 0; overflow-y: auto; padding: 20px 12px 24px 0; scrollbar-gutter: stable; }
+    .chat-date { text-align: center; color: var(--muted); font-size: 11px; margin-bottom: 20px; }
+    .chat-entry { margin-bottom: 24px; overflow-wrap: anywhere; }
+    .message-meta { color: var(--muted); font-size: 11px; margin-bottom: 7px; }
+    .user-entry { max-width: 85%; margin-left: auto; }
+    .user-entry .message-meta { text-align: right; }
+    .user-message { background: var(--selected); border-radius: 20px 20px 6px 20px; padding: 14px 18px; font-size: 14px; white-space: pre-wrap; }
+    .assistant-entry { max-width: 92%; }
+    .assistant-message { font-size: 14px; white-space: pre-wrap; }
     .proposal { border: 1px solid var(--line); border-radius: 24px; padding: 24px; background: var(--surface); }
-    .proposal h2 { font-size: 20px; font-weight: 550; }
+    .proposal h2 { font-size: 17px; font-weight: 550; }
     .proposal > p { color: var(--muted); font-size: 14px; margin: 8px 0 20px; }
     .proposal-row { display: flex; align-items: start; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
     .proposal-row input { width: 20px; height: 20px; margin-top: 3px; accent-color: var(--text); flex-shrink: 0; }
     .proposal-row strong { display: block; font-weight: 500; }
     .proposal-row small { color: var(--muted); }
-    .composer { margin-top: 28px; border-radius: 22px; background: var(--capture); color: var(--capture-ink); padding: 20px; }
-    .composer p { font-size: 14px; }
-    .composer .wave-player { margin-top: 15px; }
-    .composer small { display: block; font-size: 12px; margin-top: 8px; }
-    .result { padding: 24px; background: var(--selected); border: 1px solid var(--line); border-radius: 24px; }
+    .composer { flex-shrink: 0; border-top: 1px solid var(--line); padding-top: 14px; }
+    .composer-field { display: flex; align-items: flex-end; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+    .composer textarea { flex: 1; min-width: 0; width: 100%; height: 64px; max-height: 128px; resize: vertical; background: none; color: var(--text); border: 0; padding: 8px; font-size: 14px; }
+    .composer textarea::placeholder { color: var(--muted); opacity: 1; }
+    .composer-icon { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-radius: 12px; background: none; }
+    .composer-icon:hover { background: var(--raised); }
+    .composer-icon.send { background: var(--text); color: var(--background); }
+    .composer small { display: block; font-size: 11px; color: var(--muted); margin-top: 8px; }
+    .voice-preview { padding: 14px; margin-bottom: 12px; background: var(--capture); color: var(--capture-ink); border-radius: 16px; }
+    .voice-preview p { font-size: 13px; }
+    .voice-preview .wave-player { margin-top: 8px; }
+    .voice-preview .action { margin-top: 8px; border-color: currentColor; }
+    .result { padding: 16px; background: var(--selected); border-radius: 16px; font-size: 14px; }
     .result p { margin-top: 8px; color: var(--muted); }
     dialog { width: min(560px, calc(100% - 32px)); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 28px; }
     dialog::backdrop { background: oklch(0.15 0.005 260 / .72); }
@@ -175,6 +198,7 @@
       .bottom-nav button[aria-current="page"] { background: var(--selected); color: var(--text); }
       .toast { bottom: calc(150px + var(--safe-bottom)); }
       body[data-page="assistant"] .toast { bottom: calc(90px + var(--safe-bottom)); }
+      body[data-page="assistant"] .workspace { padding-bottom: calc(81px + var(--safe-bottom)); }
     }
     @media (max-width: 599px) {
       .studybar { padding: 4px 16px; gap: 8px; font-size: 10px; } .studybar button { font-size: 10px; }
@@ -190,8 +214,15 @@
       .task-controls { gap: 4px 10px; margin-top: 2px; }
       .section-head h2 { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
       .day-progress { padding-left: 0; margin-right: 0; }
-      .user-message { max-width: 94%; padding: 18px; } .proposal { padding: 20px; }
-      .conversation-intro { font-size: 14px; }
+      body[data-page="assistant"] .workspace { padding-inline: 16px; padding-top: 12px; }
+      body[data-page="assistant"] .top { margin-bottom: 12px; }
+      .chat-heading { padding-bottom: 12px; } .chat-heading h1 { font-size: 23px; }
+      .chat-heading p { font-size: 12px; }
+      .conversation { padding-right: 0; padding-top: 16px; }
+      .user-entry { max-width: 92%; } .assistant-entry { max-width: 100%; }
+      .user-message { padding: 12px 14px; } .proposal { padding: 16px; border-radius: 20px; }
+      .proposal-row { font-size: 14px; }
+      .composer textarea { resize: none; height: 64px; padding: 6px; }
     }
     @media (prefers-reduced-motion: no-preference) {
       button { transition: background-color 160ms ease-out, color 160ms ease-out; }
@@ -305,20 +336,14 @@
           </aside>
         </div>
       </section>
-      <section class="content" id="assistant-page" aria-labelledby="assistant-title" hidden>
-        <div class="greeting"><h1 id="assistant-title">Разберём твои дела.</h1><p>Ассистент</p></div>
-        <div class="conversation">
-          <p class="conversation-intro">Расскажи, что изменилось. Мунин предложит действия, а ты решишь, какие применить.</p>
-          <div class="user-message">Макет отправил, Саше позвонил. Ещё надо записаться к стоматологу.</div>
-          <div class="proposal" id="proposal"><h2>Вот что можно изменить</h2><p>Сними галочку, если какое-то действие лишнее.</p>
-            <label class="proposal-row"><input type="checkbox" checked data-proposal="complete"><span><strong>Закрыть «Отправить макет»</strong><small>Выполнено</small></span></label>
-            <label class="proposal-row"><input type="checkbox" checked data-proposal="complete"><span><strong>Закрыть «Позвонить Саше»</strong><small>Выполнено</small></span></label>
-            <label class="proposal-row"><input type="checkbox" checked data-proposal="create"><span><strong>Записаться к стоматологу</strong><small>Новая задача, без срока</small></span></label>
-            <div class="actions"><button class="action primary" id="apply">Применить 3 действия</button><button class="action" id="reject">Отклонить</button></div>
-          </div>
-          <div class="result" id="proposal-result" role="status" hidden></div>
-          <div class="composer"><p>Голосовой ввод</p><button class="wave-player" aria-label="Приостановить волну"><span class="wave" aria-hidden="true"></span><svg class="icon" aria-hidden="true"><use href="#pause"/></svg></button><small>В этом эскизе показан готовый пример обращения. Запись и отправка не подключены.</small></div>
-        </div>
+      <section class="content chat-page" id="assistant-page" aria-labelledby="assistant-title" hidden>
+        <header class="chat-heading"><h1 id="assistant-title">Разберём твои дела.</h1><p>Расскажи своими словами. Изменения подтверждаешь ты.</p></header>
+        <div class="conversation" id="chat-log" role="log" aria-label="Переписка с Мунином" aria-live="polite" aria-relevant="additions"></div>
+        <form class="composer" id="chat-form">
+          <div class="voice-preview" id="voice-preview" hidden><p>Пример голосового сообщения</p><button class="wave-player" type="button" aria-label="Приостановить волну"><span class="wave" aria-hidden="true"></span><svg class="icon" aria-hidden="true"><use href="#pause"/></svg></button><p>«Надо записаться к стоматологу»</p><button class="action" id="insert-voice" type="button">Вставить пример</button></div>
+          <div class="composer-field"><textarea id="chat-input" aria-label="Сообщение Мунину" placeholder="Что нужно сделать или что изменилось?" maxlength="1000" rows="2"></textarea><button class="composer-icon" id="voice-example" type="button" aria-label="Показать пример голосового ввода" aria-expanded="false" aria-controls="voice-preview"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg></button><button class="composer-icon send" id="send-message" type="submit" aria-label="Отправить сообщение" disabled><svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+          <small>Демочат: ответы по примерам, без отправки на сервер. Микрофон показывает пример.</small>
+        </form>
       </section>
     </main>
   </div>
@@ -335,22 +360,23 @@
       { id: 3, title: 'Разобрать заметки за неделю', group: 'Личное', minutes: 15, meta: 'Без срока', status: 'started' }
     ];
     let tasks = [], budget = null, counts = {}, completedToday = [], editingId = null, toastTimer;
+    let chatEntries = [], nextChatId = 1, nextTaskId = 4;
     const tasksElement = document.getElementById('tasks');
     const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
     const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
     const doneWord = (number) => number % 10 === 1 && number % 100 !== 11 ? 'дело' : number % 10 >= 2 && number % 10 <= 4 && (number % 100 < 12 || number % 100 > 14) ? 'дела' : 'дел';
     function render(revealNext = false) {
-      const visible = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && (!budget || task.minutes <= budget));
+      const visible = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && (!budget || task.minutes !== null && task.minutes <= budget)).slice(0, 3);
       tasksElement.innerHTML = visible.map((task, index) => `<article class="task${revealNext && index === 0 ? ' is-next' : ''}" aria-labelledby="title-${task.id}">
         <button class="task-check" data-action="done" data-id="${task.id}" aria-label="Сделано: ${escapeHtml(task.title)}" title="Отметить как выполненную"><span class="check-ring">${icon('check')}</span></button>
         <div class="task-body"><div class="task-heading"><h3 id="title-${task.id}"><button class="task-title" data-action="edit" data-id="${task.id}">${escapeHtml(task.title)}</button></h3><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
-        <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes} мин</span><span>${task.group}</span></div>
-        <div class="task-controls">${task.status === 'todo' ? `<button class="text-action" data-action="start" data-id="${task.id}">Начать</button>` : '<span class="task-status">В работе</span>'}<button class="text-action" data-action="snooze" data-id="${task.id}">Отложить</button></div></div>
+        <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes === null ? 'Без оценки' : `${task.minutes} мин`}</span><span>${task.group}</span>${task.status === 'started' ? '<span class="task-status">В работе</span>' : ''}</div>
+        <div class="task-controls">${task.status === 'todo' ? `<button class="text-action" data-action="start" data-id="${task.id}">Начать</button>` : `<button class="text-action" data-action="done" data-id="${task.id}" aria-label="Завершить: ${escapeHtml(task.title)}">Завершить</button><button class="text-action" data-action="todo" data-id="${task.id}">Вернуть в список</button>`}<button class="text-action" data-action="snooze" data-id="${task.id}">Отложить</button></div></div>
       </article>`).join('');
       document.getElementById('focus-summary').textContent = visible.length === 1 ? '1 главное дело.' : visible.length === 0 ? 'пауза.' : `${visible.length} главных дела.`;
       document.getElementById('empty').hidden = visible.length !== 0;
       const next = visible[0];
-      const nextNote = next ? next.status === 'started' ? `в работе — ~${next.minutes} мин` : `следующее — ~${next.minutes} мин` : 'в подборке пауза';
+      const nextNote = next ? next.minutes === null ? 'следующее дело без оценки' : next.status === 'started' ? `в работе — ~${next.minutes} мин` : `следующее — ~${next.minutes} мин` : 'в подборке пауза';
       document.getElementById('day-progress-note').textContent = `${counts.done} готово · ${nextNote}`;
       const progress = document.getElementById('day-progress');
       progress.setAttribute('aria-label', `Сегодня сделано ${counts.done} ${doneWord(counts.done)}; ${nextNote}. Итоги дня`);
@@ -364,12 +390,14 @@
       toastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
     }
     function showPage(page) {
+      clearTimeout(toastTimer); document.getElementById('toast').hidden = true;
       document.body.dataset.page = page;
       document.getElementById('capture-dock').hidden = page !== 'focus';
       document.getElementById('focus-page').hidden = page !== 'focus'; document.getElementById('assistant-page').hidden = page !== 'assistant';
       document.querySelectorAll('nav [data-page]').forEach((button) => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
       document.getElementById('top-label').textContent = page === 'focus' ? 'Сейчас' : 'Ассистент';
       paintWaves();
+      if (page === 'assistant') scrollChat();
       window.scrollTo({top: 0, behavior: 'instant'});
     }
     document.querySelectorAll('[data-page]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.page)));
@@ -387,13 +415,15 @@
       const completed = button.dataset.action === 'done';
       if (completed) { task.status = 'done'; counts.done++; completedToday.push(task.title); }
       if (button.dataset.action === 'start') { task.status = 'started'; counts.started++; notice('Задача начата в примере'); }
+      if (button.dataset.action === 'todo') { task.status = 'todo'; notice('Задача возвращена в список.'); }
       if (button.dataset.action === 'snooze') { task.status = 'moved'; counts.moved++; notice('В примере: отложено на завтра'); }
       render(completed);
       if (completed) {
-        const next = tasks.find((item) => item.status !== 'done' && item.status !== 'moved' && (!budget || item.minutes <= budget));
-        notice(next ? `Готово. ${next.status === 'started' ? 'В работе ещё одно дело' : 'Следующее дело'} — примерно ${next.minutes} минут.` : 'Подборка закрыта. Можно выдохнуть.');
+        const next = tasks.find((item) => item.status !== 'done' && item.status !== 'moved' && (!budget || item.minutes !== null && item.minutes <= budget));
+        notice(next ? next.minutes === null ? 'Готово. Можно перейти к следующему делу.' : `Готово. ${next.status === 'started' ? 'В работе ещё одно дело' : 'Следующее дело'} — примерно ${next.minutes} минут.` : 'Подборка закрыта. Можно выдохнуть.');
       }
-      const nextControl = tasksElement.querySelector('[data-action="done"]') || document.querySelector('[data-minutes]'); nextControl.focus();
+      const sameTask = tasksElement.querySelector(`[data-id="${task.id}"][data-action="${task.status === 'started' ? 'todo' : 'start'}"]`);
+      const nextControl = sameTask || tasksElement.querySelector('[data-action="done"]') || document.querySelector('[data-minutes]'); nextControl.focus();
     });
     document.getElementById('cancel-edit').addEventListener('click', () => document.getElementById('edit-dialog').close());
     document.getElementById('day-progress').addEventListener('click', () => {
@@ -410,23 +440,89 @@
       const dark = document.documentElement.dataset.theme !== 'dark'; document.documentElement.dataset.theme = dark ? 'dark' : 'light';
       document.getElementById('theme-label').textContent = dark ? 'Ночь' : 'День'; document.getElementById('theme').setAttribute('aria-label', dark ? 'Переключить на светлую тему' : 'Переключить на тёмную тему');
     });
-    const proposalInputs = [...document.querySelectorAll('[data-proposal]')];
-    function updateApply() { const count = proposalInputs.filter((input) => input.checked).length; const apply = document.getElementById('apply'); apply.textContent = `Применить (${count})`; apply.disabled = count === 0; }
-    proposalInputs.forEach((input) => input.addEventListener('change', updateApply));
-    function proposalResult(text) {
-      document.getElementById('proposal').hidden = true; const result = document.getElementById('proposal-result'); result.hidden = false; result.textContent = text;
+    const chatLog = document.getElementById('chat-log');
+    const chatInput = document.getElementById('chat-input');
+    const chatTime = () => new Intl.DateTimeFormat('ru-RU', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Moscow'}).format(new Date());
+    function scrollChat() { chatLog.scrollTop = chatLog.scrollHeight; }
+    function actionLabel(action) { return `${action.kind === 'create' ? 'Добавить' : action.kind === 'done' ? 'Завершить' : 'Вернуть в список'} «${action.title}»`; }
+    function renderChat() {
+      chatLog.innerHTML = '<p class="chat-date">Сегодня · пример диалога</p>' + chatEntries.map((entry) => {
+        const meta = `<p class="message-meta">${entry.kind === 'user' ? 'Ты' : 'Мунин'} · ${entry.time}</p>`;
+        if (entry.kind === 'user') return `<article class="chat-entry user-entry" aria-label="Твоё сообщение">${meta}<p class="user-message">${escapeHtml(entry.text)}</p></article>`;
+        if (entry.kind === 'text') return `<article class="chat-entry assistant-entry" aria-label="Ответ Мунина">${meta}<p class="assistant-message">${escapeHtml(entry.text)}</p></article>`;
+        if (entry.result) return `<article class="chat-entry assistant-entry" aria-label="Результат предложения">${meta}<p class="result">${escapeHtml(entry.result)}</p></article>`;
+        const selected = entry.actions.filter((action) => action.selected).length;
+        return `<article class="chat-entry assistant-entry" aria-label="Предложение Мунина">${meta}<section class="proposal" aria-labelledby="proposal-${entry.id}"><h2 id="proposal-${entry.id}">Вот что можно изменить</h2><p>Проверь предложение перед применением.</p>${entry.actions.map((action, index) => `<label class="proposal-row"><input type="checkbox" data-chat-id="${entry.id}" data-action-index="${index}" ${action.selected ? 'checked' : ''}><span><strong>${escapeHtml(actionLabel(action))}</strong><small>${action.kind === 'create' ? 'Новая задача, без срока' : 'Изменение существующей задачи'}</small></span></label>`).join('')}<div class="actions"><button class="action primary" data-chat-action="apply" data-chat-id="${entry.id}" ${selected === 0 ? 'disabled' : ''}>Применить (${selected})</button><button class="action" data-chat-action="reject" data-chat-id="${entry.id}">Отклонить</button></div></section></article>`;
+      }).join('');
+      scrollChat();
     }
-    document.getElementById('apply').addEventListener('click', () => {
-      const selected = proposalInputs.filter((input) => input.checked); proposalResult(`В примере применено ${selected.length} из 3 действий. Реальные задачи не изменились.`);
+    function addChat(kind, text, actions) { chatEntries.push({id: nextChatId++, kind, text, actions, time: chatTime()}); }
+    function demoReply(text) {
+      if (/[?]|покажи|что.*(?:сегодня|задач|дел)/i.test(text)) {
+        const active = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved');
+        addChat('text', active.length ? `В списке сейчас:\n${active.map((task) => `• ${task.title}${task.status === 'started' ? ' (в работе)' : ''}`).join('\n')}` : 'В примере активных задач больше нет. Можно добавить новое дело.'); return;
+      }
+      const change = /заверш|закр(?:ой|ыть)|выполн|верн(?:и|уть)|отмен.*работ/i.test(text);
+      if (change) {
+        const candidates = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && text.toLocaleLowerCase('ru').includes(task.title.toLocaleLowerCase('ru')));
+        if (candidates.length !== 1) { addChat('text', 'Уточни полное название задачи из списка, чтобы я предложил изменение для нужного дела.'); return; }
+        addChat('proposal', '', [{kind: /верн|отмен/i.test(text) ? 'todo' : 'done', title: candidates[0].title, taskId: candidates[0].id, selected: true}]); return;
+      }
+      const title = text.replace(/^(?:надо|нужно|добавь(?: задачу)?)[\s:,-]*/i, '').trim();
+      if (!title || title.length > 500) { addChat('text', 'Напиши короткое название дела, до 500 символов.'); return; }
+      addChat('proposal', '', [{kind: 'create', title, selected: true}]);
+    }
+    function updateSend() { document.getElementById('send-message').disabled = !chatInput.value.trim(); }
+    chatInput.addEventListener('input', updateSend);
+    document.getElementById('chat-form').addEventListener('submit', (event) => {
+      event.preventDefault(); const text = chatInput.value.trim(); if (!text) return;
+      addChat('user', text); demoReply(text); chatInput.value = ''; updateSend(); renderChat(); chatInput.focus();
     });
-    document.getElementById('reject').addEventListener('click', () => proposalResult('Предложение отклонено. Ничего не изменено.'));
+    chatInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); document.getElementById('chat-form').requestSubmit(); } });
+    chatLog.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-action-index]'); if (!input) return;
+      const entry = chatEntries.find((item) => item.id === Number(input.dataset.chatId));
+      entry.actions[Number(input.dataset.actionIndex)].selected = input.checked;
+      const count = entry.actions.filter((action) => action.selected).length;
+      const apply = input.closest('.proposal').querySelector('[data-chat-action="apply"]'); apply.disabled = count === 0; apply.textContent = `Применить (${count})`;
+    });
+    chatLog.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-chat-action]'); if (!button) return;
+      const entry = chatEntries.find((item) => item.id === Number(button.dataset.chatId)); if (!entry || entry.result) return;
+      if (button.dataset.chatAction === 'reject') entry.result = 'Предложение отклонено. Задачи остались как были.';
+      else {
+        const selected = entry.actions.filter((action) => action.selected); if (!selected.length) return;
+        const results = selected.map((action) => {
+          if (action.kind === 'create') { tasks.push({id: nextTaskId++, title: action.title, group: 'Без группы', minutes: null, meta: 'Без срока', status: 'todo'}); return `Добавлено: «${action.title}».`; }
+          const task = tasks.find((item) => item.id === action.taskId);
+          if (!task || task.status === 'done' || task.status === 'moved') return `«${action.title}»: задача уже изменена, новое действие не применено.`;
+          task.status = action.kind;
+          if (action.kind === 'done') { counts.done++; completedToday.push(task.title); }
+          return `${action.kind === 'done' ? 'Завершено' : 'Возвращено в список'}: «${task.title}».`;
+        });
+        entry.result = results.join('\n'); render();
+      }
+      renderChat(); chatInput.focus();
+    });
+    document.getElementById('voice-example').addEventListener('click', () => {
+      const preview = document.getElementById('voice-preview'); preview.hidden = !preview.hidden;
+      document.getElementById('voice-example').setAttribute('aria-expanded', String(!preview.hidden)); paintWaves();
+    });
+    document.getElementById('insert-voice').addEventListener('click', () => {
+      chatInput.value = 'Надо записаться к стоматологу'; document.getElementById('voice-preview').hidden = true;
+      document.getElementById('voice-example').setAttribute('aria-expanded', 'false'); updateSend(); chatInput.focus();
+    });
     function reset() {
       tasks = initialTasks.map((task) => ({...task})); budget = null; counts = {done: 2, started: 1, moved: 1};
       completedToday = ['Отправить макет', 'Позвонить Саше'];
       document.getElementById('day-progress').setAttribute('aria-expanded', 'false'); document.getElementById('day-detail').hidden = true;
       document.querySelectorAll('[data-minutes]').forEach((button) => button.setAttribute('aria-pressed', 'false'));
-      proposalInputs.forEach((input) => { input.checked = true; }); updateApply();
-      document.getElementById('proposal').hidden = false; document.getElementById('proposal-result').hidden = true;
+      chatEntries = []; nextChatId = 1; nextTaskId = 4;
+      addChat('user', 'Что у меня сейчас в фокусе?'); demoReply('Что у меня сейчас в фокусе?');
+      addChat('user', 'Ещё надо записаться к стоматологу.');
+      addChat('proposal', '', [{kind: 'create', title: 'Записаться к стоматологу', selected: true}]);
+      chatInput.value = ''; updateSend(); renderChat();
+      document.getElementById('voice-preview').hidden = true; document.getElementById('voice-example').setAttribute('aria-expanded', 'false');
       document.getElementById('toast').hidden = true; clearTimeout(toastTimer); render(); showPage('focus');
     }
     document.getElementById('reset').addEventListener('click', reset);
