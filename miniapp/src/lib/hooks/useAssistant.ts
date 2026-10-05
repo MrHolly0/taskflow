@@ -1,27 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-
-const getClient = () => {
-  const token = localStorage.getItem('auth_token');
-  const client = axios.create({
-    baseURL: API_BASE,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  client.interceptors.response.use(
-    (r) => r,
-    (err) => {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        window.location.reload();
-      }
-      return Promise.reject(err);
-    }
-  );
-  return client;
-};
+import { getAuthenticatedClient as getClient } from '@/lib/authenticated-client';
 
 export type ProposalStatus = 'PENDING' | 'APPLIED' | 'PARTIALLY_APPLIED' | 'REJECTED' | 'EXPIRED' | 'FAILED' | 'DECLINED';
 

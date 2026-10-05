@@ -8,10 +8,12 @@ const FALLBACK_TIMEZONE = 'UTC';
  * загрузились, isReady=false — рисовать даты в это время нельзя,
  * иначе будет видна вспышка неверного (браузерного) времени.
  */
-export function useUserTimezone(): { timezone: string; isReady: boolean } {
-  const { data } = useSettings();
+export function useUserTimezone() {
+  const { data, error, refetch } = useSettings();
   return {
     timezone: data?.timezone ?? FALLBACK_TIMEZONE,
     isReady: !!data,
+    error,
+    refetch,
   };
 }

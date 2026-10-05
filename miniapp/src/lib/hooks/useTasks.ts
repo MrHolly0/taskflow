@@ -1,7 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+import { getAuthenticatedClient as getClient } from '@/lib/authenticated-client';
 
 export interface ReminderResponse {
   id: string;
@@ -20,7 +18,7 @@ export interface RecurrenceRule {
   endsAt?: string;
 }
 
-interface Task {
+export interface TaskResponse {
   id: string;
   title: string;
   description?: string;
@@ -42,6 +40,8 @@ interface Task {
   reminders?: ReminderResponse[];
   persistentReminder?: boolean;
 }
+
+type Task = TaskResponse;
 
 interface FocusResponse {
   tasks: Task[];
@@ -72,26 +72,6 @@ export interface TaskStatsItem {
 interface TaskStatsResponse {
   tasks: TaskStatsItem[];
 }
-
-const getClient = () => {
-  const token = localStorage.getItem('auth_token');
-  const client = axios.create({
-    baseURL: API_BASE,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  client.interceptors.response.use(
-    (r) => r,
-    (err) => {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        window.location.reload();
-      }
-      return Promise.reject(err);
-    }
-  );
-  return client;
-};
 
 export const useFocusTasks = (availableMinutes?: number) => {
   return useQuery({
@@ -201,6 +181,7 @@ export interface CreateTaskRequest {
   description?: string;
   priority: string;
   deadline?: string;
+  plannedDate?: string;
   estimateMinutes?: number;
   groupId?: string;
   groupName?: string;
@@ -229,7 +210,8 @@ export const useCreateTask = () => {
       const response = await getClient().post<Task>('/tasks/quick', request);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (task) => {
+      queryClient.setQueryData<Task[]>(['tasks', 'list'], previous => previous ? [task, ...previous] : previous);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
     },
@@ -245,10 +227,19 @@ export const useTasksList = () => {
   return useQuery({
     queryKey: ['tasks', 'list'],
     queryFn: async () => {
-      const response = await getClient().get<TasksPage>('/tasks', {
-        params: { size: 100, sort: 'createdAt,desc' },
-      });
-      return response.data.content;
+      const tasks: Task[] = [];
+      let page = 0;
+      let total = Infinity;
+      while (tasks.length < total) {
+        const response = await getClient().get<TasksPage>('/tasks', {
+          params: { page, size: 100, sort: 'createdAt,desc' },
+        });
+        tasks.push(...response.data.content);
+        total = response.data.totalElements;
+        if (!response.data.content.length) break;
+        page++;
+      }
+      return tasks;
     },
     staleTime: 1000 * 60 * 2,
   });
@@ -275,6 +266,8 @@ export interface UpdateTaskRequest {
   plannedDate?: string | null;
   estimateMinutes?: number | null;
   groupId?: string | null;
+  clearGroup?: boolean;
+  clearPlannedDate?: boolean;
   recurrence?: RecurrenceRule | null;
   persistentReminder?: boolean | null;
 }
@@ -283,9 +276,15 @@ export const useUpdateTask = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...patch }: UpdateTaskRequest) => {
-      await getClient().patch(`/tasks/${id}`, patch);
+      const response = await getClient().patch<Task>(`/tasks/${id}`, {
+        ...patch,
+        ...(patch.groupId === null ? { clearGroup: true } : {}),
+        ...(patch.plannedDate === null ? { clearPlannedDate: true } : {}),
+      });
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (task) => {
+      queryClient.setQueryData<Task[]>(['tasks', 'list'], (previous) => previous?.map(item => item.id === task.id ? task : item));
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });
@@ -309,7 +308,8 @@ export const useCreateGroup = () => {
       const response = await getClient().post<GroupResponse>('/groups', request);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (group) => {
+      queryClient.setQueryData<GroupResponse[]>(['groups'], previous => previous ? [...previous, group] : previous);
       queryClient.invalidateQueries({ queryKey: ['groups'] });
     },
   });
@@ -322,6 +322,21 @@ export const useDeleteGroup = () => {
       await getClient().delete(`/groups/${groupId}`);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    },
+  });
+};
+
+export const useUpdateGroup = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...request }: CreateGroupRequest & { id: string }) => {
+      const response = await getClient().put<GroupResponse>(`/groups/${id}`, request);
+      return response.data;
+    },
+    onSuccess: (group) => {
+      queryClient.setQueryData<GroupResponse[]>(['groups'], previous => previous?.map(item => item.id === group.id ? group : item));
       queryClient.invalidateQueries({ queryKey: ['groups'] });
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },

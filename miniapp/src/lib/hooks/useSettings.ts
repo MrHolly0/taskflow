@@ -1,16 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { getAuthenticatedClient as getClient } from '@/lib/authenticated-client';
 import { useStore } from '@/lib/store';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-
-const getClient = () => {
-  const token = localStorage.getItem('auth_token');
-  return axios.create({
-    baseURL: API_BASE,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-};
 
 export type VoiceInputMode = 'SILENCE' | 'TOGGLE' | 'HOLD';
 
