@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>Мунин · концепт интерфейса</title>
+  <link rel="stylesheet" href="concept-pages.css">
   <style>
     :root {
       --background: oklch(0.21 0.01 260); --surface: oklch(0.245 0.01 260);
@@ -258,6 +259,11 @@
     <symbol id="check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></symbol>
     <symbol id="chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="plug" viewBox="0 0 24 24"><path d="M8 3v5M16 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v5"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="M15 15l6 6"/></symbol>
+    <symbol id="settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="var(--background)"/><circle cx="16" cy="12" r="2" fill="var(--background)"/><circle cx="10" cy="18" r="2" fill="var(--background)"/></symbol>
+    <symbol id="mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 7l9 6 9-6"/></symbol>
+    <symbol id="phone" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="3"/><path d="M11 18h2"/></symbol>
   </svg>
   <div class="studybar"><p><strong>Концепт интерфейса</strong> · демоданные</p><button id="reset">Сбросить пример</button></div>
   <div class="shell">
@@ -288,14 +294,14 @@
       <nav class="side-nav" aria-label="Основная навигация">
         <button class="nav-item" data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button>
         <button class="nav-item" data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button>
-        <button class="nav-item" disabled><svg class="icon"><use href="#list"/></svg>Все задачи</button>
-        <button class="nav-item" disabled><svg class="icon"><use href="#board"/></svg>Доска</button>
-        <button class="nav-item" disabled><svg class="icon"><use href="#groups"/></svg>Группы</button>
-        <button class="nav-item" disabled><svg class="icon"><use href="#stats"/></svg>Статистика</button>
-        <button class="nav-item" disabled><svg class="icon"><use href="#plug"/></svg>Интеграции</button>
+        <button class="nav-item" data-page="all"><svg class="icon"><use href="#list"/></svg>Все задачи</button>
+        <button class="nav-item" data-page="board"><svg class="icon"><use href="#board"/></svg>Доска</button>
+        <button class="nav-item" data-page="groups"><svg class="icon"><use href="#groups"/></svg>Группы</button>
+        <button class="nav-item" data-page="stats"><svg class="icon"><use href="#stats"/></svg>Статистика</button>
+        <button class="nav-item" data-page="settings"><svg class="icon"><use href="#settings"/></svg>Настройки</button>
+        <button class="nav-item" data-page="integrations"><svg class="icon"><use href="#plug"/></svg>Интеграции</button>
       </nav>
-      <p class="nav-note">В эскизе доступны «Сейчас» и «Ассистент».</p>
-      <div class="sidebar-bottom"><span class="avatar" aria-hidden="true">С</span><div>Саша<small>Мой Мунин</small></div></div>
+      <div class="sidebar-bottom"><span class="avatar" aria-hidden="true">С</span><div><span id="sidebar-name">Саша</span><small>Мой Мунин</small></div></div>
     </aside>
     <main class="workspace">
       <header class="top"><span class="top-label" id="top-label">Сейчас</span><div class="brand mobile-brand"><svg
@@ -349,7 +355,7 @@
   </div>
   <div class="capture-dock" id="capture-dock"><button class="mobile-capture" id="mobile-capture" data-page="assistant"><span class="mini-wave" aria-hidden="true"></span>Рассказать Мунину<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
   <nav class="bottom-nav" aria-label="Нижняя навигация">
-    <button data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button><button data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button><button disabled><svg class="icon"><use href="#list"/></svg>Задачи</button><button disabled><svg class="icon"><use href="#board"/></svg>Доска</button><button disabled><svg class="icon"><use href="#groups"/></svg>Группы</button><button disabled><svg class="icon"><use href="#more"/></svg>Ещё</button>
+    <button data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button><button data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button><button data-page="all"><svg class="icon"><use href="#list"/></svg>Задачи</button><button data-page="board"><svg class="icon"><use href="#board"/></svg>Доска</button><button data-page="groups"><svg class="icon"><use href="#groups"/></svg>Группы</button><button data-page="more"><svg class="icon"><use href="#more"/></svg>Ещё</button>
   </nav>
   <dialog id="edit-dialog"><form id="edit-form"><h2>Изменить задачу</h2><label for="task-title">Название</label><input id="task-title" name="title" required maxlength="500"><div class="actions"><button class="action primary" type="submit">Сохранить</button><button class="action" type="button" id="cancel-edit">Отмена</button></div></form></dialog>
   <div class="toast" id="toast" role="status" hidden></div>
@@ -366,11 +372,11 @@
     const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
     const doneWord = (number) => number % 10 === 1 && number % 100 !== 11 ? 'дело' : number % 10 >= 2 && number % 10 <= 4 && (number % 100 < 12 || number % 100 > 14) ? 'дела' : 'дел';
     function render(revealNext = false) {
-      const visible = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && (!budget || task.minutes !== null && task.minutes <= budget)).slice(0, 3);
+      const visible = tasks.filter((task) => !task.archived && !['done', 'moved', 'cancelled'].includes(task.status) && (!budget || task.minutes !== null && task.minutes <= budget)).slice(0, 3);
       tasksElement.innerHTML = visible.map((task, index) => `<article class="task${revealNext && index === 0 ? ' is-next' : ''}" aria-labelledby="title-${task.id}">
         <button class="task-check" data-action="done" data-id="${task.id}" aria-label="Сделано: ${escapeHtml(task.title)}" title="Отметить как выполненную"><span class="check-ring">${icon('check')}</span></button>
         <div class="task-body"><div class="task-heading"><h3 id="title-${task.id}"><button class="task-title" data-action="edit" data-id="${task.id}">${escapeHtml(task.title)}</button></h3><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
-        <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes === null ? 'Без оценки' : `${task.minutes} мин`}</span><span>${task.group}</span>${task.status === 'started' ? '<span class="task-status">В работе</span>' : ''}</div>
+        <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes === null ? 'Без оценки' : `${task.minutes} мин`}</span><span>${escapeHtml(task.group)}</span>${task.status === 'started' ? '<span class="task-status">В работе</span>' : ''}</div>
         <div class="task-controls">${task.status === 'todo' ? `<button class="text-action" data-action="start" data-id="${task.id}">Начать</button>` : `<button class="text-action" data-action="done" data-id="${task.id}" aria-label="Завершить: ${escapeHtml(task.title)}">Завершить</button><button class="text-action" data-action="todo" data-id="${task.id}">Вернуть в список</button>`}<button class="text-action" data-action="snooze" data-id="${task.id}">Отложить</button></div></div>
       </article>`).join('');
       document.getElementById('focus-summary').textContent = visible.length === 1 ? '1 главное дело.' : visible.length === 0 ? 'пауза.' : `${visible.length} главных дела.`;
@@ -410,7 +416,7 @@
       const button = event.target.closest('[data-action]'); if (!button) return;
       const task = tasks.find((item) => item.id === Number(button.dataset.id)); if (!task) return;
       if (button.dataset.action === 'edit') {
-        editingId = task.id; document.getElementById('task-title').value = task.title; document.getElementById('edit-dialog').showModal(); return;
+        openTaskEditor(task.id); return;
       }
       const completed = button.dataset.action === 'done';
       if (completed) { task.status = 'done'; counts.done++; completedToday.push(task.title); }
@@ -419,7 +425,7 @@
       if (button.dataset.action === 'snooze') { task.status = 'moved'; counts.moved++; notice('В примере: отложено на завтра'); }
       render(completed);
       if (completed) {
-        const next = tasks.find((item) => item.status !== 'done' && item.status !== 'moved' && (!budget || item.minutes !== null && item.minutes <= budget));
+        const next = tasks.find((item) => !item.archived && !['done', 'moved', 'cancelled'].includes(item.status) && (!budget || item.minutes !== null && item.minutes <= budget));
         notice(next ? next.minutes === null ? 'Готово. Можно перейти к следующему делу.' : `Готово. ${next.status === 'started' ? 'В работе ещё одно дело' : 'Следующее дело'} — примерно ${next.minutes} минут.` : 'Подборка закрыта. Можно выдохнуть.');
       }
       const sameTask = tasksElement.querySelector(`[data-id="${task.id}"][data-action="${task.status === 'started' ? 'todo' : 'start'}"]`);
@@ -433,8 +439,11 @@
     });
     document.getElementById('edit-form').addEventListener('submit', (event) => {
       event.preventDefault(); const value = document.getElementById('task-title').value.trim(); if (!value) return;
-      tasks.find((task) => task.id === editingId).title = value; render(); document.getElementById('edit-dialog').close();
-      tasksElement.querySelector(`[data-action="edit"][data-id="${editingId}"]`).focus();
+      const task = tasks.find((item) => item.id === editingId); task.title = value;
+      if (typeof applyTaskFields === 'function') applyTaskFields(task);
+      render(); document.getElementById('edit-dialog').close();
+      const currentPage = document.querySelector('.workspace > section:not([hidden])');
+      currentPage?.querySelector(`[data-open-task="${editingId}"], [data-action="edit"][data-id="${editingId}"]`)?.focus();
     });
     document.getElementById('theme').addEventListener('click', () => {
       const dark = document.documentElement.dataset.theme !== 'dark'; document.documentElement.dataset.theme = dark ? 'dark' : 'light';
@@ -459,12 +468,12 @@
     function addChat(kind, text, actions) { chatEntries.push({id: nextChatId++, kind, text, actions, time: chatTime()}); }
     function demoReply(text) {
       if (/[?]|покажи|что.*(?:сегодня|задач|дел)/i.test(text)) {
-        const active = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved');
+        const active = tasks.filter((task) => !task.archived && !['done', 'moved', 'cancelled'].includes(task.status));
         addChat('text', active.length ? `В списке сейчас:\n${active.map((task) => `• ${task.title}${task.status === 'started' ? ' (в работе)' : ''}`).join('\n')}` : 'В примере активных задач больше нет. Можно добавить новое дело.'); return;
       }
       const change = /заверш|закр(?:ой|ыть)|выполн|верн(?:и|уть)|отмен.*работ/i.test(text);
       if (change) {
-        const candidates = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && text.toLocaleLowerCase('ru').includes(task.title.toLocaleLowerCase('ru')));
+        const candidates = tasks.filter((task) => !task.archived && !['done', 'moved', 'cancelled'].includes(task.status) && text.toLocaleLowerCase('ru').includes(task.title.toLocaleLowerCase('ru')));
         if (candidates.length !== 1) { addChat('text', 'Уточни полное название задачи из списка, чтобы я предложил изменение для нужного дела.'); return; }
         addChat('proposal', '', [{kind: /верн|отмен/i.test(text) ? 'todo' : 'done', title: candidates[0].title, taskId: candidates[0].id, selected: true}]); return;
       }
@@ -493,9 +502,9 @@
       else {
         const selected = entry.actions.filter((action) => action.selected); if (!selected.length) return;
         const results = selected.map((action) => {
-          if (action.kind === 'create') { tasks.push({id: nextTaskId++, title: action.title, group: 'Без группы', minutes: null, meta: 'Без срока', status: 'todo'}); return `Добавлено: «${action.title}».`; }
+          if (action.kind === 'create') { tasks.push({id: nextTaskId++, title: action.title, group: '', minutes: null, meta: 'Без срока', status: 'todo'}); return `Добавлено: «${action.title}».`; }
           const task = tasks.find((item) => item.id === action.taskId);
-          if (!task || task.status === 'done' || task.status === 'moved') return `«${action.title}»: задача уже изменена, новое действие не применено.`;
+          if (!task || task.archived || ['done', 'moved', 'cancelled'].includes(task.status)) return `«${action.title}»: задача уже изменена, новое действие не применено.`;
           task.status = action.kind;
           if (action.kind === 'done') { counts.done++; completedToday.push(task.title); }
           return `${action.kind === 'done' ? 'Завершено' : 'Возвращено в список'}: «${task.title}».`;
@@ -525,7 +534,13 @@
       document.getElementById('voice-preview').hidden = true; document.getElementById('voice-example').setAttribute('aria-expanded', 'false');
       document.getElementById('toast').hidden = true; clearTimeout(toastTimer); render(); showPage('focus');
     }
-    document.getElementById('reset').addEventListener('click', reset);
+    function openTaskEditor(id) {
+      const task = tasks.find((item) => item.id === id); if (!task) return;
+      editingId = id; document.getElementById('task-title').value = task.title;
+      if (typeof fillTaskFields === 'function') fillTaskFields(task);
+      document.getElementById('edit-dialog').showModal();
+    }
+    document.getElementById('reset').addEventListener('click', () => reset());
     const motionPreference = matchMedia('(prefers-reduced-motion: reduce)');
     const waveforms = [...document.querySelectorAll('.wave, .mini-wave')].map((wave) => {
       const count = wave.classList.contains('mini-wave') ? 5 : 34;
@@ -573,5 +588,6 @@
     syncWaves();
     reset();
   </script>
+  <script src="concept-pages.js"></script>
 </body>
 </html>
