@@ -238,6 +238,7 @@
     @keyframes next-task { from { opacity: .45; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes completed-mark { 50% { transform: scale(1.25); color: var(--text); } }
   </style>
+  <link rel="stylesheet" href="concept-detail.css">
 </head>
 <body>
   <svg aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -259,6 +260,8 @@
     <symbol id="check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"/></symbol>
     <symbol id="chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="plug" viewBox="0 0 24 24"><path d="M8 3v5M16 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v5"/></symbol>
+    <symbol id="cancel" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="archive" viewBox="0 0 24 24"><path d="M4 9h16v12H4Z"/><path d="M3 3h18v6H3Z"/><path d="M10 13h4"/></symbol>
     <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="M15 15l6 6"/></symbol>
     <symbol id="settings" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="var(--background)"/><circle cx="16" cy="12" r="2" fill="var(--background)"/><circle cx="10" cy="18" r="2" fill="var(--background)"/></symbol>
@@ -441,7 +444,7 @@
       event.preventDefault(); const value = document.getElementById('task-title').value.trim(); if (!value) return;
       const task = tasks.find((item) => item.id === editingId); task.title = value;
       if (typeof applyTaskFields === 'function') applyTaskFields(task);
-      render(); document.getElementById('edit-dialog').close();
+      render(); document.getElementById('edit-dialog').close(); notice('Задача сохранена.');
       const currentPage = document.querySelector('.workspace > section:not([hidden])');
       currentPage?.querySelector(`[data-open-task="${editingId}"], [data-action="edit"][data-id="${editingId}"]`)?.focus();
     });
