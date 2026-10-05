@@ -110,11 +110,12 @@
     .capture .transcript .faded { opacity: .55; }
     .wave-player { display: flex; align-items: center; gap: 10px; width: 100%; height: 44px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--wave-accent); }
     .wave-player > .icon { width: 16px; height: 16px; }
+    .capture .wave-player > .icon { width: 18px; height: 18px; stroke-width: 3; }
     .wave-player:disabled { opacity: 1; }
     .wave-player:disabled > .icon { visibility: hidden; }
     .wave { display: flex; align-items: center; gap: 3px; flex: 1; min-width: 0; height: 44px; overflow: hidden; color: var(--wave-accent); }
     .wave i { display: block; height: 34px; width: 3px; flex: 1 1 3px; max-width: 4px; border-radius: 3px; background: currentColor; transform-origin: center; }
-    .capture .capture-action { width: 100%; border: 0; border-radius: 100px; background: var(--capture-ink); color: var(--capture); padding: 12px 16px; min-height: 48px; font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 20px; }
+    .capture .capture-action { width: 100%; border: 0; border-radius: 14px; background: var(--capture-ink); color: var(--capture); padding: 12px 16px; min-height: 48px; font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 20px; }
     .capture small { display: block; font-size: 11px; margin-top: 14px; opacity: .7; }
     .day-progress { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 8px; margin-right: -8px; background: none; border: 0; border-radius: 10px; font-size: 12px; color: var(--muted); }
     .day-progress:hover { background: var(--raised); color: var(--text); }
