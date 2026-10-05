@@ -13,6 +13,7 @@
       --accent: var(--text); --accent-ink: var(--background); --selected: var(--raised);
       --capture: oklch(0.94 0.002 260); --capture-ink: oklch(0.22 0.006 260);
       --wave-accent: oklch(0.55 0.20 264); --wave-on-action: var(--wave-accent);
+      --wave-cool: oklch(0.58 0.17 254); --wave-soft: oklch(0.59 0.18 273);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       color-scheme: dark;
@@ -132,6 +133,7 @@
     .mobile-capture { display: none; }
     .mini-wave { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 3px; width: 26px; height: 24px; color: var(--wave-on-action); }
     .mini-wave i { width: 2px; height: 22px; border-radius: 2px; background: currentColor; transform-origin: center; }
+    [data-theme="light"] .mini-wave { --wave-cool: oklch(0.79 0.10 254); --wave-soft: oklch(0.73 0.14 273); }
     .empty { padding: 24px 0; }
     .empty h3 { font-size: 22px; margin-bottom: 8px; }
     .empty p { color: var(--muted); font-size: 14px; }
@@ -434,17 +436,22 @@
       return {element: wave, bars: [...wave.children]};
     });
     const speechEnvelope = [0.16, 0.13, 0.20, 0.42, 0.78, 0.95, 0.62, 0.36, 0.51, 0.84, 0.57, 0.25, 0.13, 0.12, 0.17, 0.33, 0.64, 0.90, 0.72, 0.43, 0.26, 0.55, 0.79, 0.48, 0.21, 0.15, 0.12, 0.15, 0.29, 0.58, 0.82, 0.53, 0.31, 0.65, 0.96, 0.70, 0.38, 0.18, 0.12, 0.16, 0.24, 0.46, 0.73, 0.61, 0.32, 0.19, 0.13, 0.16];
+    const waveColors = ['currentColor', 'var(--wave-cool)', 'var(--wave-soft)'];
     let wavePlaying = true, waveFrame = null, waveTime = 0, waveLastFrame = null;
     function paintWaves() {
       waveforms.forEach(({element, bars}) => {
         if (!element.getClientRects().length) return;
         bars.forEach((bar, index) => {
-          const position = index + waveTime * 9;
+          const position = ((index - waveTime * 9) % speechEnvelope.length + speechEnvelope.length) % speechEnvelope.length;
           const sample = Math.floor(position), fraction = position - sample;
           const eased = fraction * fraction * (3 - 2 * fraction);
           const from = speechEnvelope[sample % speechEnvelope.length];
           const to = speechEnvelope[(sample + 1) % speechEnvelope.length];
           bar.style.transform = `scaleY(${(from + (to - from) * eased).toFixed(3)})`;
+          const colorPosition = ((index / (bars.length - 1) * 1.8 - waveTime * 0.22) % waveColors.length + waveColors.length) % waveColors.length;
+          const colorIndex = Math.floor(colorPosition);
+          const colorMix = ((colorPosition - colorIndex) * 100).toFixed(1);
+          bar.style.backgroundColor = `color-mix(in oklch, ${waveColors[colorIndex]}, ${waveColors[(colorIndex + 1) % waveColors.length]} ${colorMix}%)`;
         });
       });
     }
