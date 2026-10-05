@@ -334,9 +334,13 @@ body:not([data-page="focus"]):not([data-page="assistant"]) .toast { bottom: calc
 @media (pointer: coarse) { [data-record-id] { -webkit-touch-callout: none; } .record-open,.task-title { user-select: none; } }
 @media (hover: hover) and (pointer: fine) { .focus-menu-hint .mouse-tip { display: inline; } .focus-menu-hint .touch-tip { display: none; } }
 @media (min-width: 1024px) {
-  #tasks .text-action { min-height: 36px; }
   .group-emblem svg { width: 24px; height: 24px; stroke-width: 2; }
   .folder-tile[aria-expanded="true"] .group-emblem:not(.is-folder) svg, .folder-tile.is-drag-target .group-emblem:not(.is-folder) svg { transform: none; }
+}
+@media (min-width: 600px) and (pointer: fine) {
+  #tasks .text-action { min-height: 32px; padding: 5px 10px; border-radius: 7px; }
+  #tasks .text-action[data-action="start"], #tasks .text-action[data-action="done"] { min-width: 0; padding-inline: 10px; }
+  .budget .chip { min-height: 36px; padding: 6px 12px; border-radius: 9px; }
 }
 .folder-stage { overflow-anchor: none; }
 .folder-hover-preview { min-height: 0; overflow: hidden; }
