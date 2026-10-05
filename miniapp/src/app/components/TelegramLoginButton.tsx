@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 import { TelegramGlyph } from '@/app/components/TelegramLogo';
 
 const BOT_ID = import.meta.env.VITE_TELEGRAM_BOT_ID || '8738130486';
@@ -6,6 +7,8 @@ const HASH_PREFIX = '#tgAuthResult=';
 
 type Props = {
   onAuth: (fields: Record<string, string>) => void;
+  label?: string;
+  className?: string;
 };
 
 type AuthResult =
@@ -40,7 +43,7 @@ function readAuthResult(): AuthResult {
 // страницы, а не всплывающее окно, — если человек отменит вход у Telegram,
 // он просто не окажется здесь с этим хешем, и страница не зависает в
 // промежуточном состоянии, потому что мы его и не заводили.
-export function TelegramLoginButton({ onAuth }: Props) {
+export function TelegramLoginButton({ onAuth, label = 'Telegram', className }: Props) {
   const [parseError, setParseError] = useState(false);
 
   useEffect(() => {
@@ -70,10 +73,10 @@ export function TelegramLoginButton({ onAuth }: Props) {
       <button
         type="button"
         onClick={handleClick}
-        className="flex items-center justify-center gap-3 py-3 px-6 rounded-2xl font-semibold text-white transition-all active:scale-95 cursor-pointer bg-[#2AABEE] hover:bg-[#229ED9]"
+        className={cn('flex items-center justify-center gap-3 py-3 px-6 rounded-2xl font-semibold text-white transition-all active:scale-95 cursor-pointer bg-[#2AABEE] hover:bg-[#229ED9]', className)}
       >
-        <TelegramGlyph className="h-5 w-5 text-white" />
-        Telegram
+        {label === 'Telegram' && <TelegramGlyph className="h-5 w-5 text-white" />}
+        {label}
       </button>
       {parseError && (
         <p className="text-xs text-destructive text-center">

@@ -1,0 +1,46 @@
+.munin-assistant {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.munin-chat-heading { flex-shrink: 0; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.munin-chat-heading h1 { font-size: 28px; font-weight: 550; line-height: 1.2; letter-spacing: -.6px; }
+.munin-chat-heading p { margin-top: 7px; font-size: 13px; color: var(--muted-foreground); }
+.munin-conversation { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 8px 24px 0; scrollbar-gutter: stable; }
+.munin-chat-intro { padding: 22px 0; max-width: 60ch; }
+.munin-chat-intro > p { font-size: 15px; line-height: 1.65; color: var(--muted-foreground); }
+.munin-chat-examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+.munin-chat-examples button { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; min-height: 44px; font-size: 12px; text-align: left; transition: background-color .18s ease-out; }
+.munin-chat-examples button:hover { background: var(--secondary); }
+.munin-chat-examples button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.munin-chat-entry { margin-bottom: 24px; overflow-wrap: anywhere; }
+.munin-user-entry { width: fit-content; max-width: 85%; margin-left: auto; }
+.munin-message-meta { margin-bottom: 7px; color: var(--muted-foreground); font-size: 11px; text-align: right; }
+.munin-user-message { background: var(--secondary); color: var(--foreground); border-radius: 20px 20px 6px 20px; padding: 14px 18px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
+.munin-chat-entry > [data-slot="card"] { width: fit-content; max-width: 92%; box-shadow: none; border-radius: 18px; }
+.munin-chat-entry > .munin-chat-proposal { width: 92%; max-width: 92%; border-radius: 22px; box-shadow: none; }
+.munin-composer { flex-shrink: 0; border-top: 1px solid var(--border); padding-top: 14px; }
+.munin-composer-field { display: flex; align-items: flex-end; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); }
+.munin-composer-field > .grid { min-width: 0; }
+.munin-composer-field .munin-message-input { background: transparent; color: var(--foreground); border: 0; outline: none; border-radius: 10px; box-shadow: none; padding: 8px; max-height: 128px; font-size: 14px; }
+.munin-composer-field .munin-message-input::placeholder { color: var(--muted-foreground); opacity: 1; }
+.munin-composer-field .munin-message-input:focus-visible { box-shadow: inset 0 0 0 1px var(--ring); }
+.munin-composer-field > button, .munin-composer-field > .relative > button { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; }
+.munin-composer-hint { margin-top: 8px; color: var(--muted-foreground); font-size: 11px; }
+@media (max-width: 767px) {
+  .munin-chat-heading { padding-bottom: 12px; }
+  .munin-chat-heading h1 { font-size: 23px; }
+  .munin-chat-heading p { font-size: 12px; }
+  .munin-conversation { padding-top: 16px; padding-right: 0; }
+  .munin-chat-intro { padding: 12px 0; }
+  .munin-chat-entry > [data-slot="card"], .munin-chat-entry > .munin-chat-proposal { max-width: 100%; }
+  .munin-chat-entry > .munin-chat-proposal { width: 100%; }
+  .munin-composer-field { gap: 4px; padding: 6px; }
+  .munin-composer-field .munin-message-input { font-size: 16px; }
+  .munin-composer-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .munin-chat-examples button { transition: none; } }

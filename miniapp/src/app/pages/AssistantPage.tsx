@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IconSend, IconAlertTriangle } from '@tabler/icons-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   useSendAssistantMessage,
   useSetActionAccepted,
@@ -19,9 +19,9 @@ import { ProposalCard } from '@/app/components/ProposalCard';
 import { VoiceRecorderTrigger } from '@/app/components/VoiceRecorderTrigger';
 import { VoiceRecordingBar } from '@/app/components/VoiceRecordingBar';
 import { Button } from '@/app/components/ui/button';
-import { Textarea } from '@/app/components/ui/textarea';
 import { Card } from '@/app/components/ui/card';
 import { cn } from '@/lib/utils';
+import '@/styles/assistant.css';
 
 type Entry =
   | { kind: 'user'; text: string }
@@ -52,6 +52,26 @@ function errorMessage(error: unknown): string {
 export function AssistantPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState('');
+  const conversation = useRef<HTMLDivElement>(null);
+  const inputField = useRef<HTMLTextAreaElement>(null);
+  const previousCount = useRef(0);
+  const followReplies = useRef(true);
+  const reduceMotion = useReducedMotion();
+  const lastKind = entries[entries.length - 1]?.kind;
+
+  useEffect(() => {
+    const log = conversation.current;
+    if (!log) return;
+    if (entries.length > previousCount.current || followReplies.current) {
+      log.scrollTop = log.scrollHeight;
+    }
+    previousCount.current = entries.length;
+  }, [entries.length, lastKind]);
+
+  const useExample = (text: string) => {
+    setInput(text);
+    inputField.current?.focus();
+  };
   const sendMessage = useSendAssistantMessage();
   const setActionAccepted = useSetActionAccepted();
   const selectAlternative = useSelectAlternative();
@@ -68,6 +88,7 @@ export function AssistantPage() {
   };
 
   const send = (payload: { text?: string; file?: File }) => {
+    if (sendMessage.isPending) return;
     const localId = nextId();
     const userText = payload.text ?? '🎤 Голосовое сообщение';
     setEntries((prev) => [...prev, { kind: 'user', text: userText }, { kind: 'pending', localId }]);
@@ -157,28 +178,48 @@ export function AssistantPage() {
   };
 
   return (
-    <div className="mx-auto flex h-full max-w-2xl flex-col">
-      <div className="mb-4">
-        <h1 className="text-lg font-semibold">Ассистент</h1>
-      </div>
+    <div className="munin-assistant">
+      <header className="munin-chat-heading">
+        <h1>Разберём твои дела.</h1>
+        <p>Расскажи своими словами. Изменения подтверждаешь ты.</p>
+      </header>
 
-      <div className="flex-1 space-y-3 overflow-y-auto pb-4">
+      <div
+        className="munin-conversation"
+        ref={conversation}
+        role="log"
+        aria-label="Переписка с Мунином"
+        aria-live="polite"
+        aria-relevant="additions"
+        onScroll={() => {
+          const log = conversation.current;
+          if (log) followReplies.current = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+        }}
+      >
         {entries.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            Расскажите, что нужно сделать — своими словами, как обычному человеку. Ассистент предложит, что изменить, и ничего не тронет без вашего подтверждения.
-          </p>
+          <div className="munin-chat-intro">
+            <p>Можно добавить дела, перенести планы или рассказать, что уже готово. Мунин предложит изменения, а ты проверишь их перед применением.</p>
+            <div className="munin-chat-examples" aria-label="Примеры обращений">
+              {['Завтра нужно отправить документы', 'Позвонил Саше, задача готова', 'Перенеси встречу на пятницу'].map((example) => (
+                <button type="button" key={example} onClick={() => useExample(example)}>{example}</button>
+              ))}
+            </div>
+          </div>
         )}
         <AnimatePresence initial={false}>
           {entries.map((entry, i) => (
             <motion.div
               key={'localId' in entry ? entry.localId : `user-${i}`}
-              initial={{ opacity: 0, y: 8 }}
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: reduceMotion ? 0 : 0.18 }}
+              className="munin-chat-entry"
             >
               {entry.kind === 'user' && (
-                <div className="ml-auto max-w-[80%] break-words rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-4 py-2 text-sm">
-                  {entry.text}
+                <div className="munin-user-entry">
+                  <p className="munin-message-meta">Ты</p>
+                  <p className="munin-user-message">{entry.text}</p>
                 </div>
               )}
 
@@ -216,7 +257,7 @@ export function AssistantPage() {
                   onReject={() => reject(entry.proposal, entry.localId)}
                   applying={applyProposal.isPending}
                   rejecting={rejectProposal.isPending}
-                  className="max-w-[85%]"
+                  className="munin-chat-proposal"
                 />
               )}
             </motion.div>
@@ -224,38 +265,43 @@ export function AssistantPage() {
         </AnimatePresence>
       </div>
 
-      <div className="flex items-end gap-2 border-t border-border pt-3">
-        {/* Textarea и полоса записи лежат в одной ячейке грида — высота слота
-            определяется большей из них и не меняется при старте записи, иначе
-            кнопка справа подпрыгивает в момент, когда палец уже на ней. */}
-        <div className="grid flex-1">
-          <Textarea
-            key="input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            placeholder="Например: закрой молоко и позвони Марку завтра"
-            className={cn('col-start-1 row-start-1 min-h-16 max-h-32 resize-none', recording.isRecording && 'invisible pointer-events-none')}
-            aria-hidden={recording.isRecording}
-          />
-          <div
-            className={cn('col-start-1 row-start-1 flex items-center', !recording.isRecording && 'invisible pointer-events-none')}
-            aria-hidden={!recording.isRecording}
-          >
-            <VoiceRecordingBar key="bar" recording={recording} />
+      <div className="munin-composer">
+        <div className="munin-composer-field">
+          {/* Textarea и полоса записи лежат в одной ячейке грида — высота слота
+              определяется большей из них и не меняется при старте записи, иначе
+              кнопка справа подпрыгивает в момент, когда палец уже на ней. */}
+          <div className="grid flex-1">
+            <textarea
+              key="input"
+              ref={inputField}
+              aria-label="Сообщение Мунину"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              placeholder="Что нужно сделать или что изменилось?"
+              className={cn('munin-message-input col-start-1 row-start-1 w-full min-h-16 max-h-32 resize-none', recording.isRecording && 'invisible pointer-events-none')}
+              aria-hidden={recording.isRecording}
+            />
+            <div
+              className={cn('col-start-1 row-start-1 flex items-center', !recording.isRecording && 'invisible pointer-events-none')}
+              aria-hidden={!recording.isRecording}
+            >
+              <VoiceRecordingBar key="bar" recording={recording} />
+            </div>
           </div>
+          <VoiceRecorderTrigger key="trigger" recording={recording} disabled={sendMessage.isPending} />
+          {!recording.isRecording && (
+            <Button key="send" size="icon" onClick={handleSubmit} disabled={!input.trim() || sendMessage.isPending} aria-label="Отправить сообщение" title="Отправить" className="munin-send-message">
+              <IconSend className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-        <VoiceRecorderTrigger key="trigger" recording={recording} disabled={sendMessage.isPending} />
-        {!recording.isRecording && (
-          <Button key="send" size="icon" onClick={handleSubmit} disabled={!input.trim() || sendMessage.isPending} title="Отправить">
-            <IconSend className="h-4 w-4" />
-          </Button>
-        )}
+        <p className="munin-composer-hint">Enter: отправить · Shift + Enter: новая строка</p>
       </div>
     </div>
   );

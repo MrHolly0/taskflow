@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { IconMail, IconPhone } from '@tabler/icons-react';
+import { IconMail, IconPhone, IconShieldCheck } from '@tabler/icons-react';
 import { Card } from '@/app/components/ui/card';
-import { Badge } from '@/app/components/ui/badge';
 import { Button, buttonVariants } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { Separator } from '@/app/components/ui/separator';
@@ -18,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from '@/app/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import '@/styles/integrations.css';
 import { EmailCodeStep } from '@/app/components/EmailCodeStep';
 import { PhoneWaitingStep } from '@/app/components/PhoneWaitingStep';
 import { TelegramLoginButton } from '@/app/components/TelegramLoginButton';
@@ -44,6 +44,15 @@ import {
   type MergeConflictResponse,
   type PhoneBindConfirmationStatus,
 } from '@/lib/hooks/useIdentities';
+
+function identityErrorDetail(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('response' in error)) return undefined;
+  const response = error.response;
+  if (typeof response !== 'object' || response === null || !('data' in response)) return undefined;
+  const data = response.data;
+  if (typeof data !== 'object' || data === null || !('detail' in data)) return undefined;
+  return typeof data.detail === 'string' ? data.detail : undefined;
+}
 
 const EMPTY_TRANSFER: AccountTransferResult = {
   tasks: 0, groups: 0, tags: 0, notifications: 0, auditEvents: 0, proposals: 0, identities: 0,
@@ -99,28 +108,24 @@ function useMergeFlow(onMerged: (result: IdentityBindResponse) => void, onResolv
 
 function IntegrationsHeader() {
   return (
-    <div className="space-y-1">
-      <h1 className="text-2xl font-semibold">Интеграции</h1>
-      <p className="text-sm text-muted-foreground">
-        Способы входа в аккаунт. Привяжи хотя бы два, чтобы не потерять доступ, если один перестанет работать.
-      </p>
-    </div>
+    <header className="munin-integrations-heading">
+      <h1>Интеграции</h1>
+      <p>Один аккаунт, несколько способов входа.</p>
+    </header>
   );
 }
 
-// Подключено и не подключено — два значения одного признака, а не разные
-// сущности: одна и та же плашка, различающаяся только цветом.
-function StatusBadge({ connected, children }: { connected: boolean; children: React.ReactNode }) {
+function IdentityState({ connected, children }: { connected: boolean; children: React.ReactNode }) {
   return (
-    <Badge variant={connected ? 'success' : 'destructive'} className="mt-0.5">
+    <span className={cn('munin-identity-state', connected && 'is-connected')}>
       {children}
-    </Badge>
+    </span>
   );
 }
 
 function SectionSkeleton() {
   return (
-    <div className="flex items-center gap-3" aria-hidden="true">
+    <div className="munin-identity-provider" aria-hidden="true">
       <div className="h-10 w-10 shrink-0 rounded-lg bg-muted animate-pulse" />
       <div className="flex flex-col gap-1.5">
         <div className="h-3.5 w-20 rounded bg-muted animate-pulse" />
@@ -141,7 +146,7 @@ export function IntegrationsPage() {
   // «ничего не подключено» и «не знаем, что подключено».
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="munin-integrations">
         <IntegrationsHeader />
         <Card className="p-6 flex flex-col gap-6">
           <SectionSkeleton />
@@ -154,7 +159,7 @@ export function IntegrationsPage() {
 
   if (isError || !identities) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="munin-integrations">
         <IntegrationsHeader />
         <Card className="p-6">
           <div className="flex flex-col items-center gap-3 py-6 text-center">
@@ -179,26 +184,19 @@ export function IntegrationsPage() {
 
   const handleUnbind = (provider: IdentityProvider) => {
     unbind.mutate(provider, {
-      onError: (err: any) => {
-        const detail = err?.response?.data?.detail;
-        toast.error(detail || 'Не получилось отвязать способ входа');
-      },
+      onError: (err) => toast.error(identityErrorDetail(err) ?? 'Не получилось отвязать способ входа'),
     });
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="munin-integrations">
       <IntegrationsHeader />
 
-      <Card className="p-6 flex flex-col gap-6">
-        {/* Не предупреждение (для этого есть диалог согласия в момент
-            привязки) — единственное место, где человек может узнать про
-            слияние учёток заранее, до того как оно случится. */}
-        <p className="text-xs text-muted-foreground">
-          Один аккаунт — несколько способов входа. Если на почте или в Telegram уже была отдельная
-          учетка с задачами, при подключении мы предложим перенести их сюда, в одну.
-        </p>
-
+      <div className="munin-access-note">
+        <IconShieldCheck size={18} aria-hidden="true" />
+        <p>{identities.length > 1 ? 'Запасной способ входа подключён.' : 'Подключи второй способ входа, чтобы сохранить доступ к задачам.'}</p>
+      </div>
+      <div className="munin-identity-list">
         <TelegramSection
           connected={Boolean(telegram)}
           canUnbind={canUnbind}
@@ -230,7 +228,14 @@ export function IntegrationsPage() {
             />
           </>
         )}
-      </Card>
+      </div>
+      <div className="munin-identity-help">
+        {identities.length === 1 && <p>Единственный способ входа нельзя отключить.</p>}
+        <details>
+          <summary>Если у меня уже есть другой аккаунт?</summary>
+          <p>При подключении почты или Telegram предложим перенести задачи из прежнего аккаунта. Число задач и групп появится до твоего подтверждения.</p>
+        </details>
+      </div>
     </div>
   );
 }
@@ -259,23 +264,23 @@ function TelegramSection({
       },
       onError: (err) => {
         if (merge.catchConflict(err)) return;
-        toast.error((err as any)?.response?.data?.detail || 'Не получилось привязать Telegram');
+        toast.error(identityErrorDetail(err) ?? 'Не получилось привязать Telegram');
       },
     });
   };
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <TelegramLogo className="h-10 w-10 shrink-0" />
+    <section className="munin-identity-row">
+      <div className="munin-identity-summary">
+        <div className="munin-identity-provider">
+          <TelegramLogo className="munin-telegram-logo" />
           <div>
             <p className="text-sm font-medium">Telegram</p>
-            <StatusBadge connected={connected}>{connected ? 'Подключен' : 'Не подключен'}</StatusBadge>
+            <IdentityState connected={connected}>{connected ? 'Подключён' : 'Вход через Telegram'}</IdentityState>
           </div>
         </div>
 
-        {connected && (
+        {connected ? (
           <AlertDialog>
             {/* Без asChild: Button — обычная функция без forwardRef. */}
             <AlertDialogTrigger
@@ -298,10 +303,10 @@ function TelegramSection({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        )}
+        ) : !isTelegramWebApp() ? (
+          <TelegramLoginButton onAuth={handleAuth} label="Подключить" className="munin-connect-button" />
+        ) : null}
       </div>
-
-      {!connected && !isTelegramWebApp() && <TelegramLoginButton onAuth={handleAuth} />}
 
       <MergeConflictDialog
         conflict={merge.conflict}
@@ -361,15 +366,15 @@ function EmailSection({
   };
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <IconMail className="h-5 w-5 text-primary" />
+    <section className="munin-identity-row">
+      <div className="munin-identity-summary">
+        <div className="munin-identity-provider">
+          <div className="munin-identity-icon">
+            <IconMail className="h-5 w-5" />
           </div>
           <div>
             <p className="text-sm font-medium">Почта</p>
-            <StatusBadge connected={connected}>{connected ? externalId : 'Не подключена'}</StatusBadge>
+            <IdentityState connected={connected}>{connected ? externalId : 'Код в письме'}</IdentityState>
           </div>
         </div>
 
@@ -396,12 +401,12 @@ function EmailSection({
             </AlertDialogContent>
           </AlertDialog>
         ) : step === 'idle' ? (
-          <Button size="sm" onClick={() => setStep('email')}>Подключить</Button>
+          <Button variant="outline" size="sm" className="munin-connect-button" onClick={() => setStep('email')}>Подключить</Button>
         ) : null}
       </div>
 
       {step === 'email' && (
-        <form onSubmit={handleSubmitEmail} className="flex gap-2">
+        <form onSubmit={handleSubmitEmail} className="munin-identity-form">
           <Input
             type="email"
             required
@@ -411,10 +416,12 @@ function EmailSection({
             placeholder="почта@пример.ру"
             disabled={requestCode.isPending}
             className="h-10"
+            aria-label="Адрес почты"
           />
           <Button type="submit" disabled={requestCode.isPending || !email} className="h-10 shrink-0">
             Продолжить
           </Button>
+          <Button type="button" variant="ghost" onClick={() => setStep('idle')} disabled={requestCode.isPending}>Отмена</Button>
         </form>
       )}
 
@@ -488,15 +495,15 @@ function PhoneSection({
   };
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <IconPhone className="h-5 w-5 text-primary" />
+    <section className="munin-identity-row">
+      <div className="munin-identity-summary">
+        <div className="munin-identity-provider">
+          <div className="munin-identity-icon">
+            <IconPhone className="h-5 w-5" />
           </div>
           <div>
             <p className="text-sm font-medium">Телефон</p>
-            <StatusBadge connected={connected}>{connected ? externalId : 'Не подключен'}</StatusBadge>
+            <IdentityState connected={connected}>{connected ? externalId : 'Подтверждение звонком'}</IdentityState>
           </div>
         </div>
 
@@ -523,12 +530,12 @@ function PhoneSection({
             </AlertDialogContent>
           </AlertDialog>
         ) : step === 'idle' && available ? (
-          <Button size="sm" onClick={() => setStep('phone')}>Подключить</Button>
+          <Button variant="outline" size="sm" className="munin-connect-button" onClick={() => setStep('phone')}>Подключить</Button>
         ) : null}
       </div>
 
       {step === 'phone' && available && (
-        <form onSubmit={handleSubmitPhone} className="flex gap-2">
+        <form onSubmit={handleSubmitPhone} className="munin-identity-form">
           <Input
             type="tel"
             inputMode="tel"
@@ -539,10 +546,12 @@ function PhoneSection({
             placeholder="+7 (999) 123-45-67"
             disabled={requestConfirmation.isPending}
             className="h-10"
+            aria-label="Номер телефона"
           />
           <Button type="submit" disabled={requestConfirmation.isPending || !phone} className="h-10 shrink-0">
             Продолжить
           </Button>
+          <Button type="button" variant="ghost" onClick={() => setStep('idle')} disabled={requestConfirmation.isPending}>Отмена</Button>
         </form>
       )}
 

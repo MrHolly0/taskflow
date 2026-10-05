@@ -1,121 +1,486 @@
-import { Card } from '@/app/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { useTaskStats } from '@/lib/hooks/useTasks';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { IconArrowRight, IconLoader2 } from '@tabler/icons-react';
+import { Button } from '@/app/components/ui/button';
+import { Input } from '@/app/components/ui/input';
+import { TaskDetailModal } from '@/app/components/TaskDetailModal';
+import { useGroups, useTasksList, useTaskStats, useUpdateTask } from '@/lib/hooks/useTasks';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
-import { isSameZonedDay, zonedDayKey } from '@/lib/utils';
+import { useSettings } from '@/lib/hooks/useSettings';
+import { useStore } from '@/lib/store';
+import { isActiveTask, useTaskUi } from '@/lib/task-ui';
+import { zonedDayKey } from '@/lib/utils';
+import '@/styles/stats.css';
 
-/** Склонение для 2–4 («2 активных дня») и остальных случаев. */
-function pluralDays(count: number): string {
-  const tail = count % 10;
-  const teen = count % 100;
-  if (tail === 1 && teen !== 11) return 'активный день';
-  if (tail >= 2 && tail <= 4 && (teen < 12 || teen > 14)) return 'активных дня';
-  return 'активных дней';
+function readGoal(key: string): number {
+  try {
+    const saved = Number(localStorage.getItem(key));
+    return Number.isInteger(saved) && saved >= 1 && saved <= 1000 ? saved : 5;
+  } catch {
+    return 5;
+  }
+}
+
+function deeds(count: number): string {
+  const tail = count % 10,
+    teen = count % 100;
+  if (tail === 1 && teen !== 11) return 'дело';
+  if (tail >= 2 && tail <= 4 && (teen < 12 || teen > 14)) return 'дела';
+  return 'дел';
+}
+
+// Ключи календарных дней сдвигаем в UTC, чтобы переход летнего времени не менял окно.
+function recentDays(today: string): string[] {
+  const date = new Date(`${today}T12:00:00Z`);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(date);
+    day.setUTCDate(day.getUTCDate() - 6 + index);
+    return day.toISOString().slice(0, 10);
+  });
+}
+
+function dayLabel(key: string, weekday = false): string {
+  return new Date(`${key}T12:00:00Z`).toLocaleDateString(
+    'ru-RU',
+    weekday
+      ? { weekday: 'short', timeZone: 'UTC' }
+      : { day: 'numeric', month: 'short', timeZone: 'UTC' }
+  );
 }
 
 export function StatsPage() {
-  const { data: statsTasks = [] } = useTaskStats();
+  const statsQuery = useTaskStats();
+  const tasksQuery = useTasksList();
+  const { data: groups = [] } = useGroups();
+  const settingsQuery = useSettings();
   const { timezone, isReady: timezoneReady } = useUserTimezone();
+  const updateTask = useUpdateTask();
+  const navigate = useNavigate();
+  const reveal = useTaskUi((state) => state.reveal);
+  const openCapture = useTaskUi((state) => state.openCapture);
+  const userId = useStore((state) => state.user?.id);
+  const goalKey = `munin-weekly-goal:${userId ?? 'local'}`;
+  const [goal, setGoal] = useState(() => readGoal(goalKey));
+  const [goalDraft, setGoalDraft] = useState(String(goal));
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [goalError, setGoalError] = useState('');
+  const [panel, setPanel] = useState<'results' | 'directions'>('results');
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [receiptLimit, setReceiptLimit] = useState(12);
+  const [openedTaskId, setOpenedTaskId] = useState<string | null>(null);
+  const [startError, setStartError] = useState('');
+  useEffect(() => {
+    const value = readGoal(goalKey);
+    setGoal(value);
+    setGoalDraft(String(value));
+  }, [goalKey]);
 
-  const now = new Date();
-
-  // Одно окно на всю страницу: последние семь календарных дней в поясе пользователя.
-  // Карточки и график считаются по нему же, иначе итоги расходятся со столбцами.
-  const windowDays = timezoneReady
-    ? Array.from({ length: 7 }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (6 - i));
-        return date;
-      })
-    : [];
-
-  const windowKeys = new Set(windowDays.map((date) => zonedDayKey(date, timezone)));
+  const statsTasks = statsQuery.data ?? [],
+    tasks = tasksQuery.data ?? [];
+  const keys = timezoneReady ? recentDays(zonedDayKey(new Date(), timezone)) : [];
+  const windowKeys = new Set(keys);
   const inWindow = (value?: string | null) =>
-    !!value && windowKeys.has(zonedDayKey(value, timezone));
-
-  const created = statsTasks.filter((t) => inWindow(t.createdAt)).length;
-  const done = statsTasks.filter((t) => inWindow(t.completedAt)).length;
-  const overdue = statsTasks.filter((t) =>
-    t.deadline && new Date(t.deadline) < now && t.status !== 'DONE' && t.status !== 'CANCELLED'
-  ).length;
-
-  const activityData = windowDays.map((date) => ({
-    name: date.toLocaleDateString('ru-RU', { weekday: 'short', timeZone: timezone }),
-    создано: statsTasks.filter((task) => isSameZonedDay(task.createdAt, date, timezone)).length,
-    сделано: statsTasks.filter(
-      (task) => task.completedAt && isSameZonedDay(task.completedAt, date, timezone)
+    Boolean(value && windowKeys.has(zonedDayKey(value, timezone)));
+  const days = keys.map((key) => ({
+    key,
+    created: statsTasks.filter(
+      (task) => task.createdAt && zonedDayKey(task.createdAt, timezone) === key
+    ).length,
+    done: statsTasks.filter(
+      (task) => task.completedAt && zonedDayKey(task.completedAt, timezone) === key
     ).length,
   }));
+  const done = days.reduce((sum, day) => sum + day.done, 0);
+  const created = days.reduce((sum, day) => sum + day.created, 0);
+  const activeDays = days.filter((day) => day.created || day.done).length;
+  const completed = tasks
+    .filter((task) => task.status === 'DONE' && inWindow(task.completedAt))
+    .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''));
+  const receipts = completed.filter(
+    (task) =>
+      (!selectedDay || zonedDayKey(task.completedAt!, timezone) === selectedDay) &&
+      (selectedGroup === null || (task.groupId ?? '') === selectedGroup)
+  );
+  const progressGroups = [...new Set(completed.map((task) => task.groupId ?? ''))]
+    .map((id) => {
+      const wins = completed.filter((task) => (task.groupId ?? '') === id);
+      return {
+        id,
+        name: groups.find((group) => group.id === id)?.name ?? wins[0]?.groupName ?? 'Без группы',
+        wins,
+      };
+    })
+    .sort((a, b) => b.wins.length - a.wins.length);
+  const active = tasks.filter(isActiveTask);
+  const next =
+    active.find((task) => task.status === 'TODO' && task.priority === 'URGENT') ??
+    active.find((task) => task.status === 'TODO') ??
+    active.find((task) => task.status === 'IN_PROGRESS');
+  const remaining = Math.max(0, goal - done);
+  const heading =
+    remaining === 0
+      ? 'Твой ориентир на неделю закрыт.'
+      : done === 0
+        ? 'Начни с одного дела.'
+        : `Ещё ${remaining === 1 ? 'одно дело' : `${remaining} ${deeds(remaining)}`} до цели.`;
+  const openedTask = tasks.find((task) => task.id === openedTaskId) ?? null;
+  const clearFilters = () => {
+    setSelectedDay(null);
+    setSelectedGroup(null);
+    setReceiptLimit(12);
+  };
 
-  const activeDays = activityData.filter((d) => d.создано > 0 || d.сделано > 0).length;
+  const saveGoal = (event: FormEvent) => {
+    event.preventDefault();
+    const value = Number(goalDraft);
+    if (!Number.isInteger(value) || value < 1 || value > 1000) {
+      setGoalError('Выбери от 1 до 1000 дел.');
+      return;
+    }
+    try {
+      localStorage.setItem(goalKey, String(value));
+      setGoalError('');
+    } catch {
+      setGoalError('Браузер не сохранил цель. Она действует до закрытия страницы.');
+    }
+    setGoal(value);
+    setGoalEditing(false);
+  };
+  const startNext = async () => {
+    if (!next) return;
+    setStartError('');
+    try {
+      if (next.status !== 'IN_PROGRESS')
+        await updateTask.mutateAsync({ id: next.id, status: 'IN_PROGRESS' });
+      reveal([next.id]);
+      navigate('/');
+    } catch {
+      setStartError('Не получилось взять дело в работу. Попробуй ещё раз.');
+    }
+  };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold">Статистика</h1>
-
-      <div>
-        <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">За 7 дней</h2>
-        <div className="grid grid-cols-3 gap-3">
-          <Card className="p-5 text-center">
-            <div className="text-3xl font-bold">{created}</div>
-            <div className="text-xs text-muted-foreground mt-1.5">создано</div>
-          </Card>
-          <Card className="p-5 text-center">
-            <div className="text-3xl font-bold text-green-600 dark:text-green-400">{done}</div>
-            <div className="text-xs text-muted-foreground mt-1.5">сделано</div>
-          </Card>
-          <Card className="p-5 text-center">
-            <div className="text-3xl font-bold text-red-500">{overdue}</div>
-            <div className="text-xs text-muted-foreground mt-1.5">просрочено</div>
-          </Card>
+    <div className="munin-stats">
+      <header className="stats-heading">
+        <h1>Статистика</h1>
+        <p>
+          {keys.length
+            ? `${dayLabel(keys[0])} — ${dayLabel(keys[6])} · последние 7 дней`
+            : 'Твоя неделя'}
+        </p>
+      </header>
+      {statsQuery.isError || settingsQuery.isError ? (
+        <div className="stats-empty" role="alert">
+          <h2>Не удалось загрузить статистику</h2>
+          <p>Попробуй обновить данные.</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              void statsQuery.refetch();
+              void settingsQuery.refetch();
+            }}
+          >
+            Повторить
+          </Button>
         </div>
-      </div>
-
-      <Card className="p-5">
-        <div className="flex items-center gap-4">
-          <div className="text-4xl">🔥</div>
-          <div>
-            <div className="text-xl font-semibold">{activeDays} {pluralDays(activeDays)}</div>
-            <p className="text-sm text-muted-foreground">Отмечено за последние 7 дней</p>
+      ) : !timezoneReady || statsQuery.isPending ? (
+        <p className="stats-loading" role="status">
+          <IconLoader2 className="animate-spin" size={18} /> Загружаем результаты…
+        </p>
+      ) : (
+        <div className="stats-progress-layout" data-panel={panel}>
+          <div className="stats-main">
+            <section className="stats-week-intent" aria-labelledby="stats-goal-heading">
+              <p className="stats-eyebrow">Ориентир недели</p>
+              <h2 id="stats-goal-heading">{heading}</h2>
+              <div
+                className="stats-intent-track"
+                role="progressbar"
+                aria-label="Ориентир недели"
+                aria-valuemin={0}
+                aria-valuemax={goal}
+                aria-valuenow={Math.min(done, goal)}
+                aria-valuetext={`Завершено ${done} из ${goal}`}
+              >
+                <div
+                  className="stats-intent-fill"
+                  style={{ transform: `scaleX(${Math.min(1, done / goal)})` }}
+                />
+                <div
+                  className="stats-intent-ticks"
+                  style={{ gridTemplateColumns: `repeat(${Math.min(10, goal)}, 1fr)` }}
+                >
+                  {Array.from({ length: Math.min(10, goal) }, (_, index) => (
+                    <i key={index} />
+                  ))}
+                </div>
+              </div>
+              <div className="stats-intent-caption">
+                <span>
+                  {done} из {goal} дел завершено
+                </span>
+                <button
+                  onClick={() => {
+                    setGoalDraft(String(goal));
+                    setGoalEditing(!goalEditing);
+                    setGoalError('');
+                  }}
+                  aria-expanded={goalEditing}
+                >
+                  Изменить цель
+                </button>
+              </div>
+              {goalEditing && (
+                <form className="stats-goal-editor" onSubmit={saveGoal}>
+                  <label htmlFor="weekly-goal">Сколько дел хочешь завершить за 7 дней?</label>
+                  <div>
+                    <Input
+                      id="weekly-goal"
+                      type="number"
+                      min={1}
+                      max={1000}
+                      required
+                      value={goalDraft}
+                      onChange={(event) => setGoalDraft(event.target.value)}
+                      autoFocus
+                    />
+                    <Button type="submit">Сохранить</Button>
+                    <Button type="button" variant="outline" onClick={() => setGoalEditing(false)}>
+                      Отмена
+                    </Button>
+                  </div>
+                  <p>Цель хранится в этом браузере.</p>
+                </form>
+              )}
+              {goalError && (
+                <p className="stats-error" role="status">
+                  {goalError}
+                </p>
+              )}
+            </section>
+            <div className="stats-mobile-tabs" role="group" aria-label="Раздел статистики">
+              <button aria-pressed={panel === 'results'} onClick={() => setPanel('results')}>
+                Сделанные дела
+              </button>
+              <button aria-pressed={panel === 'directions'} onClick={() => setPanel('directions')}>
+                Направления
+              </button>
+            </div>
+            <section className="stats-results" aria-label="Сделанные дела">
+              <div className="stats-week-rhythm" aria-label="Завершения по дням">
+                {days.map((day) => (
+                  <button
+                    key={day.key}
+                    className={`stats-rhythm-day ${day.done ? 'has-done' : ''}`}
+                    aria-pressed={selectedDay === day.key}
+                    aria-label={`${dayLabel(day.key)}: завершено ${day.done}`}
+                    onClick={() => {
+                      setSelectedDay(selectedDay === day.key ? null : day.key);
+                      setReceiptLimit(12);
+                    }}
+                  >
+                    <span>{dayLabel(day.key, true)}</span>
+                    <span className="stats-rhythm-stamp">{day.done || '·'}</span>
+                    <span>{Number(day.key.slice(-2))}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="stats-receipt-heading">
+                <h2>
+                  {selectedGroup !== null
+                    ? `${progressGroups.find((group) => group.id === selectedGroup)?.name ?? 'Выбранная группа'}${selectedDay ? ` · ${dayLabel(selectedDay)}` : ''}`
+                    : selectedDay
+                      ? `Сделано ${dayLabel(selectedDay)}`
+                      : 'Что уже позади'}
+                </h2>
+                <button onClick={clearFilters}>Вся неделя</button>
+              </div>
+              {tasksQuery.isPending ? (
+                <p className="stats-note" role="status">
+                  Загружаем сделанные дела…
+                </p>
+              ) : tasksQuery.isError ? (
+                <div className="stats-empty" role="alert">
+                  <p>Итоги загружены, но список дел пока недоступен.</p>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      void tasksQuery.refetch();
+                    }}
+                  >
+                    Повторить
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {done > completed.length && (
+                    <p className="stats-note">
+                      В итогах учтены и завершения, убранные из списка. Ниже — {completed.length} из{' '}
+                      {done} доступных дел.
+                    </p>
+                  )}
+                  {receipts.length ? (
+                    <>
+                      {receipts.slice(0, receiptLimit).map((task) => (
+                        <article className="stats-progress-receipt" key={task.id}>
+                          <span className="stats-receipt-mark" aria-hidden="true">
+                            ГОТОВО
+                          </span>
+                          <button onClick={() => setOpenedTaskId(task.id)}>
+                            {task.title}
+                            <small>{task.groupName || 'Без группы'}</small>
+                          </button>
+                          <time dateTime={task.completedAt}>
+                            {dayLabel(zonedDayKey(task.completedAt!, timezone))}
+                          </time>
+                        </article>
+                      ))}
+                      {receipts.length > receiptLimit && (
+                        <Button
+                          className="stats-show-more"
+                          variant="outline"
+                          onClick={() => setReceiptLimit(receiptLimit + 12)}
+                        >
+                          Ещё сделанные дела · {receipts.length - receiptLimit}
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <div className="stats-empty">
+                      <h3>
+                        {done && !selectedDay && selectedGroup === null
+                          ? 'Результаты сохранены в итогах'
+                          : selectedDay || selectedGroup !== null
+                            ? 'В этом разделе без завершений'
+                            : 'Здесь будут твои результаты'}
+                      </h3>
+                      <p>
+                        {done && !selectedDay && selectedGroup === null
+                          ? 'Завершённые дела уже убраны из списка.'
+                          : selectedDay || selectedGroup !== null
+                            ? 'Открой всю неделю, чтобы увидеть другие дни.'
+                            : 'Каждое завершённое дело остаётся в истории недели.'}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+              <section className="stats-audit">
+                <button aria-expanded={detailsOpen} onClick={() => setDetailsOpen(!detailsOpen)}>
+                  {detailsOpen ? 'Скрыть числа и даты' : 'Показать числа и даты'}
+                </button>
+                {detailsOpen && (
+                  <>
+                    <p className="stats-note">
+                      За те же 7 дней: добавлено {created}, завершено {done}, активных дней{' '}
+                      {activeDays}. Активность включает создание и завершение.
+                    </p>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>День</th>
+                          <th>Добавлено</th>
+                          <th>Готово</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {days.map((day) => (
+                          <tr key={day.key}>
+                            <td>{dayLabel(day.key)}</td>
+                            <td>{day.created}</td>
+                            <td>{day.done}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
+              </section>
+            </section>
           </div>
+          <aside className="stats-progress-side">
+            <h2>Что продвинулось</h2>
+            {tasksQuery.isPending ? (
+              <p className="stats-note">Загружаем направления…</p>
+            ) : tasksQuery.isError ? (
+              <p className="stats-note">Направления появятся после загрузки списка дел.</p>
+            ) : (
+              <>
+                {done > completed.length && (
+                  <p className="stats-note">По доступным в списке делам.</p>
+                )}
+                {progressGroups.length ? (
+                  progressGroups.map((group) => (
+                    <button
+                      key={group.id}
+                      className="stats-group-progress"
+                      onClick={() => {
+                        setSelectedGroup(group.id);
+                        setSelectedDay(null);
+                        setReceiptLimit(12);
+                        setPanel('results');
+                      }}
+                    >
+                      <strong>{group.name}</strong>
+                      <span>{group.wins.length} готово</span>
+                      <p>{group.wins[0].title}</p>
+                    </button>
+                  ))
+                ) : (
+                  <p className="stats-note">Завершения покажут, какие направления ты продвинул.</p>
+                )}
+              </>
+            )}
+            {!tasksQuery.isPending && !tasksQuery.isError && (
+              <section className="stats-next-step">
+                {next ? (
+                  <>
+                    <p className="stats-eyebrow">Можно продолжить с этого</p>
+                    <h3>{next.title}</h3>
+                    <p>
+                      {next.groupName || 'Без группы'}
+                      {next.estimateMinutes ? ` · около ${next.estimateMinutes} мин` : ''}
+                    </p>
+                    <Button
+                      disabled={updateTask.isPending}
+                      onClick={() => {
+                        void startNext();
+                      }}
+                    >
+                      {updateTask.isPending
+                        ? 'Сохраняем…'
+                        : next.status === 'IN_PROGRESS'
+                          ? 'Продолжить'
+                          : 'Взять в работу'}
+                      <IconArrowRight size={16} />
+                    </Button>
+                    {startError && (
+                      <p className="stats-error" role="alert">
+                        {startError}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h3>Активных дел не осталось</h3>
+                    <p>Можно выдохнуть или добавить новый план.</p>
+                    <Button variant="outline" onClick={openCapture}>
+                      Рассказать Мунину
+                    </Button>
+                  </>
+                )}
+              </section>
+            )}
+          </aside>
         </div>
-      </Card>
-
-      <Card className="p-5 space-y-4">
-        <h2 className="text-sm font-medium">Активность по дням</h2>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={activityData} barCategoryGap="30%">
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis
-              dataKey="name"
-              tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
-              stroke="var(--border)"
-            />
-            <YAxis
-              tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }}
-              stroke="var(--border)"
-              width={24}
-              allowDecimals={false}
-              domain={[0, (max: number) => Math.max(max, 4)]}
-            />
-            <Tooltip
-              cursor={{ fill: 'var(--accent)', opacity: 0.5 }}
-              contentStyle={{
-                backgroundColor: 'var(--card)',
-                color: 'var(--card-foreground)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '12px',
-              }}
-            />
-            <Legend
-              wrapperStyle={{ fontSize: '12px', color: 'var(--muted-foreground)' }}
-            />
-            <Bar dataKey="создано" fill="var(--chart-created)" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="сделано" fill="var(--primary)" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
+      )}
+      <TaskDetailModal
+        task={openedTask}
+        open={Boolean(openedTask)}
+        onClose={() => setOpenedTaskId(null)}
+      />
     </div>
   );
 }
