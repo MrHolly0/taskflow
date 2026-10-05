@@ -322,7 +322,7 @@ body:not([data-page="focus"]):not([data-page="assistant"]) .toast { bottom: calc
 .search-field:focus-within { outline: none; border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
 .select-search input:focus-visible { outline: none; }
 .select-search:focus-within { box-shadow: inset 0 0 0 1px var(--text); border-radius: 7px; }
-#tasks .task-controls { gap: 6px; margin-left: 0; margin-top: 6px; }
+#tasks .task-controls { gap: 6px; margin-left: 0; margin-top: 10px; }
 #tasks .text-action { font-size: 13px; padding: 7px 12px; border-radius: 9px; line-height: 1.3; }
 #tasks .text-action[data-action="start"], #tasks .text-action[data-action="done"] { min-width: 84px; }
 #tasks .task:not(:first-child) .text-action[data-action="start"] { border: 1px solid var(--line); color: var(--text); }
