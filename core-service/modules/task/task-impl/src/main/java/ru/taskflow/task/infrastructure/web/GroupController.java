@@ -44,4 +44,11 @@ public class GroupController {
                        @PathVariable UUID id) {
         groupService.delete(user.userId(), id);
     }
+
+    @PutMapping("/{id}")
+    public GroupResponse update(@AuthenticationPrincipal AuthenticatedUser user,
+                                @PathVariable UUID id,
+                                @RequestBody @Valid CreateGroupRequest request) {
+        return groupService.update(user.userId(), id, request);
+    }
 }

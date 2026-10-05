@@ -121,6 +121,43 @@ class TaskServiceTest {
         verify(taskRepository).save(any(TaskJpaEntity.class));
     }
 
+    @Test
+    void create_preservesPlannedDateWithoutMakingItDeadline() {
+        var plannedDate = OffsetDateTime.parse("2026-10-07T00:00:00+03:00");
+        var request = new CreateTaskRequest("разобрать заметки", null, null, null, null, null,
+                List.of(), 15, null, null, false, plannedDate);
+        ArgumentCaptor<TaskJpaEntity> captor = ArgumentCaptor.forClass(TaskJpaEntity.class);
+        when(taskRepository.save(captor.capture())).thenAnswer(invocation -> {
+            TaskJpaEntity saved = invocation.getArgument(0);
+            saved.setId(taskId);
+            return saved;
+        });
+        when(taskMapper.toResponse(any())).thenReturn(mockResponse(taskId, "разобрать заметки"));
+
+        taskService.create(userId, request);
+
+        var saved = captor.getValue();
+        assertThat(saved.getPlannedDate()).isEqualTo(plannedDate);
+        assertThat(saved.getPlannedDateSetAt()).isEqualTo(OffsetDateTime.now(clock));
+        assertThat(saved.getDeadline()).isNull();
+        verify(taskReminderService).planForDeadline(userId, saved);
+        verifyNoMoreInteractions(taskReminderService);
+    }
+
+    @Test
+    void create_leavesPlannedDateUnsetWhenOmitted() {
+        var request = new CreateTaskRequest("разобрать заметки", null, null, null, null, null,
+                List.of(), null, null);
+        ArgumentCaptor<TaskJpaEntity> captor = ArgumentCaptor.forClass(TaskJpaEntity.class);
+        when(taskRepository.save(captor.capture())).thenReturn(taskEntity());
+        when(taskMapper.toResponse(any())).thenReturn(mockResponse(taskId, "разобрать заметки"));
+
+        taskService.create(userId, request);
+
+        assertThat(captor.getValue().getPlannedDate()).isNull();
+        assertThat(captor.getValue().getPlannedDateSetAt()).isNull();
+    }
+
     // Б1: настойчивость ставит человек, через обычный запрос создания/правки —
     // модель это поле не видит (контур ассистента не участвует).
     @Test
@@ -303,6 +340,93 @@ class TaskServiceTest {
 
         assertThat(entity.getTitle()).isEqualTo("новый заголовок");
         assertThat(result.title()).isEqualTo("новый заголовок");
+    }
+
+    @Test
+    void update_explicitlyClearsGroupAndPlannedDateInAudit() {
+        var entity = taskEntity();
+        var group = new GroupJpaEntity();
+        group.setId(UUID.randomUUID());
+        entity.setGroup(group);
+        entity.setPlannedDate(OffsetDateTime.parse("2026-10-07T00:00:00Z"));
+        entity.setPlannedDateSetAt(OffsetDateTime.now(clock));
+        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.save(entity)).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
+        var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null,
+                null, null, null, null, true, true);
+
+        taskService.update(userId, taskId, request);
+
+        assertThat(entity.getGroup()).isNull();
+        assertThat(entity.getPlannedDate()).isNull();
+        assertThat(entity.getPlannedDateSetAt()).isNull();
+        assertThat(entity.getUserId()).isEqualTo(userId);
+        verify(auditService).record(eq(userId), eq(taskId), eq(AuditEventType.UPDATED),
+                argThat(delta -> delta != null && delta.size() == 2
+                        && delta.containsKey("groupId") && delta.get("groupId") == null
+                        && delta.containsKey("plannedDate") && delta.get("plannedDate") == null));
+        verifyNoInteractions(groupRepository, taskReminderService);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.NullSource
+    @org.junit.jupiter.params.provider.ValueSource(booleans = false)
+    void update_keepsGroupAndPlannedDateWithoutExplicitClear(Boolean clear) {
+        var entity = taskEntity();
+        var group = new GroupJpaEntity();
+        group.setId(UUID.randomUUID());
+        var planned = OffsetDateTime.parse("2026-10-07T00:00:00Z");
+        var setAt = OffsetDateTime.now(clock);
+        entity.setGroup(group);
+        entity.setPlannedDate(planned);
+        entity.setPlannedDateSetAt(setAt);
+        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.save(entity)).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
+        var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null,
+                null, null, null, null, clear, clear);
+
+        taskService.update(userId, taskId, request);
+
+        assertThat(entity.getGroup()).isSameAs(group);
+        assertThat(entity.getPlannedDate()).isEqualTo(planned);
+        assertThat(entity.getPlannedDateSetAt()).isEqualTo(setAt);
+        verify(auditService).record(userId, taskId, AuditEventType.UPDATED, null);
+        verifyNoInteractions(groupRepository, taskReminderService);
+    }
+
+    @Test
+    void update_clearCannotTouchAnotherUsersTask() {
+        var otherUserId = UUID.randomUUID();
+        when(taskRepository.findByIdAndUserId(taskId, otherUserId)).thenReturn(Optional.empty());
+        var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null,
+                null, null, null, null, true, true);
+
+        assertThatThrownBy(() -> taskService.update(otherUserId, taskId, request))
+                .isInstanceOf(TaskNotFoundException.class);
+
+        verify(taskRepository).findByIdAndUserId(taskId, otherUserId);
+        verifyNoMoreInteractions(taskRepository);
+        verifyNoInteractions(auditService, groupRepository, taskReminderService);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = TaskStatus.class, names = {"TODO", "IN_PROGRESS"})
+    void update_returningDoneTaskToActiveClearsCompletionTime(TaskStatus status) {
+        var entity = taskEntity();
+        entity.setStatus(TaskStatus.DONE);
+        entity.setCompletedAt(OffsetDateTime.now(clock));
+        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.save(entity)).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
+        var request = new UpdateTaskRequest(null, null, null, status, null, null, null, null, null);
+
+        taskService.update(userId, taskId, request);
+
+        assertThat(entity.getStatus()).isEqualTo(status);
+        assertThat(entity.getCompletedAt()).isNull();
+        verifyNoInteractions(taskReminderService);
     }
 
     @Test

@@ -52,6 +52,16 @@ public class GroupService {
         return new GroupResponse(saved.getId(), saved.getName(), saved.getColor(), saved.getIcon());
     }
 
+    @Transactional
+    public GroupResponse update(UUID userId, UUID groupId, CreateGroupRequest request) {
+        var group = groupRepository.findByIdAndUserId(groupId, userId)
+                .orElseThrow(() -> new GroupNotFoundException(groupId));
+        group.setName(request.name().trim());
+        group.setColor(request.color());
+        group.setIcon(request.icon());
+        return new GroupResponse(group.getId(), group.getName(), group.getColor(), group.getIcon());
+    }
+
     /**
      * Удаляет группу пользователя.
      *

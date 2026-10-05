@@ -113,6 +113,11 @@ public class TaskServiceImpl implements TaskService {
         task.setSource(request.source());
         task.setPersistentReminder(request.persistentReminder());
 
+        if (request.plannedDate() != null) {
+            task.setPlannedDate(request.plannedDate());
+            task.setPlannedDateSetAt(OffsetDateTime.now(clock));
+        }
+
         task.setGroup(resolveGroup(userId, request.groupId(), request.groupName()));
 
         if (!request.tags().isEmpty()) {
@@ -299,13 +304,19 @@ public class TaskServiceImpl implements TaskService {
         if (request.estimateMinutes() != null) task.setEstimateMinutes(request.estimateMinutes());
         // Отдельный путь: день исполнения не участвует в deadlineChanged ниже
         // и не трогает напоминания — они привязаны к deadline, а не к нему.
-        if (request.plannedDate() != null) {
+        if (Boolean.TRUE.equals(request.clearPlannedDate())) {
+            task.setPlannedDate(null);
+            task.setPlannedDateSetAt(null);
+        } else if (request.plannedDate() != null) {
             task.setPlannedDate(request.plannedDate());
             task.setPlannedDateSetAt(OffsetDateTime.now());
         }
 
         if (request.status() != null) {
             task.setStatus(request.status());
+            if (request.status() == TaskStatus.TODO || request.status() == TaskStatus.IN_PROGRESS) {
+                task.setCompletedAt(null);
+            }
             if (request.status() == TaskStatus.DONE && task.getCompletedAt() == null) {
                 task.setCompletedAt(OffsetDateTime.now());
             }
@@ -314,9 +325,11 @@ public class TaskServiceImpl implements TaskService {
             }
         }
 
-        boolean groupRequested = request.groupId() != null
+        boolean groupRequested = Boolean.TRUE.equals(request.clearGroup()) || request.groupId() != null
                 || (request.groupName() != null && !request.groupName().isBlank());
-        if (groupRequested) {
+        if (Boolean.TRUE.equals(request.clearGroup())) {
+            task.setGroup(null);
+        } else if (groupRequested) {
             task.setGroup(resolveGroup(userId, request.groupId(), request.groupName()));
         }
 
@@ -604,7 +617,11 @@ public class TaskServiceImpl implements TaskService {
         if (request.estimateMinutes() != null && !request.estimateMinutes().equals(task.getEstimateMinutes())) {
             delta.put("estimateMinutes", request.estimateMinutes());
         }
-        if (request.plannedDate() != null && !request.plannedDate().equals(task.getPlannedDate())) {
+        if (Boolean.TRUE.equals(request.clearPlannedDate())) {
+            if (task.getPlannedDate() != null || task.getPlannedDateSetAt() != null) {
+                delta.put("plannedDate", null);
+            }
+        } else if (request.plannedDate() != null && !request.plannedDate().equals(task.getPlannedDate())) {
             delta.put("plannedDate", request.plannedDate());
         }
         if (request.recurrence() != null) {

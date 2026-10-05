@@ -22,7 +22,9 @@ public record UpdateTaskRequest(
         RecurrenceRule recurrence,
         // Б1: null — не трогать; true/false — включить/выключить настойчивость.
         // Выключение отдельно гасит запланированные повторы (TaskServiceImpl.update).
-        Boolean persistentReminder
+        Boolean persistentReminder,
+        Boolean clearGroup,
+        Boolean clearPlannedDate
 ) {
     public UpdateTaskRequest(String title, String description, TaskPriority priority, TaskStatus status,
             OffsetDateTime deadline, UUID groupId, String groupName, List<String> tags, Integer estimateMinutes) {
@@ -43,5 +45,12 @@ public record UpdateTaskRequest(
             OffsetDateTime plannedDate, RecurrenceRule recurrence) {
         this(title, description, priority, status, deadline, groupId, groupName, tags, estimateMinutes, plannedDate,
                 recurrence, null);
+    }
+
+    public UpdateTaskRequest(String title, String description, TaskPriority priority, TaskStatus status,
+            OffsetDateTime deadline, UUID groupId, String groupName, List<String> tags, Integer estimateMinutes,
+            OffsetDateTime plannedDate, RecurrenceRule recurrence, Boolean persistentReminder) {
+        this(title, description, priority, status, deadline, groupId, groupName, tags, estimateMinutes, plannedDate,
+                recurrence, persistentReminder, null, null);
     }
 }
