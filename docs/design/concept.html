@@ -93,6 +93,7 @@
     .task-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 0 -8px; }
     .text-action { min-height: 44px; background: none; border: 0; padding: 8px; border-radius: 10px; font-size: 12px; color: var(--muted); }
     .text-action:hover { background: var(--raised); color: var(--text); }
+    .task:first-child .text-action[data-action="start"] { background: var(--text); color: var(--background); padding-inline: 14px; }
     .task-status { font-size: 12px; color: var(--text); margin: 0 8px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
     .action { min-height: 44px; border-radius: 12px; border: 1px solid var(--line); background: none; padding: 9px 14px; font-size: 14px; }
@@ -121,6 +122,10 @@
     .day-detail li .icon { width: 16px; height: 16px; margin-top: 2px; color: var(--muted); }
     .day-detail p { margin-top: 14px; font-size: 12px; color: var(--muted); }
     .bottom-nav { display: none; }
+    .capture-dock { display: none; }
+    .mobile-capture { display: none; }
+    .mini-wave { display: inline-flex; align-items: center; justify-content: center; gap: 3px; width: 26px; height: 24px; }
+    .mini-wave i { width: 2px; height: var(--bar-height); border-radius: 2px; background: currentColor; }
     .empty { padding: 24px 0; }
     .empty h3 { font-size: 22px; margin-bottom: 8px; }
     .empty p { color: var(--muted); font-size: 14px; }
@@ -150,18 +155,21 @@
     @media (max-width: 1023px) {
       .shell { grid-template-columns: minmax(0, 1fr); }
       .sidebar { display: none; } .mobile-brand { display: flex; padding: 0; } .top-label { display: none; }
-      .workspace { padding: 22px 24px calc(104px + var(--safe-bottom)); }
+      .workspace { padding: 22px 24px calc(176px + var(--safe-bottom)); }
       .top { margin-bottom: 32px; } .content { max-width: 680px; }
       .columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
-      .aside { align-items: start; }
+      .aside { display: none; }
+      .capture-dock { position: fixed; display: grid; place-items: center; bottom: calc(69px + var(--safe-bottom)); left: 0; right: 0; padding: 20px 20px 15px; background: linear-gradient(to bottom, transparent, var(--background) 18px); z-index: 6; pointer-events: none; }
+      .mobile-capture { display: flex; align-items: center; justify-content: center; gap: 12px; width: min(320px, 100%); min-height: 52px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 100px; background: var(--text); color: var(--background); font-size: 14px; font-weight: 500; box-shadow: 0 4px 18px oklch(0 0 0 / .12); pointer-events: auto; }
       .bottom-nav { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 4px calc(8px + var(--safe-bottom)); background: var(--background); border-top: 1px solid var(--line); z-index: 5; }
       .bottom-nav button { min-width: 0; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; background: none; border: 0; color: var(--muted); border-radius: 12px; font-size: 10px; }
       .bottom-nav button[aria-current="page"] { background: var(--selected); color: var(--text); }
-      .toast { bottom: calc(90px + var(--safe-bottom)); }
+      .toast { bottom: calc(150px + var(--safe-bottom)); }
+      body[data-page="assistant"] .toast { bottom: calc(90px + var(--safe-bottom)); }
     }
     @media (max-width: 599px) {
       .studybar { padding: 4px 16px; gap: 8px; font-size: 10px; } .studybar button { font-size: 10px; }
-      .workspace { padding: 20px 20px calc(104px + var(--safe-bottom)); }
+      .workspace { padding: 20px 20px calc(176px + var(--safe-bottom)); }
       .theme { padding: 8px 10px; } .top { margin-bottom: 26px; }
       .greeting { margin-bottom: 24px; } .greeting h1 { font-size: 32px; letter-spacing: -.8px; }
       .greeting .lead-name { margin-bottom: 10px; } .greeting .date { margin-top: 12px; }
@@ -171,14 +179,31 @@
       .task h3 { font-size: 16px; } .meta { gap: 4px 10px; }
       .task-check { margin-left: -8px; margin-right: -6px; }
       .task-controls { gap: 4px 10px; margin-top: 2px; }
-      .aside { display: flex; flex-direction: column; gap: 14px; }
-      .capture { width: 100%; }
-      .capture { padding: 22px; border-radius: 24px; }
-      .capture .transcript { font-size: 15px; }
+      .section-head h2 { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      .day-progress { padding-left: 0; margin-right: 0; }
       .user-message { max-width: 94%; padding: 18px; } .proposal { padding: 20px; }
       .conversation-intro { font-size: 14px; }
     }
-    @media (prefers-reduced-motion: no-preference) { button { transition: background-color 160ms ease-out, color 160ms ease-out; } }
+    @media (prefers-reduced-motion: no-preference) {
+      button { transition: background-color 160ms ease-out, color 160ms ease-out; }
+      .capture { transition: transform 220ms ease-out; }
+      .capture button .icon { transition: transform 220ms ease-out; }
+      .capture:focus-within { transform: translateY(-2px); }
+      .capture:focus-within .wave i { animation: voice-wave 820ms ease-in-out var(--wave-delay) 3 alternate; }
+      .capture:focus-within button .icon { transform: translateX(4px); }
+      .mobile-capture:active .mini-wave i, .mobile-capture:focus-visible .mini-wave i { animation: voice-wave 260ms ease-in-out var(--wave-delay) 2 alternate; }
+      .mobile-capture:active { transform: scale(.98); }
+      .task.is-next { animation: next-task 240ms ease-out; }
+      .day-progress.advanced > .icon:first-child { animation: completed-mark 300ms ease-out; }
+      @media (hover: hover) {
+        .capture:hover { transform: translateY(-2px); }
+        .capture:hover .wave i { animation: voice-wave 820ms ease-in-out var(--wave-delay) 3 alternate; }
+        .capture:hover button .icon { transform: translateX(4px); }
+      }
+    }
+    @keyframes voice-wave { from { transform: scaleY(.55); } to { transform: scaleY(1.15); } }
+    @keyframes next-task { from { opacity: .45; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes completed-mark { 50% { transform: scale(1.25); color: var(--text); } }
   </style>
 </head>
 <body>
@@ -267,13 +292,13 @@
           <div class="focus-column">
             <div class="greeting"><p class="lead-name">Привет, Саша.</p><h1 id="focus-title">Сейчас у тебя<br><strong id="focus-summary">3 главных дела.</strong></h1><p class="date">Понедельник, 5 октября</p></div>
             <div class="budget" role="group" aria-label="Сколько времени есть?"><span class="budget-label">Сколько времени есть?</span><button class="chip" data-minutes="15" aria-pressed="false">15 мин</button><button class="chip" data-minutes="30" aria-pressed="false">30 мин</button><button class="chip" data-minutes="60" aria-pressed="false">1 час</button></div>
-            <div class="section-head"><h2>Фокус сейчас</h2><button class="day-progress" id="day-progress" aria-expanded="false" aria-controls="day-detail"><svg class="icon" aria-hidden="true"><use href="#check"/></svg><span id="day-progress-note" aria-live="polite">Уже сделано 2 дела</span><svg class="icon chevron" aria-hidden="true"><use href="#chevron"/></svg></button></div>
+            <div class="section-head"><h2>Фокус сейчас</h2><button class="day-progress" id="day-progress" aria-expanded="false" aria-controls="day-detail"><svg class="icon" aria-hidden="true"><use href="#check"/></svg><span id="day-progress-note" aria-live="polite">2 готово · следующее — ~30 мин</span><svg class="icon chevron" aria-hidden="true"><use href="#chevron"/></svg></button></div>
             <section class="day-detail" id="day-detail" aria-labelledby="day-detail-title" hidden><h3 id="day-detail-title">Что уже получилось сегодня</h3><ul id="completed-items"></ul><p id="day-extra"></p></section>
             <div id="tasks"></div>
             <div id="empty" class="empty" hidden><h3>Можно выдохнуть.</h3><p>В этой подборке больше нет задач. Можно выбрать другой бюджет времени или рассказать о новых делах.</p></div>
           </div>
           <aside class="aside" aria-label="Ввод">
-            <div class="capture"><div class="module-heading"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg>Расскажи Мунину</div><h2>Всё, что держишь<br>в голове.</h2><p class="transcript"><span class="faded">Макет отправил, Саше позвонил.</span> Ещё надо записаться к стоматологу.</p><div class="wave" aria-hidden="true"></div><button data-page="assistant">Текст или голос<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button><small>Пример обращения. Запись не подключена.</small></div>
+            <div class="capture"><div class="module-heading"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg>Расскажи Мунину</div><h2>Расскажи, что<br>нужно сделать.</h2><p class="transcript"><span class="faded">Макет отправил, Саше позвонил.</span> Ещё надо записаться к стоматологу.</p><div class="wave" aria-hidden="true"></div><button data-page="assistant">Текст или голос<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button><small>Пример обращения. Запись не подключена.</small></div>
           </aside>
         </div>
       </section>
@@ -294,6 +319,7 @@
       </section>
     </main>
   </div>
+  <div class="capture-dock" id="capture-dock"><button class="mobile-capture" id="mobile-capture" data-page="assistant"><span class="mini-wave" aria-hidden="true"><i style="--bar-height:9px;--wave-delay:0ms"></i><i style="--bar-height:18px;--wave-delay:40ms"></i><i style="--bar-height:24px;--wave-delay:80ms"></i><i style="--bar-height:14px;--wave-delay:20ms"></i><i style="--bar-height:8px;--wave-delay:60ms"></i></span>Рассказать Мунину<svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
   <nav class="bottom-nav" aria-label="Нижняя навигация">
     <button data-page="focus" aria-current="page"><svg class="icon"><use href="#focus"/></svg>Сейчас</button><button data-page="assistant"><svg class="icon"><use href="#chat"/></svg>Ассистент</button><button disabled><svg class="icon"><use href="#list"/></svg>Задачи</button><button disabled><svg class="icon"><use href="#board"/></svg>Доска</button><button disabled><svg class="icon"><use href="#groups"/></svg>Группы</button><button disabled><svg class="icon"><use href="#more"/></svg>Ещё</button>
   </nav>
@@ -310,9 +336,9 @@
     const icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#${name}"/></svg>`;
     const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
     const doneWord = (number) => number % 10 === 1 && number % 100 !== 11 ? 'дело' : number % 10 >= 2 && number % 10 <= 4 && (number % 100 < 12 || number % 100 > 14) ? 'дела' : 'дел';
-    function render() {
+    function render(revealNext = false) {
       const visible = tasks.filter((task) => task.status !== 'done' && task.status !== 'moved' && (!budget || task.minutes <= budget));
-      tasksElement.innerHTML = visible.map((task) => `<article class="task" aria-labelledby="title-${task.id}">
+      tasksElement.innerHTML = visible.map((task, index) => `<article class="task${revealNext && index === 0 ? ' is-next' : ''}" aria-labelledby="title-${task.id}">
         <button class="task-check" data-action="done" data-id="${task.id}" aria-label="Сделано: ${escapeHtml(task.title)}" title="Отметить как выполненную"><span class="check-ring">${icon('check')}</span></button>
         <div class="task-body"><div class="task-heading"><h3 id="title-${task.id}"><button class="task-title" data-action="edit" data-id="${task.id}">${escapeHtml(task.title)}</button></h3><button class="edit" data-action="edit" data-id="${task.id}" aria-label="Редактировать: ${escapeHtml(task.title)}">${icon('edit')}</button></div>
         <div class="meta"><span>${icon('clock')}${escapeHtml(task.meta)}</span><span>${task.minutes} мин</span><span>${task.group}</span></div>
@@ -320,8 +346,12 @@
       </article>`).join('');
       document.getElementById('focus-summary').textContent = visible.length === 1 ? '1 главное дело.' : visible.length === 0 ? 'пауза.' : `${visible.length} главных дела.`;
       document.getElementById('empty').hidden = visible.length !== 0;
-      document.getElementById('day-progress-note').textContent = `Уже сделано ${counts.done} ${doneWord(counts.done)}`;
-      document.getElementById('day-progress').setAttribute('aria-label', `Сегодня уже сделано ${counts.done} ${doneWord(counts.done)}. Показать итоги дня`);
+      const next = visible[0];
+      const nextNote = next ? next.status === 'started' ? `в работе — ~${next.minutes} мин` : `следующее — ~${next.minutes} мин` : 'в подборке пауза';
+      document.getElementById('day-progress-note').textContent = `${counts.done} готово · ${nextNote}`;
+      const progress = document.getElementById('day-progress');
+      progress.setAttribute('aria-label', `Сегодня сделано ${counts.done} ${doneWord(counts.done)}; ${nextNote}. Итоги дня`);
+      progress.classList.toggle('advanced', revealNext);
       document.getElementById('completed-items').innerHTML = completedToday.map((title) => `<li>${icon('check')}<span>${escapeHtml(title)}</span></li>`).join('');
       document.getElementById('day-extra').textContent = `Ещё: начато ${counts.started}, перенесено ${counts.moved}.`;
     }
@@ -331,6 +361,8 @@
       toastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
     }
     function showPage(page) {
+      document.body.dataset.page = page;
+      document.getElementById('capture-dock').hidden = page !== 'focus';
       document.getElementById('focus-page').hidden = page !== 'focus'; document.getElementById('assistant-page').hidden = page !== 'assistant';
       document.querySelectorAll('nav [data-page]').forEach((button) => { if (button.dataset.page === page) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
       document.getElementById('top-label').textContent = page === 'focus' ? 'Сейчас' : 'Ассистент';
@@ -348,10 +380,15 @@
       if (button.dataset.action === 'edit') {
         editingId = task.id; document.getElementById('task-title').value = task.title; document.getElementById('edit-dialog').showModal(); return;
       }
-      if (button.dataset.action === 'done') { task.status = 'done'; counts.done++; completedToday.push(task.title); notice('Ещё одно дело готово.'); }
+      const completed = button.dataset.action === 'done';
+      if (completed) { task.status = 'done'; counts.done++; completedToday.push(task.title); }
       if (button.dataset.action === 'start') { task.status = 'started'; counts.started++; notice('Задача начата в примере'); }
       if (button.dataset.action === 'snooze') { task.status = 'moved'; counts.moved++; notice('В примере: отложено на завтра'); }
-      render();
+      render(completed);
+      if (completed) {
+        const next = tasks.find((item) => item.status !== 'done' && item.status !== 'moved' && (!budget || item.minutes <= budget));
+        notice(next ? `Готово. ${next.status === 'started' ? 'В работе ещё одно дело' : 'Следующее дело'} — примерно ${next.minutes} минут.` : 'Подборка закрыта. Можно выдохнуть.');
+      }
       const nextControl = tasksElement.querySelector('[data-action="done"]') || document.querySelector('[data-minutes]'); nextControl.focus();
     });
     document.getElementById('cancel-edit').addEventListener('click', () => document.getElementById('edit-dialog').close());
@@ -389,7 +426,7 @@
       document.getElementById('toast').hidden = true; clearTimeout(toastTimer); render(); showPage('focus');
     }
     document.getElementById('reset').addEventListener('click', reset);
-    document.querySelectorAll('.wave').forEach((wave) => wave.innerHTML = Array.from({length: 36}, (_, index) => `<i style="height:${8 + ((index * 17 + 9) % 32)}px"></i>`).join(''));
+    document.querySelectorAll('.wave').forEach((wave) => wave.innerHTML = Array.from({length: 36}, (_, index) => `<i style="height:${8 + ((index * 17 + 9) % 32)}px;--wave-delay:${(index * 37) % 180}ms"></i>`).join(''));
     reset();
   </script>
 </body>
