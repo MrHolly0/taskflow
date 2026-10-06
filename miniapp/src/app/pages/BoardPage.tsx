@@ -1,486 +1,307 @@
 import { useEffect, useRef, useState } from 'react';
-import { Status, Task } from '@/lib/store';
-import { useTasksList, useUpdateTask } from '@/lib/hooks/useTasks';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  CollisionDetection,
-  DndContext,
-  DragEndEvent,
-  DragStartEvent,
-  DragOverlay,
-  pointerWithin,
-  rectIntersection,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
+  DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor,
+  useSensor, useSensors, useDraggable, useDroppable, pointerWithin, rectIntersection,
+  defaultDropAnimationSideEffects,
+  type CollisionDetection, type DragEndEvent, type DragStartEvent,
+  type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
-  IconClock,
-  IconGripVertical,
-  IconPlus,
-  IconCircleDashed,
-  IconProgress,
-  IconCircleCheck,
-  IconArrowsVertical,
-  IconSwipe,
-  IconChevronLeft,
-  IconChevronRight,
-  IconBell,
+  IconClock, IconGripVertical, IconPlus, IconCircleDashed, IconProgress,
+  IconCircleCheck, IconChevronLeft, IconChevronRight, IconBell, IconSearch, IconX,
 } from '@tabler/icons-react';
+import { toast } from 'sonner';
+import { useTasksList, useUpdateTask, type TaskResponse } from '@/lib/hooks/useTasks';
+import { groupBoardTasks, isBoardStatus, type BoardStatus } from '@/lib/board';
 import { formatDeadline, formatReminderTime, cn } from '@/lib/utils';
+import { plural } from '@/lib/plural';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
 import { useMinuteTick } from '@/lib/hooks/useMinuteTick';
-import { Badge } from '@/app/components/ui/badge';
-import { Card } from '@/app/components/ui/card';
+import { useTaskUi, useTaskReveal } from '@/lib/task-ui';
 import { Button } from '@/app/components/ui/button';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
-import { QuickInputModal } from '@/app/components/QuickInputModal';
+import { CreateTaskDialog } from '@/app/components/CreateTaskDialog';
+import { TaskActionMenu } from '@/app/components/TaskRow';
+import '@/styles/board.css';
 
-const PRIORITY_DOT: Record<string, string> = {
-  URGENT: 'bg-red-500',
-  HIGH: 'bg-orange-500',
-  MEDIUM: 'bg-blue-500',
-  LOW: 'bg-gray-400',
-};
-
-/**
- * Статус определяется по положению пальца внутри области — актуально для длинных
- * секций, у которых closestCorners требовал тащить далеко за границу. Если палец
- * не над одной из секций (например, ещё не долетел до соседней в горизонтальном
- * режиме), запасной вариант — пересечение прямоугольников.
- */
-const collisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  if (pointerCollisions.length > 0) {
-    return pointerCollisions;
-  }
-  return rectIntersection(args);
-};
-
-const COLUMN_STYLE: Record<Status, string> = {
-  TODO: 'border-t-slate-400',
-  IN_PROGRESS: 'border-t-blue-500',
-  DONE: 'border-t-green-500',
-  CANCELLED: 'border-t-muted-foreground',
-};
-
-const COLUMNS: {
-  id: Status;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  iconColor: string;
-}[] = [
-  { id: 'TODO', label: 'К выполнению', icon: IconCircleDashed, iconColor: 'text-slate-500' },
-  { id: 'IN_PROGRESS', label: 'В работе', icon: IconProgress, iconColor: 'text-blue-500' },
-  { id: 'DONE', label: 'Готово', icon: IconCircleCheck, iconColor: 'text-green-500' },
-];
-
-/* ────────────── Draggable Task Card ────────────── */
-function DraggableTaskCard({
-  task,
-  isDragging: _isDragging,
-  onClick,
-}: {
-  task: Task;
-  isDragging?: boolean;
-  onClick: (task: Task) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: task.id,
-  });
-  const { timezone, isReady: timezoneReady } = useUserTimezone();
-  useMinuteTick();
-
-  const style = transform
-    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
-    : undefined;
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn('touch-none select-none', isDragging && 'opacity-40')}
-      {...attributes}
-      {...listeners}
-    >
-      <Card
-        className="p-3.5 space-y-2.5 cursor-pointer hover:shadow-md transition-shadow border border-border/60 group"
-        onClick={() => !isDragging && onClick(task)}
-      >
-        <div className="flex items-start gap-2">
-          {/* Ручка — визуальная подсказка, зажатие работает с любой точки карточки */}
-          <div className="mt-0.5 opacity-0 group-hover:opacity-40 [@media(pointer:coarse)]:opacity-40 transition-opacity cursor-grab active:cursor-grabbing flex-shrink-0">
-            <IconGripVertical className="h-4 w-4 text-muted-foreground" />
-          </div>
-
-          <div className="flex-1 min-w-0 space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <div className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', PRIORITY_DOT[task.priority])} />
-              <span className="text-sm font-medium leading-tight">{task.title}</span>
-            </div>
-
-            <div className="flex flex-wrap gap-2 items-center">
-              {task.deadline && timezoneReady && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <IconClock className="h-3 w-3" />
-                  {formatDeadline(task.deadline, timezone, task.status)}
-                </span>
-              )}
-              {task.group && (
-                <span className="text-xs text-muted-foreground">{task.group}</span>
-              )}
-              {/* Значок напоминания (Б3) — только ближайшее время, без счётчиков и без красного */}
-              {task.nextReminderAt && timezoneReady && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <IconBell className="h-3 w-3" />
-                  {formatReminderTime(task.nextReminderAt, timezone)}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-/* ────────────── Overlay Card (while dragging) ────────────── */
-function OverlayTaskCard({ task }: { task: Task }) {
-  return (
-    <Card className="p-3.5 shadow-xl border border-primary/30 bg-background/95 rotate-1 cursor-grabbing">
-      <div className="flex items-center gap-1.5">
-        <div className={cn('w-1.5 h-1.5 rounded-full flex-shrink-0', PRIORITY_DOT[task.priority])} />
-        <span className="text-sm font-medium">{task.title}</span>
-      </div>
-    </Card>
-  );
-}
-
-/* ────────────── Droppable Column ────────────── */
-function DroppableColumn({
-  column,
-  tasks,
-  onTaskClick,
-  onAddTask,
-}: {
-  column: (typeof COLUMNS)[number];
-  tasks: Task[];
-  onTaskClick: (task: Task) => void;
-  onAddTask: () => void;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
-  const ColumnIcon = column.icon;
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'flex flex-col rounded-xl border-t-2 bg-muted/30 p-3 transition-colors min-h-[200px]',
-        COLUMN_STYLE[column.id],
-        isOver && 'bg-accent/60 ring-1 ring-primary/30'
-      )}
-    >
-      {/* Column header */}
-      <div className="flex items-center justify-between mb-3 px-0.5">
-        <div className="flex items-center gap-2">
-          <ColumnIcon className={cn('h-4 w-4', column.iconColor)} />
-          <h2 className="font-semibold text-sm">{column.label}</h2>
-          <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-            {tasks.length}
-          </Badge>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-          onClick={onAddTask}
-        >
-          <IconPlus className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {/* Tasks */}
-      <div className="flex flex-col gap-2 flex-1">
-        {tasks.map((task) => (
-          <DraggableTaskCard key={task.id} task={task} onClick={onTaskClick} />
-        ))}
-
-        {tasks.length === 0 && (
-          <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed border-border/60 py-8">
-            <p className="text-xs text-muted-foreground">Перетащи сюда</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ────────────── Узкий экран: статусы друг под другом или по одному со свайпом ────────────── */
+const COLUMNS = [
+  { id: 'TODO', label: 'К выполнению', icon: IconCircleDashed },
+  { id: 'IN_PROGRESS', label: 'В работе', icon: IconProgress },
+  { id: 'DONE', label: 'Готово', icon: IconCircleCheck },
+] as const;
+type Column = (typeof COLUMNS)[number];
 type BoardView = 'vertical' | 'horizontal';
 const BOARD_VIEW_KEY = 'taskflow.boardView';
-const CAROUSEL_GAP = 12; // px, соответствует gap-3 у контейнера карусели
+const CANCEL_ID = 'board-cancel';
 
-function readBoardView(): BoardView {
-  return localStorage.getItem(BOARD_VIEW_KEY) === 'horizontal' ? 'horizontal' : 'vertical';
+// Для мыши и пальца принимаем только область под указателем, включая отмену.
+const collisionDetection: CollisionDetection = args => {
+  const collisions = args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args);
+  const cancel = collisions.find(collision => collision.id === CANCEL_ID);
+  return cancel ? [cancel] : collisions;
+};
+
+const keyboardCoordinates: KeyboardCoordinateGetter = (event, { context, currentCoordinates }) => {
+  const direction = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.code];
+  if (!direction) return;
+  event.preventDefault();
+  const current = context.over?.id ?? context.active?.data.current?.status;
+  const index = COLUMNS.findIndex(column => column.id === current);
+  const next = COLUMNS[Math.max(0, Math.min(2, index + direction))];
+  const rect = context.droppableRects.get(next.id);
+  const active = context.collisionRect;
+  if (!rect || !active) return;
+  return {
+    x: currentCoordinates.x + rect.left + rect.width / 2 - active.left - active.width / 2,
+    y: currentCoordinates.y + rect.top + rect.height / 2 - active.top - active.height / 2,
+  };
+};
+
+function CardContents({ task, moreButton }: { task: TaskResponse; moreButton?: React.ReactNode }) {
+  const { timezone, isReady } = useUserTimezone();
+  const reminder = task.reminders?.find(item => item.status === 'PENDING') ?? task.reminders?.[0];
+  return (
+    <div className="board-task-main">
+      <IconGripVertical className="board-task-grip" aria-hidden="true" />
+      <div className="board-task-content">
+        <p className="board-task-title">{task.title}</p>
+        <div className="board-task-meta">
+          {task.priority === 'HIGH' && <span>Важно</span>}
+          {task.priority === 'URGENT' && <span>Срочно</span>}
+          {task.deadline && isReady && <span><IconClock />{formatDeadline(task.deadline, timezone, task.status)}</span>}
+          {task.groupName && <span>{task.groupName}</span>}
+          {reminder && isReady && <span><IconBell />{formatReminderTime(reminder.fireAt, timezone)}</span>}
+        </div>
+      </div>
+      {moreButton}
+    </div>
+  );
 }
 
-function useIsNarrow(): boolean {
-  const [narrow, setNarrow] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+function DraggableTaskCard({ task, onOpen }: { task: TaskResponse; onOpen: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.id, data: { status: task.status },
+  });
+  const revealRef = useTaskReveal(task.id);
+  return (
+    <TaskActionMenu task={task} onOpen={onOpen} moreButtonClassName="board-task-more" contextDisabled={isDragging}>
+      {({ moreButton, menuOpen }) => (
+        <article
+          ref={node => { setNodeRef(node); revealRef.current = node; }}
+          {...attributes} {...listeners}
+          aria-label={task.title}
+          aria-describedby="board-interaction-hint"
+          data-board-task-id={task.id}
+          className={cn('board-task', isDragging && 'board-drag-source', menuOpen && 'board-menu-open')}
+          onClick={() => !isDragging && onOpen()}
+          onKeyDown={event => {
+            if (event.target === event.currentTarget && event.key === 'Enter') {
+              event.preventDefault();
+              onOpen();
+            } else listeners?.onKeyDown?.(event);
+          }}
+        >
+          <CardContents task={task} moreButton={moreButton} />
+        </article>
+      )}
+    </TaskActionMenu>
   );
+}
+
+function DroppableColumn({ column, tasks, narrow, searching, onOpen, onAdd }: {
+  column: Column; tasks: TaskResponse[]; narrow: boolean; searching: boolean;
+  onOpen: (id: string) => void; onAdd: (status: BoardStatus) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const batch = narrow ? 4 : 8;
+  const [extra, setExtra] = useState(0);
+  const Icon = column.icon;
+  const visible = tasks.slice(0, batch + extra);
+  const remaining = tasks.length - visible.length;
+  return (
+    <section ref={setNodeRef} data-status={column.id}
+      aria-label={column.label} className={cn('board-column', isOver && 'board-drop-target')}>
+      <div className="board-column-head">
+        <h2><Icon className="board-status-icon" /><span>{column.label}</span><small aria-label={`${tasks.length} ${plural(tasks.length, ['задача', 'задачи', 'задач'])}`}>{tasks.length}</small></h2>
+        <button className="board-icon-button" aria-label={`Добавить задачу: ${column.label}`}
+          onClick={() => onAdd(column.id)}><IconPlus /></button>
+      </div>
+      <div className="board-column-body">
+        {visible.map(task => <DraggableTaskCard key={task.id} task={task} onOpen={() => onOpen(task.id)} />)}
+        {!tasks.length && <div className="board-empty-column">
+          <p>{searching ? 'Ничего не найдено' : 'Здесь пока нет задач'}</p>
+          {!searching && <button onClick={() => onAdd(column.id)}>Добавить задачу</button>}
+        </div>}
+        {remaining > 0 && <button className="board-load-more" onClick={() => setExtra(value => value + batch)}>
+          Ещё {Math.min(batch, remaining)} из {remaining}
+        </button>}
+      </div>
+    </section>
+  );
+}
+
+function CancelDropZone() {
+  const { setNodeRef, isOver } = useDroppable({ id: CANCEL_ID });
+  return <div ref={setNodeRef} className={cn('board-cancel-drop', isOver && 'is-over')}>
+    <IconX /><div><strong>Отменить перенос</strong><small>Отпусти здесь или нажми Esc</small></div>
+  </div>;
+}
+
+function useIsNarrow() {
+  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
   useEffect(() => {
-    const mql = window.matchMedia('(max-width: 767px)');
-    const handler = () => setNarrow(mql.matches);
-    handler();
-    mql.addEventListener('change', handler);
-    return () => mql.removeEventListener('change', handler);
+    const media = matchMedia('(max-width: 767px)');
+    const change = () => setNarrow(media.matches);
+    media.addEventListener('change', change);
+    return () => media.removeEventListener('change', change);
   }, []);
   return narrow;
 }
 
-/* ────────────── Карусель «один статус на экран» ────────────── */
-function SingleStatusView({
-  tasksByStatus,
-  onTaskClick,
-  onAddTask,
-  dragActive,
-}: {
-  tasksByStatus: Record<Status, Task[]>;
-  onTaskClick: (task: Task) => void;
-  onAddTask: () => void;
-  dragActive: boolean;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
+export function BoardPage() {
+  const { data: tasks = [], isLoading, error, refetch } = useTasksList();
+  const update = useUpdateTask();
+  const queryClient = useQueryClient();
+  const [activeTask, setActiveTask] = useState<TaskResponse | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [createStatus, setCreateStatus] = useState<BoardStatus | null>(null);
+  const [search, setSearch] = useState('');
+  const [leadingId, setLeadingId] = useState<string>();
+  const [boardView, setBoardView] = useState<BoardView>(() =>
+    localStorage.getItem(BOARD_VIEW_KEY) === 'horizontal' ? 'horizontal' : 'vertical');
   const [index, setIndex] = useState(0);
+  const narrow = useIsNarrow();
+  const horizontal = narrow && boardView === 'horizontal';
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previous = useRef<Map<string, string>>();
+  const reveal = useTaskUi(state => state.reveal);
+  const revealedAt = useTaskUi(state => state.revealedAt);
+  const revealIds = useTaskUi(state => state.revealIds);
+  useMinuteTick();
+
+  const goTo = (next: number) => {
+    const container = containerRef.current;
+    const first = container?.children[0] as HTMLElement | undefined;
+    if (!container || !first) return;
+    container.scrollTo({ left: (first.offsetWidth + 12) * next,
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    setIndex(next);
+  };
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let frame: number;
-    const onScroll = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const first = el.children[0] as HTMLElement | undefined;
-        if (!first) return;
-        const step = first.offsetWidth + CAROUSEL_GAP;
-        const i = Math.round(el.scrollLeft / step);
-        setIndex(Math.min(COLUMNS.length - 1, Math.max(0, i)));
-      });
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      el.removeEventListener('scroll', onScroll);
-      cancelAnimationFrame(frame);
-    };
-  }, []);
+    if (isLoading) return;
+    if (previous.current) {
+      const changed = tasks.find(task => isBoardStatus(task.status) &&
+        (!previous.current!.has(task.id) || previous.current!.get(task.id) !== task.status));
+      if (changed) {
+        setLeadingId(changed.id);
+        reveal([changed.id]);
+      }
+    }
+    previous.current = new Map(tasks.map(task => [task.id, task.status]));
+  }, [tasks, isLoading, reveal]);
 
-  const goTo = (i: number) => {
-    const el = containerRef.current;
-    const first = el?.children[0] as HTMLElement | undefined;
-    if (!el || !first) return;
-    const clamped = Math.min(COLUMNS.length - 1, Math.max(0, i));
-    el.scrollTo({ left: (first.offsetWidth + CAROUSEL_GAP) * clamped, behavior: 'smooth' });
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          disabled={index === 0}
-          onClick={() => goTo(index - 1)}
-        >
-          <IconChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex items-center gap-1.5">
-          {COLUMNS.map((c, i) => (
-            <span
-              key={c.id}
-              className={cn('h-1.5 w-1.5 rounded-full', i === index ? 'bg-primary' : 'bg-muted-foreground/30')}
-            />
-          ))}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          disabled={index === COLUMNS.length - 1}
-          onClick={() => goTo(index + 1)}
-        >
-          <IconChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-      <div
-        ref={containerRef}
-        className={cn(
-          'flex gap-3 overflow-x-auto pb-1 -mx-4 px-4',
-          dragActive ? 'snap-none' : 'snap-x snap-mandatory'
-        )}
-      >
-        {COLUMNS.map((column) => (
-          <div key={column.id} className="w-[87%] shrink-0 snap-center">
-            <DroppableColumn
-              column={column}
-              tasks={tasksByStatus[column.id]}
-              onTaskClick={onTaskClick}
-              onAddTask={onAddTask}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function toTask(t: any): Task {
-  return {
-    id: String(t.id),
-    title: t.title,
-    description: t.description,
-    priority: t.priority,
-    status: t.status,
-    deadline: t.deadline,
-    group: t.groupName,
-    groupId: t.groupId,
-    estimatedTime: t.estimateMinutes,
-    createdAt: t.createdAt,
-    completedAt: t.completedAt,
-    nextReminderAt: t.reminders?.[0]?.fireAt,
-  };
-}
-
-/* ────────────── BoardPage ────────────── */
-export function BoardPage() {
-  const { data: apiTasks = [] } = useTasksList();
-  const { mutate: updateTaskStatus } = useUpdateTask();
-
-  const tasks: Task[] = apiTasks.map(toTask);
-
-  const [activeTask, setActiveTask] = useState<Task | null>(null);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [taskModalOpen, setTaskModalOpen] = useState(false);
-  const [quickInputOpen, setQuickInputOpen] = useState(false);
-  const [boardView, setBoardViewState] = useState<BoardView>(readBoardView);
-  const isNarrow = useIsNarrow();
-
-  const setBoardView = (view: BoardView) => {
-    localStorage.setItem(BOARD_VIEW_KEY, view);
-    setBoardViewState(view);
-  };
+  useEffect(() => {
+    if (!revealedAt || Date.now() - revealedAt > 8000) return;
+    const task = tasks.find(item => item.id === revealIds[0]);
+    if (!task || !isBoardStatus(task.status)) return;
+    setLeadingId(task.id);
+    setSearch('');
+    if (horizontal) goTo(COLUMNS.findIndex(column => column.id === task.status));
+  }, [revealedAt, revealIds, tasks, horizontal]);
 
   const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
-    })
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinates,
+      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] } }),
   );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const task = tasks.find((t) => t.id === event.active.id);
-    setActiveTask(task ?? null);
+  const tasksByStatus = groupBoardTasks(tasks, search, leadingId);
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveTask(tasks.find(task => task.id === active.id) ?? null);
   };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
     setActiveTask(null);
-    if (!over) return;
-
-    const taskId = active.id as string;
-    const newStatus = over.id as Status;
-
-    const task = tasks.find((t) => t.id === taskId);
-    if (task && task.status !== newStatus) {
-      updateTaskStatus({ id: taskId, status: newStatus });
-    }
+    const task = tasks.find(item => item.id === active.id);
+    if (!task || !over || !isBoardStatus(String(over.id)) || task.status === over.id) return;
+    const status = String(over.id);
+    setLeadingId(task.id);
+    void queryClient.cancelQueries({ queryKey: ['tasks', 'list'] });
+    queryClient.setQueryData<TaskResponse[]>(['tasks', 'list'], items =>
+      items?.map(item => item.id === task.id ? { ...item, status } : item));
+    update.mutate({ id: task.id, status }, {
+      onSuccess: () => {
+        toast.success(`Задача перенесена: ${COLUMNS.find(column => column.id === status)?.label}.`, {
+          action: { label: 'Отменить', onClick: () => update.mutate({ id: task.id, status: task.status }, {
+            onError: () => toast.error('Не удалось вернуть задачу. Попробуй ещё раз.'),
+          }) },
+        });
+      },
+      onError: () => {
+        queryClient.setQueryData<TaskResponse[]>(['tasks', 'list'], items =>
+          items?.map(item => item.id === task.id ? task : item));
+        void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        toast.error('Не удалось перенести задачу. Она осталась в прежнем статусе.');
+      },
+    });
   };
 
-  const handleTaskClick = (task: Task) => {
-    setSelectedTask(task);
-    setTaskModalOpen(true);
-  };
-
-  const tasksByStatus: Record<Status, Task[]> = {
-    TODO: tasks.filter((t) => t.status === 'TODO'),
-    IN_PROGRESS: tasks.filter((t) => t.status === 'IN_PROGRESS'),
-    DONE: tasks.filter((t) => t.status === 'DONE'),
-    CANCELLED: tasks.filter((t) => t.status === 'CANCELLED'),
-  };
-
-  return (
-    <>
-      <div className="max-w-7xl mx-auto space-y-5">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Доска</h1>
-          <Button
-            variant="outline"
-            size="icon"
-            className="md:hidden h-8 w-8"
-            onClick={() => setBoardView(boardView === 'vertical' ? 'horizontal' : 'vertical')}
-            title={boardView === 'vertical' ? 'Показать по одному статусу, со свайпом' : 'Показать статусы друг под другом'}
-          >
-            {boardView === 'vertical' ? <IconSwipe className="h-4 w-4" /> : <IconArrowsVertical className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        <DndContext
-          sensors={sensors}
-          collisionDetection={collisionDetection}
-          autoScroll={{ threshold: { x: 0.25, y: 0.2 } }}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          {isNarrow ? (
-            boardView === 'vertical' ? (
-              <div className="flex flex-col gap-4">
-                {COLUMNS.map((column) => (
-                  <DroppableColumn
-                    key={column.id}
-                    column={column}
-                    tasks={tasksByStatus[column.id]}
-                    onTaskClick={handleTaskClick}
-                    onAddTask={() => setQuickInputOpen(true)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <SingleStatusView
-                tasksByStatus={tasksByStatus}
-                onTaskClick={handleTaskClick}
-                onAddTask={() => setQuickInputOpen(true)}
-                dragActive={activeTask !== null}
-              />
-            )
-          ) : (
-            <div className="grid grid-cols-3 gap-4">
-              {COLUMNS.map((column) => (
-                <DroppableColumn
-                  key={column.id}
-                  column={column}
-                  tasks={tasksByStatus[column.id]}
-                  onTaskClick={handleTaskClick}
-                  onAddTask={() => setQuickInputOpen(true)}
-                />
-              ))}
-            </div>
-          )}
-
-          <DragOverlay>
-            {activeTask && <OverlayTaskCard task={activeTask} />}
-          </DragOverlay>
-        </DndContext>
+  return <>
+    <div className="munin-page munin-board-page">
+      <header className="munin-page-head">
+        <div><h1>Доска</h1><p className="board-summary">{tasks.filter(task => task.status === 'TODO' || task.status === 'IN_PROGRESS').length} активных · {tasks.filter(task => task.status === 'DONE').length} готово{search.trim() && ' · поиск'}</p></div>
+        <Button onClick={() => setCreateStatus('TODO')}><IconPlus className="h-4 w-4" />Задача</Button>
+      </header>
+      <div className="board-workbar">
+        <label className="munin-search"><IconSearch /><input aria-label="Найти задачу на доске" placeholder="Найти задачу" value={search} onChange={event => setSearch(event.target.value)} />
+          {search && <button aria-label="Сбросить поиск" className="board-search-reset" onClick={() => setSearch('')}><IconX /></button>}
+        </label>
+        {narrow && <div className="board-view-switch" aria-label="Вид доски">
+          {([['vertical', 'Списком'], ['horizontal', 'По статусам']] as const).map(([value, label]) =>
+            <button key={value} aria-pressed={boardView === value} onClick={() => {
+              localStorage.setItem(BOARD_VIEW_KEY, value); setBoardView(value); setIndex(0);
+            }}>{label}</button>)}
+        </div>}
+        <p id="board-interaction-hint" className="board-hint">{narrow ? '⋯: быстрые действия' : 'ПКМ или ⋯: быстрые действия'}</p>
       </div>
-
-      <TaskDetailModal
-        task={selectedTask}
-        open={taskModalOpen}
-        onClose={() => setTaskModalOpen(false)}
-      />
-      <QuickInputModal open={quickInputOpen} onClose={() => setQuickInputOpen(false)} />
-    </>
-  );
+      {isLoading ? <div className="page-state" role="status">Загружаем задачи…</div> : error ?
+        <div className="page-state" role="alert"><p>Не удалось загрузить доску</p><Button variant="outline" onClick={() => void refetch()}>Попробовать снова</Button></div> :
+        <DndContext sensors={sensors} collisionDetection={collisionDetection}
+          autoScroll={{ threshold: { x: 0.25, y: 0.2 } }}
+          onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={() => setActiveTask(null)}
+          accessibility={{ screenReaderInstructions: { draggable: 'Пробел: взять задачу. Стрелки: выбрать статус. Пробел: перенести. Escape: отменить.' },
+            announcements: {
+              onDragStart: ({ active }) => `Задача взята: ${tasks.find(task => task.id === active.id)?.title ?? ''}`,
+              onDragOver: ({ over }) => over ? (over.id === CANCEL_ID ? 'Отменить перенос' : COLUMNS.find(column => column.id === over.id)?.label) : 'Вне колонок. Перенос отменится.',
+              onDragEnd: ({ over }) => over && isBoardStatus(String(over.id)) ? 'Задача отпущена в колонке.' : 'Перенос отменён.',
+              onDragCancel: () => 'Перенос отменён.',
+            } }}>
+          {horizontal && <nav className="board-carousel-nav" aria-label="Статус задач">
+            <button aria-label="Предыдущий статус" disabled={!index} onClick={() => goTo(index - 1)}><IconChevronLeft /></button>
+            <div>{COLUMNS.map((column, position) => <button key={column.id} aria-pressed={index === position} onClick={() => goTo(position)}>{column.label}</button>)}</div>
+            <button aria-label="Следующий статус" disabled={index === 2} onClick={() => goTo(index + 1)}><IconChevronRight /></button>
+          </nav>}
+          <div ref={containerRef} className={cn('munin-board', horizontal && 'board-horizontal', activeTask && 'board-drag-active')}
+            onScroll={event => {
+              if (!horizontal) return;
+              const first = event.currentTarget.children[0] as HTMLElement | undefined;
+              if (first) setIndex(Math.max(0, Math.min(2, Math.round(event.currentTarget.scrollLeft / (first.offsetWidth + 12)))));
+            }}>
+            {COLUMNS.map(column => <DroppableColumn key={column.id} column={column} narrow={narrow} searching={Boolean(search.trim())}
+              tasks={tasksByStatus[column.id]} onOpen={setSelectedId} onAdd={setCreateStatus} />)}
+          </div>
+          {activeTask && <CancelDropZone />}
+          <DragOverlay dropAnimation={matchMedia('(prefers-reduced-motion: reduce)').matches ? null : {
+            duration: 180, easing: 'cubic-bezier(.22,1,.36,1)',
+            sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0' } } }),
+          }}>
+            {activeTask && <div className="board-task board-drag-overlay"><CardContents task={activeTask} /></div>}
+          </DragOverlay>
+        </DndContext>}
+      <p className="board-note">{narrow ? 'Статус можно изменить в меню ⋯. Для переноса удерживай карточку.' : 'Перетаскивай карточку целиком. С клавиатуры: пробел, стрелки и пробел; Esc — отмена.'}</p>
+    </div>
+    <TaskDetailModal task={tasks.find(task => task.id === selectedId) ?? null} open={Boolean(selectedId)} onClose={() => setSelectedId(null)} />
+    <CreateTaskDialog open={createStatus !== null} initialStatus={createStatus ?? 'TODO'} onClose={() => setCreateStatus(null)} onInspect={setSelectedId} />
+  </>;
 }

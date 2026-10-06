@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { useCreateTask, useGroups, type TaskResponse } from '@/lib/hooks/useTasks';
+import { useCreateTask, useUpdateTask, useGroups, type TaskResponse } from '@/lib/hooks/useTasks';
+import { getStatusLabel, type Status } from '@/lib/store';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
 import { zonedInputToIso } from '@/lib/reminderPresets';
 import { useTaskUi } from '@/lib/task-ui';
@@ -43,12 +44,14 @@ export function CreateTaskDialog({
   groupId,
   onCreated,
   onInspect,
+  initialStatus = 'TODO',
 }: {
   open: boolean;
   onClose: () => void;
   groupId?: string;
   onCreated?: (task: TaskResponse) => void;
   onInspect?: (id: string) => void;
+  initialStatus?: Exclude<Status, 'CANCELLED'>;
 }) {
   const {
     register,
@@ -62,6 +65,7 @@ export function CreateTaskDialog({
   const [group, setGroup] = useState(groupId || '__none__');
   const [priority, setPriority] = useState('MEDIUM');
   const create = useCreateTask();
+  const update = useUpdateTask();
   const { data: groups = [] } = useGroups();
   const { timezone, isReady } = useUserTimezone();
   const reveal = useTaskUi((s) => s.reveal);
@@ -81,7 +85,7 @@ export function CreateTaskDialog({
       return;
     }
     try {
-      const task = await create.mutateAsync({
+      let task = await create.mutateAsync({
         title: parsed.data.title,
         description: values.description || undefined,
         priority,
@@ -94,6 +98,13 @@ export function CreateTaskDialog({
           : undefined,
         estimateMinutes: values.minutes ? Number(values.minutes) : undefined,
       });
+      if (initialStatus !== 'TODO') {
+        try {
+          task = await update.mutateAsync({ id: task.id, status: initialStatus });
+        } catch {
+          toast.error('Задача создана в «К выполнению», но статус не изменился.');
+        }
+      }
       onCreated?.(task);
       reveal([task.id]);
       onClose();
@@ -115,6 +126,7 @@ export function CreateTaskDialog({
           <DialogTitle>Новая задача</DialogTitle>
           <DialogDescription>
             Достаточно названия. Остальное можно добавить позже.
+            {initialStatus !== 'TODO' && ` Добавим в «${getStatusLabel(initialStatus)}».`}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-5">
@@ -195,8 +207,8 @@ export function CreateTaskDialog({
             </div>
           </details>
           <div className="flex gap-2">
-            <Button type="submit" disabled={create.isPending || !isReady}>
-              {create.isPending ? 'Добавляем…' : 'Добавить'}
+            <Button type="submit" disabled={create.isPending || update.isPending || !isReady}>
+              {create.isPending || update.isPending ? 'Добавляем…' : 'Добавить'}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>
               Отмена
