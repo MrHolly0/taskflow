@@ -304,8 +304,8 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
       <DialogContent
         className={cn(
           'sm:max-w-lg w-full p-0 gap-0 flex flex-col',
-          'inset-y-auto top-4 my-0 max-h-[calc(100dvh-2rem)]',
-          'sm:inset-y-0 sm:my-auto sm:max-h-[90dvh]'
+          'self-start max-h-[calc(100dvh-2rem)]',
+          'sm:self-center sm:max-h-[90dvh]'
         )}
       >
         <DialogHeader className="px-6 pt-6">

@@ -50,15 +50,16 @@ function AlertDialogContent({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
-      <AlertDialogPrimitive.Content
-        data-slot="alert-dialog-content"
-        className={cn(
-          "ui-floating-surface bg-background fixed inset-x-0 inset-y-0 m-auto h-fit z-50 grid w-full max-w-[calc(100%-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
-          className,
-        )}
-        {...props}
-      />
+      <AlertDialogOverlay className="flex items-center justify-center py-4">
+        <AlertDialogPrimitive.Content
+          data-slot="alert-dialog-content"
+          className={cn(
+            "ui-floating-surface bg-background relative z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+            className,
+          )}
+          {...props}
+        />
+      </AlertDialogOverlay>
     </AlertDialogPortal>
   );
 }
