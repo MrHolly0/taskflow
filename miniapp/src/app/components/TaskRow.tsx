@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import * as ContextMenu from '@radix-ui/react-context-menu';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import {
@@ -79,25 +79,28 @@ export function useTaskActions(task: TaskResponse) {
   };
 }
 
-export function TaskRow({
+export function TaskActionMenu({
   task,
   onOpen,
-  variant = 'list',
-  primary = false,
-  dragHandle,
+  children,
+  moreButtonClassName = 'task-more',
+  contextDisabled = false,
 }: {
   task: TaskResponse;
   onOpen: () => void;
-  variant?: 'focus' | 'list' | 'folder';
-  primary?: boolean;
-  dragHandle?: ReactNode;
+  children: (menu: {
+    moreButton: ReactNode;
+    menuOpen: boolean;
+    actions: ReturnType<typeof useTaskActions>;
+  }) => ReactElement;
+  moreButtonClassName?: string;
+  contextDisabled?: boolean;
 }) {
   const actions = useTaskActions(task);
   const { data: groups = [] } = useGroups();
-  const { timezone } = useUserTimezone();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
-  const ref = useTaskReveal(task.id);
   const closed = !isActiveTask(task);
   function items(kind: 'context' | 'dropdown') {
     const Menu = kind === 'context' ? ContextMenu : Dropdown;
@@ -187,9 +190,93 @@ export function TaskRow({
       </>
     );
   }
+  const moreButton = (
+    <Dropdown.Root onOpenChange={setDropdownOpen}>
+      <Dropdown.Trigger asChild>
+        <button
+          type="button"
+          className={moreButtonClassName}
+          aria-label={`Действия: ${task.title}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <IconDots />
+        </button>
+      </Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content
+          className="task-menu"
+          align="end"
+          sideOffset={4}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onTouchStart={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          {items('dropdown')}
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
+  );
   return (
-    <ContextMenu.Root onOpenChange={setMenuOpen}>
-      <ContextMenu.Trigger asChild>
+    <ContextMenu.Root onOpenChange={setContextOpen}>
+      <ContextMenu.Trigger asChild disabled={contextDisabled}>
+        {children({ moreButton, menuOpen: contextOpen || dropdownOpen, actions })}
+      </ContextMenu.Trigger>
+      <ContextMenu.Portal>
+        <ContextMenu.Content className="task-menu">{items('context')}</ContextMenu.Content>
+      </ContextMenu.Portal>
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="task-group-picker">
+          <DialogTitle>Переместить в группу</DialogTitle>
+          <DialogDescription>{task.title}</DialogDescription>
+          <div className="task-group-options">
+            {[{ id: '', name: 'Без группы', icon: 'folder' }, ...groups].map(group => {
+              const Icon = getGroupIcon(group.icon || 'folder');
+              const selected = (task.groupId ?? '') === group.id;
+              return (
+                <button key={group.id} disabled={actions.busy || selected}
+                  className="task-group-option" onClick={() => {
+                    void actions.patch({ groupId: group.id || null }, `Группа: ${group.name}.`);
+                    setMoveOpen(false);
+                  }}>
+                  <Icon />
+                  <span>{group.name}</span>
+                  {selected && <IconCheck aria-label="Текущая группа" />}
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </ContextMenu.Root>
+  );
+}
+
+export function TaskRow({
+  task,
+  onOpen,
+  variant = 'list',
+  primary = false,
+  dragHandle,
+}: {
+  task: TaskResponse;
+  onOpen: () => void;
+  variant?: 'focus' | 'list' | 'folder';
+  primary?: boolean;
+  dragHandle?: ReactNode;
+}) {
+  const { timezone } = useUserTimezone();
+  const ref = useTaskReveal(task.id);
+  const closed = !isActiveTask(task);
+  return (
+    <TaskActionMenu task={task} onOpen={onOpen}>
+      {({ moreButton, menuOpen, actions }) => (
         <article
           ref={ref}
           data-task-id={task.id}
@@ -279,46 +366,9 @@ export function TaskRow({
             )}
             {dragHandle}
           </div>
-          <Dropdown.Root onOpenChange={setMenuOpen}>
-            <Dropdown.Trigger asChild>
-              <button className="task-more" aria-label={`Действия: ${task.title}`}>
-                <IconDots />
-              </button>
-            </Dropdown.Trigger>
-            <Dropdown.Portal>
-              <Dropdown.Content className="task-menu" align="end" sideOffset={4}>
-                {items('dropdown')}
-              </Dropdown.Content>
-            </Dropdown.Portal>
-          </Dropdown.Root>
+          {moreButton}
         </article>
-      </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Content className="task-menu">{items('context')}</ContextMenu.Content>
-      </ContextMenu.Portal>
-      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent className="task-group-picker">
-          <DialogTitle>Переместить в группу</DialogTitle>
-          <DialogDescription>{task.title}</DialogDescription>
-          <div className="task-group-options">
-            {[{ id: '', name: 'Без группы', icon: 'folder' }, ...groups].map(group => {
-              const Icon = getGroupIcon(group.icon || 'folder');
-              const selected = (task.groupId ?? '') === group.id;
-              return (
-                <button key={group.id} disabled={actions.busy || selected}
-                  className="task-group-option" onClick={() => {
-                    void actions.patch({ groupId: group.id || null }, `Группа: ${group.name}.`);
-                    setMoveOpen(false);
-                  }}>
-                  <Icon />
-                  <span>{group.name}</span>
-                  {selected && <IconCheck aria-label="Текущая группа" />}
-                </button>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </ContextMenu.Root>
+      )}
+    </TaskActionMenu>
   );
 }

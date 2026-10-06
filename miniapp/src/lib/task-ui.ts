@@ -20,7 +20,7 @@ export const useTaskUi = create<TaskUiState>((set) => ({
 }));
 
 export function useTaskReveal(id: string) {
-  const ref = useRef<HTMLElement>(null);
+  const ref = useRef<HTMLElement | null>(null);
   const ids = useTaskUi((s) => s.revealIds);
   const at = useTaskUi((s) => s.revealedAt);
   useEffect(() => {
