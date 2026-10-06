@@ -270,10 +270,11 @@ export function AssistantPage() {
           {/* Textarea и полоса записи лежат в одной ячейке грида — высота слота
               определяется большей из них и не меняется при старте записи, иначе
               кнопка справа подпрыгивает в момент, когда палец уже на ней. */}
-          <div className="grid flex-1">
+          <div className="grid grid-cols-1 min-w-0 flex-1">
             <textarea
               key="input"
               ref={inputField}
+              wrap="soft"
               aria-label="Сообщение Мунину"
               value={input}
               onChange={(e) => setInput(e.target.value)}

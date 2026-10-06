@@ -26,7 +26,7 @@
 .munin-composer { flex-shrink: 0; border-top: 1px solid var(--border); padding-top: 14px; }
 .munin-composer-field { display: flex; align-items: flex-end; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); }
 .munin-composer-field > .grid { min-width: 0; }
-.munin-composer-field .munin-message-input { background: transparent; color: var(--foreground); border: 0; outline: none; border-radius: 10px; box-shadow: none; padding: 8px; max-height: 128px; font-size: 14px; }
+.munin-composer-field .munin-message-input { min-width:0; max-width:100%; field-sizing:fixed; overflow-x:hidden; overflow-y:auto; white-space:pre-wrap; overflow-wrap:anywhere; background: transparent; color: var(--foreground); border: 0; outline: none; border-radius: 10px; box-shadow: none; padding: 8px; max-height: 128px; font-size: 14px; }
 .munin-composer-field .munin-message-input::placeholder { color: var(--muted-foreground); opacity: 1; }
 .munin-composer-field .munin-message-input:focus-visible { box-shadow: inset 0 0 0 1px var(--ring); }
 .munin-composer-field > button, .munin-composer-field > .relative > button { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; }

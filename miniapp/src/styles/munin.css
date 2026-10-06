@@ -261,3 +261,9 @@ button:disabled { cursor:default; }
 }
 @media (pointer:coarse) { .task-menu-lifted {transform:translateY(-2px);border-radius:12px;background:var(--background);box-shadow:0 10px 26px oklch(0 0 0 / .12);} }
 @media (prefers-reduced-motion:reduce) { .munin-main {scroll-behavior:auto;} .task-menu,.group-preview,.sound-wave i,.task-reveal::before {animation:none;} .sidebar-capture {transition:none;} .task-menu-lifted {transform:none;} }
+
+.ui-floating-surface[data-state=open] {animation:munin-surface-enter 160ms ease-out;}
+.ui-floating-surface[data-state=closed] {animation:munin-surface-exit 140ms ease-in;}
+@keyframes munin-surface-enter {from {opacity:0;} to {opacity:1;}}
+@keyframes munin-surface-exit {from {opacity:1;} to {opacity:0;}}
+@media(prefers-reduced-motion:reduce) {.ui-floating-surface[data-state] {animation:none;}}

@@ -166,7 +166,7 @@
     .proposal-row small { color: var(--muted); }
     .composer { flex-shrink: 0; border-top: 1px solid var(--line); padding-top: 14px; }
     .composer-field { display: flex; align-items: flex-end; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
-    .composer textarea { flex: 1; min-width: 0; width: 100%; height: 64px; max-height: 128px; resize: vertical; background: none; color: var(--text); border: 0; padding: 8px; font-size: 14px; }
+    .composer textarea { field-sizing: fixed; overflow-x: hidden; overflow-wrap: anywhere; white-space: pre-wrap; flex: 1; min-width: 0; width: 100%; height: 64px; max-height: 128px; resize: vertical; background: none; color: var(--text); border: 0; padding: 8px; font-size: 14px; }
     .composer textarea::placeholder { color: var(--muted); opacity: 1; }
     .composer-icon { width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center; border: 0; border-radius: 12px; background: none; }
     .composer-icon:hover { background: var(--raised); }
@@ -370,7 +370,7 @@
         <div class="conversation" id="chat-log" role="log" aria-label="Переписка с Мунином" aria-live="polite" aria-relevant="additions"></div>
         <form class="composer" id="chat-form">
           <div class="voice-preview" id="voice-preview" hidden><p>Пример голосового сообщения</p><button class="wave-player" type="button" aria-label="Приостановить волну"><span class="wave" aria-hidden="true"></span><svg class="icon" aria-hidden="true"><use href="#pause"/></svg></button><p>«Надо записаться к стоматологу»</p><button class="action" id="insert-voice" type="button">Вставить пример</button></div>
-          <div class="composer-field"><textarea id="chat-input" aria-label="Сообщение Мунину" placeholder="Что нужно сделать или что изменилось?" maxlength="1000" rows="2"></textarea><button class="composer-icon" id="voice-example" type="button" aria-label="Показать пример голосового ввода" aria-expanded="false" aria-controls="voice-preview"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg></button><button class="composer-icon send" id="send-message" type="submit" aria-label="Отправить сообщение" disabled><svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
+          <div class="composer-field"><textarea wrap="soft" id="chat-input" aria-label="Сообщение Мунину" placeholder="Что нужно сделать или что изменилось?" maxlength="1000" rows="2"></textarea><button class="composer-icon" id="voice-example" type="button" aria-label="Показать пример голосового ввода" aria-expanded="false" aria-controls="voice-preview"><svg class="icon" aria-hidden="true"><use href="#mic"/></svg></button><button class="composer-icon send" id="send-message" type="submit" aria-label="Отправить сообщение" disabled><svg class="icon" aria-hidden="true"><use href="#arrow"/></svg></button></div>
           <small>Демочат: ответы по примерам, без отправки на сервер. Микрофон показывает пример.</small>
         </form>
       </section>

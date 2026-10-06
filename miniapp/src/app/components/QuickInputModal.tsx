@@ -182,8 +182,8 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
       <DialogContent
         className={cn(
           'sm:max-w-md w-full overflow-y-auto',
-          'top-4 translate-y-0 max-h-[calc(100dvh-2rem)]',
-          'sm:top-[50%] sm:translate-y-[-50%] sm:max-h-[90dvh]'
+          'inset-y-auto top-4 my-0 max-h-[calc(100dvh-2rem)]',
+          'sm:inset-y-0 sm:my-auto sm:max-h-[90dvh]'
         )}
       >
         <DialogHeader>
