@@ -8,7 +8,10 @@
 .board-note {margin-top:16px;}
 .munin-board {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;}
 .board-column {min-width:0;background:color-mix(in oklch,var(--secondary) 56%,var(--background));padding:0 10px 10px;border-radius:16px;position:relative;max-height:max(250px,calc(100dvh - 288px));display:flex;flex-direction:column;border:1px solid transparent;transition:background 180ms,border-color 180ms;}
-.board-column-head {height:58px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 4px;}
+.board-column-head {height:62px;flex-shrink:0;display:flex;flex-direction:column;padding:8px 4px;}
+.board-column-heading {display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:32px;}
+.board-column-drop-hint {height:14px;line-height:14px;font-size:11px;color:var(--munin-wave);visibility:hidden;white-space:nowrap;}
+.board-drop-target .board-column-drop-hint {visibility:visible;}
 .board-column-head h2 {display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;min-width:0;}
 .board-column-head small {font-size:11px;min-width:22px;text-align:center;padding:3px 5px;border-radius:6px;color:var(--muted-foreground);background:var(--secondary);font-weight:400;}
 .board-status-icon {width:17px;height:17px;stroke-width:2;color:var(--muted-foreground);flex-shrink:0;}
@@ -19,7 +22,6 @@
 .board-icon-button:hover {background:var(--secondary);color:var(--foreground);}
 .board-column-body {overflow:auto;min-height:128px;padding-bottom:2px;scrollbar-gutter:stable;display:flex;flex-direction:column;gap:9px;}
 .board-drop-target {border-style:dashed;border-color:var(--munin-wave);background:color-mix(in oklch,var(--munin-wave) 6%,var(--secondary));}
-.board-drop-target::after {content:'Отпусти, чтобы изменить статус';position:absolute;bottom:12px;left:16px;right:16px;background:var(--foreground);color:var(--background);border-radius:8px;padding:8px 10px;font-size:11px;pointer-events:none;text-align:center;}
 .board-task {padding:14px;border:1px solid var(--border);border-radius:12px;background:var(--card);min-width:0;position:relative;cursor:pointer;touch-action:auto;user-select:none;transition:box-shadow 180ms,border-color 180ms;flex-shrink:0;scroll-margin-block:10px;}
 .board-task:hover {border-color:color-mix(in oklch,var(--foreground) 22%,var(--border));box-shadow:0 4px 12px oklch(0 0 0 / .08);}
 .board-task:focus-visible {outline:2px solid var(--munin-wave);outline-offset:-2px;}
@@ -63,7 +65,8 @@
   .munin-board {display:flex;flex-direction:column;gap:18px;}
   .board-column {width:100%;max-height:none;padding:0 10px 10px;}
   .board-column-body {overflow:visible;scrollbar-gutter:auto;}
-  .board-column-head {height:62px;}
+  .board-column-head {height:74px;}
+  .board-column-heading {min-height:44px;}
   .board-icon-button {width:44px;height:44px;}
   .board-task {padding:14px;}
   .board-task-meta {font-size:12px;}

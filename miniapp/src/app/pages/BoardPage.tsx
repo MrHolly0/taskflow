@@ -123,9 +123,12 @@ function DroppableColumn({ column, tasks, narrow, searching, onOpen, onAdd }: {
     <section ref={setNodeRef} data-status={column.id}
       aria-label={column.label} className={cn('board-column', isOver && 'board-drop-target')}>
       <div className="board-column-head">
-        <h2><Icon className="board-status-icon" /><span>{column.label}</span><small aria-label={`${tasks.length} ${plural(tasks.length, ['задача', 'задачи', 'задач'])}`}>{tasks.length}</small></h2>
-        <button className="board-icon-button" aria-label={`Добавить задачу: ${column.label}`}
-          onClick={() => onAdd(column.id)}><IconPlus /></button>
+        <div className="board-column-heading">
+          <h2><Icon className="board-status-icon" /><span>{column.label}</span><small aria-label={`${tasks.length} ${plural(tasks.length, ['задача', 'задачи', 'задач'])}`}>{tasks.length}</small></h2>
+          <button className="board-icon-button" aria-label={`Добавить задачу: ${column.label}`}
+            onClick={() => onAdd(column.id)}><IconPlus /></button>
+        </div>
+        <span className="board-column-drop-hint" aria-hidden={!isOver}>Отпусти, чтобы изменить статус</span>
       </div>
       <div className="board-column-body">
         {visible.map(task => <DraggableTaskCard key={task.id} task={task} onOpen={() => onOpen(task.id)} />)}
