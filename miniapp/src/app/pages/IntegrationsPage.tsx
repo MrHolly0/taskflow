@@ -21,7 +21,7 @@ import '@/styles/integrations.css';
 import { EmailCodeStep } from '@/app/components/EmailCodeStep';
 import { PhoneWaitingStep } from '@/app/components/PhoneWaitingStep';
 import { TelegramLoginButton } from '@/app/components/TelegramLoginButton';
-import { TelegramLogo } from '@/app/components/TelegramLogo';
+import { TelegramGlyph } from '@/app/components/TelegramLogo';
 import { MergeConflictDialog } from '@/app/components/MergeConflictDialog';
 import { isTelegramWebApp } from '@/lib/auth';
 import { plural } from '@/lib/plural';
@@ -273,7 +273,9 @@ function TelegramSection({
     <section className="munin-identity-row">
       <div className="munin-identity-summary">
         <div className="munin-identity-provider">
-          <TelegramLogo className="munin-telegram-logo" />
+          <span className="munin-identity-icon" aria-hidden="true">
+            <TelegramGlyph className="h-5 w-5" />
+          </span>
           <div>
             <p className="text-sm font-medium">Telegram</p>
             <IdentityState connected={connected}>{connected ? 'Подключён' : 'Вход через Telegram'}</IdentityState>

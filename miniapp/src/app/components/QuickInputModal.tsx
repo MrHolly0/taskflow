@@ -200,7 +200,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                 {/* Обе части лежат в одной ячейке грида, чтобы высота блока определялась
                     большей из них и не менялась при старте записи — иначе строка с кнопкой
                     подпрыгивает в момент, когда палец уже прижат к ней. */}
-                <div className="grid">
+                <div className="grid grid-cols-1 min-w-0">
                   <div
                     className={cn('col-start-1 row-start-1 space-y-3', recording.isRecording && 'invisible pointer-events-none')}
                     aria-hidden={recording.isRecording}

@@ -18,6 +18,7 @@
 .focus-title { font-size:40px; letter-spacing:-1.2px; line-height:1.16; font-weight:400; margin:0; }
 .focus-title strong { font-weight:650; }
 .focus-date { margin:16px 0 30px; color:var(--muted-foreground); font-size:13px; text-transform:capitalize; }
+.focus-main > .email-bind-banner { margin-bottom:20px; }
 .focus-budget { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:0 0 30px; }
 .focus-budget > span { font-size:13px; color:var(--muted-foreground); margin-right:4px; }
 .focus-budget button { background:var(--secondary); border-radius:12px; min-height:44px; padding:8px 14px; font-size:13px; }
