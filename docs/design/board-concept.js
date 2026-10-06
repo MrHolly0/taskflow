@@ -32,9 +32,8 @@
     toastTimer=setTimeout(() => {$('toast').classList.add('closing');toastTimer=setTimeout(() => {$('toast').hidden=true;},230);},3400);
   }
   function taskCard(task) {
-    const done=task.status==='DONE';
     const date=task.deadline?new Intl.DateTimeFormat('ru',{day:'numeric',month:'short'}).format(new Date(task.deadline+'T12:00:00')):'';
-    return `<article class="task ${done?'done':task.status==='IN_PROGRESS'?'started':''}" data-id="${task.id}"><div class="task-main"><button class="task-check" data-complete="${task.id}" aria-label="${done?'Вернуть в список':'Завершить'}: ${escape(task.title)}"><span>${icon('check')}</span></button><button class="task-title" data-detail="${task.id}">${escape(task.title)}</button><button class="icon-button" data-menu="${task.id}" aria-label="Быстрые действия: ${escape(task.title)}">${icon('more')}</button></div><div class="task-meta">${task.priority==='HIGH'||task.priority==='URGENT'?`<span class="${task.priority==='URGENT'?'urgent':''}">${task.priority==='URGENT'?'Срочно':'Важно'}</span>`:''}<span>${icon('clock')}${date?'Срок: '+date:'Без срока'}</span>${task.estimate?`<span>${task.estimate} мин</span>`:''}${task.group?`<span>${escape(task.group)}</span>`:''}${task.reminder?`<span>${icon('bell')}09:00</span>`:''}</div><div class="task-footer"><div>${done?`<button class="task-action" data-status="TODO" data-id="${task.id}">Вернуть в список</button>`:task.status==='TODO'?`<button class="task-action" data-status="IN_PROGRESS" data-id="${task.id}">Начать ${icon('arrow')}</button>`:`<button class="task-action" data-status="DONE" data-id="${task.id}">Завершить</button><button class="task-action" data-status="TODO" data-id="${task.id}">Вернуть</button>`}</div><button class="icon-button drag-handle" data-drag="${task.id}" aria-label="Перенести: ${escape(task.title)}" title="Перенести задачу. С клавиатуры: пробел, стрелки, Enter">${icon('grip')}</button></div></article>`;
+    return `<article class="task" data-id="${task.id}" data-detail="${task.id}" data-drag="${task.id}" tabindex="0" aria-label="${escape(task.title)}" aria-describedby="board-drag-hint"><div class="task-main"><span class="task-grip" aria-hidden="true">${icon('grip')}</span><div class="task-content"><div class="task-title">${escape(task.title)}</div><div class="task-meta">${task.priority==='HIGH'||task.priority==='URGENT'?`<span>${task.priority==='URGENT'?'Срочно':'Важно'}</span>`:''}${date?`<span>${icon('clock')}${date}</span>`:''}${task.group?`<span>${escape(task.group)}</span>`:''}${task.reminder?`<span>${icon('bell')}09:00</span>`:''}</div></div><button class="icon-button" data-menu="${task.id}" aria-label="Быстрые действия: ${escape(task.title)}">${icon('more')}</button></div></article>`;
   }
   function render(revealId) {
     const scrolled = Object.fromEntries([...document.querySelectorAll('.column')].map(col => [col.dataset.status,col.querySelector('.column-body').scrollTop]));
@@ -42,7 +41,7 @@
     $('summary').textContent=`${tasks.filter(t=>t.status==='TODO'||t.status==='IN_PROGRESS').length} активных · ${tasks.filter(t=>t.status==='DONE').length} готово`;
     $('board').innerHTML=statuses.map(status => {
       const all=filtered(status), shown=all.slice(0,limits[status]);
-      return `<section class="column" data-status="${status}" aria-label="${labels[status]}"><header class="column-head"><h2><span class="status-marker"></span>${labels[status]}<small>${all.length}</small></h2><button class="icon-button" data-add="${status}" aria-label="Добавить задачу: ${labels[status]}">${icon('plus')}</button></header>${createStatus===status?`<form class="inline-create" data-create="${status}"><textarea maxlength="512" rows="2" required aria-label="Название новой задачи" placeholder="Что нужно сделать?"></textarea><div class="inline-actions"><button class="button primary" type="submit">Добавить</button><button class="button" type="button" data-create-close>Отмена</button></div><small class="local-note">Ручное создание в «${labels[status]}»</small></form>`:''}<div class="column-body">${shown.map(taskCard).join('')}${!all.length?`<div class="empty-column"><span>${query?'Задач по запросу нет':status==='DONE'?'Здесь появятся завершённые дела':'В этой колонке пока пусто'}</span>${!query?`<button class="button" data-add="${status}">${icon('plus')}Задача</button>`:''}</div>`:''}${all.length>shown.length?`<button class="load-more" data-more="${status}">Ещё ${Math.min(batch(),all.length-shown.length)} из ${all.length-shown.length}</button>`:''}</div></section>`;
+      return `<section class="column" data-status="${status}" aria-label="${labels[status]}"><header class="column-head"><h2><svg class="status-icon" aria-hidden="true"><use href="#${{TODO:'status-todo',IN_PROGRESS:'status-progress',DONE:'status-done'}[status]}"/></svg>${labels[status]}<small>${all.length}</small></h2><button class="icon-button" data-add="${status}" aria-label="Добавить задачу: ${labels[status]}">${icon('plus')}</button></header>${createStatus===status?`<form class="inline-create" data-create="${status}"><textarea maxlength="512" rows="2" required aria-label="Название новой задачи" placeholder="Что нужно сделать?"></textarea><div class="inline-actions"><button class="button primary" type="submit">Добавить</button><button class="button" type="button" data-create-close>Отмена</button></div><small class="local-note">Ручное создание в «${labels[status]}»</small></form>`:''}<div class="column-body">${shown.map(taskCard).join('')}${!all.length?`<div class="empty-column"><span>${query?'Задач по запросу нет':status==='DONE'?'Здесь появятся завершённые дела':'В этой колонке пока пусто'}</span>${!query?`<button class="button" data-add="${status}">${icon('plus')}Задача</button>`:''}</div>`:''}${all.length>shown.length?`<button class="load-more" data-more="${status}">Ещё ${Math.min(batch(),all.length-shown.length)} из ${all.length-shown.length}</button>`:''}</div></section>`;
     }).join('');
     document.querySelectorAll('.column').forEach(col=>{col.querySelector('.column-body').scrollTop=scrolled[col.dataset.status]??0;});
     $('board').scrollLeft=horizontalScroll;
@@ -88,10 +87,10 @@
   document.addEventListener('click',event=>{if(Date.now()<blockClickUntil && !event.target.closest('#quick-menu')){event.preventDefault();event.stopImmediatePropagation();}},true);
   document.addEventListener('click',event=>{
     const detail=event.target.closest('[data-detail]'), complete=event.target.closest('[data-complete]'), status=event.target.closest('[data-status][data-id]'), menu=event.target.closest('[data-menu]'), add=event.target.closest('[data-add]'), more=event.target.closest('[data-more]'), mode=event.target.closest('button[data-view]'), index=event.target.closest('[data-column-index]');
-    if(detail)openDetails(detail.dataset.detail);
+    if(menu){const r=menu.getBoundingClientRect();openMenu(menu.dataset.menu,r.right-258,r.bottom+5);}
+    else if(detail)openDetails(detail.dataset.detail);
     else if(complete){const task=tasks.find(t=>t.id===Number(complete.dataset.complete));changeStatus(task.id,task.status==='DONE'?'TODO':'DONE');}
     else if(status)changeStatus(status.dataset.id,status.dataset.status);
-    else if(menu){const r=menu.getBoundingClientRect();openMenu(menu.dataset.menu,r.right-258,r.bottom+5);}
     else if(add){createStatus=add.dataset.add;render();document.querySelector('.inline-create')?.scrollIntoView({block:'nearest',behavior:reduced.matches?'instant':'smooth'});}
     else if(more){limits[more.dataset.more]+=batch();render();}
     else if(mode)setView(mode.dataset.view);
@@ -124,12 +123,16 @@
   function selectTarget(status) {
     drag.target=status;document.querySelectorAll('.column').forEach(col=>col.classList.toggle('is-target',col.dataset.status===status&&status!==drag.task.status));
   }
+  function moveGhost(x,y) {
+    drag.ghost.style.transform=`translate3d(${x-drag.offsetX}px,${y-drag.offsetY}px,0) rotate(1deg)`;
+  }
   function startDrag(id,x,y,keyboard=false) {
     const task=tasks.find(t=>t.id===Number(id));if(!task)return;closeMenu();
-    const source=document.querySelector(`.task[data-id="${id}"]`);source.classList.add('drag-source');
-    const ghost=document.createElement('div');ghost.className='drag-ghost';ghost.textContent=task.title;document.body.append(ghost);
-    drag={task,source,ghost,target:null,keyboard};pointer={x,y};document.body.classList.add('dragging');$('board').classList.add('drag-active');$('cancel-zone').hidden=false;
-    ghost.style.transform=`translate(${x+14}px,${y+14}px)`;$('announcer').textContent=`Взята задача ${task.title}. Для отмены нажми Escape.`;
+    const source=document.querySelector(`.task[data-id="${id}"]`),r=source.getBoundingClientRect();
+    const ghost=source.cloneNode(true);ghost.classList.add('drag-ghost');ghost.classList.remove('reveal');ghost.removeAttribute('data-id');ghost.removeAttribute('data-detail');ghost.removeAttribute('data-drag');ghost.removeAttribute('tabindex');ghost.setAttribute('aria-hidden','true');ghost.querySelectorAll('button').forEach(b=>b.tabIndex=-1);ghost.style.width=r.width+'px';document.body.append(ghost);
+    source.classList.add('drag-source');
+    drag={task,source,ghost,target:null,keyboard,offsetX:x-r.left,offsetY:y-r.top};pointer={x,y};document.body.classList.add('dragging');$('board').classList.add('drag-active');$('cancel-zone').hidden=false;
+    moveGhost(x,y);$('announcer').textContent=`Взята задача ${task.title}. Для отмены нажми Escape.`;
     if(keyboard)selectTarget(task.status);else autoscroll();
   }
   function autoscroll() {
@@ -140,30 +143,31 @@
     if(narrow&&view==='horizontal'){const r=$('board').getBoundingClientRect();if(pointer.y>r.top&&pointer.y<r.bottom){if(pointer.x>innerWidth-42)$('board').scrollLeft+=7;else if(pointer.x<42)$('board').scrollLeft-=7;}}
     selectTarget(hitTest(pointer.x,pointer.y));dragFrame=requestAnimationFrame(autoscroll);
   }
-  function cancelDrag() {
+  function cancelDrag(keepGhost=false) {
     if(gesture?.timer)clearTimeout(gesture.timer);gesture=null;cancelAnimationFrame(dragFrame);dragFrame=null;
-    if(drag){drag.source.classList.remove('drag-source');drag.ghost.remove();}drag=null;document.body.classList.remove('dragging');$('board').classList.remove('drag-active');$('cancel-zone').hidden=true;document.querySelectorAll('.is-target').forEach(c=>c.classList.remove('is-target'));
+    if(drag){drag.source.classList.remove('drag-source');if(!keepGhost)drag.ghost.remove();}drag=null;document.body.classList.remove('dragging');$('board').classList.remove('drag-active');$('cancel-zone').hidden=true;document.querySelectorAll('.is-target').forEach(c=>c.classList.remove('is-target'));
   }
   function finishDrag(target) {
-    if(!drag)return;const task=drag.task,sourceStatus=task.status;cancelDrag();if(target&&target!==sourceStatus)changeStatus(task.id,target);else notify('Перенос отменён.');
+    if(!drag)return;const task=drag.task,sourceStatus=task.status,ghost=drag.ghost;cancelDrag(true);
+    if(target&&target!==sourceStatus)changeStatus(task.id,target);else notify('Перенос отменён.');
+    requestAnimationFrame(()=>{const destination=document.querySelector(`.task[data-id="${task.id}"]`);if(!destination){ghost.remove();return;}const r=destination.getBoundingClientRect();ghost.style.transition=reduced.matches?'none':'transform 180ms cubic-bezier(.2,.7,.3,1), opacity 180ms';ghost.style.transform=`translate3d(${r.left}px,${r.top}px,0) rotate(0deg)`;ghost.style.opacity='0';setTimeout(()=>ghost.remove(),reduced.matches?0:180);});
   }
   $('board').addEventListener('pointerdown',event=>{
-    if(event.button!==0)return;const handle=event.target.closest('[data-drag]'),card=event.target.closest('.task');if(!card)return;
-    if(!handle && event.pointerType==='mouse')return;
-    if(!handle&&event.target.closest('button:not(.task-title)'))return;
-    gesture={id:Number(card.dataset.id),x:event.clientX,y:event.clientY,pointerId:event.pointerId,handle:Boolean(handle),type:event.pointerType,timer:null};
-    if(event.pointerType!=='mouse'){gesture.timer=setTimeout(()=>{if(!gesture)return;if(gesture.handle)startDrag(gesture.id,gesture.x,gesture.y);else{openMenu(gesture.id,gesture.x,gesture.y);blockClickUntil=Date.now()+800;gesture=null;}},handle?200:500);}
+    if(event.button!==0||event.target.closest('button,input,textarea'))return;
+    const card=event.target.closest('.task');if(!card)return;
+    gesture={id:Number(card.dataset.id),x:event.clientX,y:event.clientY,pointerId:event.pointerId,type:event.pointerType,timer:null};
+    if(event.pointerType!=='mouse')gesture.timer=setTimeout(()=>{if(gesture)startDrag(gesture.id,gesture.x,gesture.y);},200);
   });
   document.addEventListener('pointermove',event=>{
-    if(gesture&&event.pointerId===gesture.pointerId){const distance=Math.hypot(event.clientX-gesture.x,event.clientY-gesture.y);if(!drag&&gesture.type==='mouse'&&distance>=8)startDrag(gesture.id,event.clientX,event.clientY);else if(!drag&&gesture.type!=='mouse'&&distance>5){clearTimeout(gesture.timer);gesture=null;}}
-    if(drag&&!drag.keyboard){event.preventDefault();pointer={x:event.clientX,y:event.clientY};drag.ghost.style.transform=`translate(${pointer.x+14}px,${pointer.y+14}px)`;selectTarget(hitTest(pointer.x,pointer.y));}
+    if(gesture&&event.pointerId===gesture.pointerId){const distance=Math.hypot(event.clientX-gesture.x,event.clientY-gesture.y);if(!drag&&gesture.type==='mouse'&&distance>=8)startDrag(gesture.id,gesture.x,gesture.y);else if(!drag&&gesture.type!=='mouse'&&distance>5){clearTimeout(gesture.timer);gesture=null;}}
+    if(drag&&!drag.keyboard){event.preventDefault();pointer={x:event.clientX,y:event.clientY};moveGhost(pointer.x,pointer.y);selectTarget(hitTest(pointer.x,pointer.y));}
   },{passive:false});
   document.addEventListener('pointerup',event=>{if(drag&&!drag.keyboard){blockClickUntil=Date.now()+350;finishDrag(hitTest(event.clientX,event.clientY));}else if(gesture){clearTimeout(gesture.timer);gesture=null;}});
   document.addEventListener('pointercancel',()=>{if(drag)cancelDrag();else if(gesture){clearTimeout(gesture.timer);gesture=null;}});
   document.addEventListener('keydown',event=>{
-    if(event.key==='Escape'){if(drag){event.preventDefault();cancelDrag();notify('Перенос отменён.');}else closeMenu();}
+    if(event.key==='Escape'){if(drag){event.preventDefault();finishDrag(null);}else closeMenu();}
     if(drag?.keyboard){if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();const index=statuses.indexOf(drag.target??drag.task.status),next=Math.max(0,Math.min(2,index+(['ArrowRight','ArrowDown'].includes(event.key)?1:-1)));selectTarget(statuses[next]);const r=document.querySelector(`.column[data-status="${statuses[next]}"]`).getBoundingClientRect();drag.ghost.style.transform=`translate(${Math.min(r.left+20,innerWidth-270)}px,${r.top+65}px)`;$('announcer').textContent=labels[statuses[next]];}else if(event.key==='Enter'||event.key===' '){event.preventDefault();finishDrag(drag.target);}return;}
-    const handle=event.target.closest('[data-drag]');if(handle&&(event.key===' '||event.key==='Enter')){event.preventDefault();const r=handle.getBoundingClientRect();startDrag(handle.dataset.drag,r.left,r.top,true);}
+    const card=event.target.closest('[data-drag]');if(card&&event.target===card){if(event.key===' '){event.preventDefault();const r=card.getBoundingClientRect();startDrag(card.dataset.drag,r.left,r.top,true);}else if(event.key==='Enter'){event.preventDefault();openDetails(card.dataset.id);}}
     if(!$('quick-menu').hidden&&['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const buttons=[...$('quick-menu').querySelectorAll('button')],index=buttons.indexOf(document.activeElement);buttons[event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length].focus();}
   });
   window.addEventListener('resize',()=>{if(drag)cancelDrag();});
