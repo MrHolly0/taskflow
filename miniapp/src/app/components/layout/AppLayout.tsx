@@ -160,7 +160,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Mobile Bottom Navigation */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center border-t border-border bg-background/95 backdrop-blur pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
+        <nav className="lg:hidden z-30 flex flex-shrink-0 items-center border-t border-border bg-background pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
           {[
             { href: '/', icon: IconSparkles, label: 'Сейчас' },
             { href: '/assistant', icon: IconMessageCircle, label: 'Ассистент' },
