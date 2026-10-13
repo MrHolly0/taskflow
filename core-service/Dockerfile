@@ -13,7 +13,7 @@ COPY . .
 # первый образ наполняет его, остальные ждут и переиспользуют.
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     chmod +x gradlew && \
-    ./gradlew :core-service:app:bootJar -x test --no-daemon
+    ./gradlew :core-service:app:bootJar -x test --no-daemon --max-workers=2
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
