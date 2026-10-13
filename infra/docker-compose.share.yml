@@ -1,0 +1,35 @@
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+  core-service:
+    ports: !reset []
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      QA_LOGIN_SECRET: ""
+      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=2
+    restart: unless-stopped
+  nlp-worker:
+    ports: !reset []
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:ActiveProcessorCount=2
+    restart: unless-stopped
+  notification-worker:
+    ports: !reset []
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:ActiveProcessorCount=2
+    restart: unless-stopped
+  miniapp:
+    ports: !reset []
+    build:
+      args:
+        VITE_API_URL: /api/v1
+        VITE_TELEGRAM_BOT_ID: ${VITE_TELEGRAM_BOT_ID:-8738130486}
+    restart: unless-stopped
+  nginx:
+    ports: !override
+      - "127.0.0.1:80:80"
+    restart: unless-stopped

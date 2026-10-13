@@ -2,6 +2,25 @@
 
 Docker Compose конфигурации для разработки и production. Включают PostgreSQL, Redis, pgAdmin и все сервисы TaskFlow.
 
+## Локальный экземпляр с публичным туннелем
+
+Из корня репозитория, с заполненным `infra/.env`:
+
+```bash
+docker compose -p infra --env-file infra/.env \
+  -f infra/docker-compose.yml -f infra/docker-compose.share.yml \
+  up -d --build postgres redis core-service nlp-worker notification-worker miniapp nginx
+```
+
+Система доступна на `http://127.0.0.1:80`. Используется сохранённая база проекта `infra`, профиль ядра `prod` и собранный фронт без демо-входа. API работает через тот же адрес; наружу открыт только nginx на loopback-интерфейсе. Требуется Docker Compose 2.24.4 или новее.
+
+```bash
+tuna http 127.0.0.1:80 --location=ru --inspect=false
+bash infra/set-public-url.sh https://адрес-туннеля
+```
+
+Вторую команду запускают в другом терминале после появления HTTPS-туннеля. Она обновляет `PUBLIC_BASE_URL`, пересоздаёт только ядро и сервис уведомлений этого экземпляра и перезапускает его nginx для обновления адреса ядра. Новый адрес также нужно указать в настройках Telegram-бота: Mini App и домен Login Widget. После смены туннеля синхронизацию нужно повторить. Уже работающие туннели и другие Docker-проекты эти команды не затрагивают.
+
 ## Окружение разработки
 
 ```bash
