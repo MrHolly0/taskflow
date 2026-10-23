@@ -3,16 +3,18 @@ package ru.taskflow.notificationworker.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import ru.taskflow.notificationworker.infrastructure.db.PendingNotification;
 import ru.taskflow.notificationworker.infrastructure.db.ScheduledNotificationPoller;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 @Service
 @RequiredArgsConstructor
@@ -23,62 +25,82 @@ public class NotificationDispatcher {
     private final List<NotificationSender> senders;
     private final ObjectMapper objectMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final ExecutorService notificationExecutor;
+    private final NotificationRetryPolicy retryPolicy;
 
-    @Scheduled(fixedDelayString = "${app.notification.poll-interval-ms:30000}")
-    @Transactional
+    @Value("${app.notification.batch-size:50}")
+    private int batchSize;
+
+    @Value("${app.notification.concurrency:4}")
+    private int concurrency;
+
+    @Scheduled(fixedDelayString = "${app.notification.poll-interval-ms:5000}")
     public void processNotifications() {
-        List<PendingNotification> notifications = poller.pollPending();
+        int remaining = Math.clamp(batchSize, 1, 500);
+        while (remaining > 0) {
+            int limit = Math.min(remaining, Math.clamp(concurrency, 1, 16));
+            List<PendingNotification> notifications = poller.claimPending(limit);
+            if (notifications.isEmpty()) {
+                return;
+            }
+            // Не держим в очереди исполнителя задания с уже отсчитываемой арендой.
+            CompletableFuture<?>[] deliveries = notifications.stream()
+                    .map(notification -> CompletableFuture.runAsync(() -> deliver(notification), notificationExecutor))
+                    .toArray(CompletableFuture[]::new);
+            CompletableFuture.allOf(deliveries).join();
+            remaining -= notifications.size();
+        }
+    }
 
-        for (PendingNotification notification : notifications) {
+    private void deliver(PendingNotification notification) {
+        try {
+            if (!poller.isClaimActive(notification)) {
+                return;
+            }
             try {
                 dispatchNotification(notification);
-                poller.markAsSent(notification.id());
-            } catch (PushSubscriptionGoneException e) {
-                // Не ошибка очереди — endpoint отозван, повторять нечего.
-                // markAsSent здесь не «доставлено», а «закрыть строку без
-                // повтора»: отдельного терминального статуса под это заводить
-                // не стали, retry всё равно не помог бы.
-                log.info("{}, удаляю подписку", e.getMessage());
+            } catch (PushSubscriptionGoneException gone) {
                 jdbcTemplate.update("DELETE FROM push_subscriptions WHERE id = ?",
                         UUID.fromString(notification.destination()));
-                poller.markAsSent(notification.id());
-            } catch (Exception e) {
-                log.error("Failed to dispatch notification {}: {}", notification.id(), e.getMessage());
-                poller.incrementRetryCount(notification.id());
+                poller.recordFailure(notification, true, Duration.ZERO, "PUSH_SUBSCRIPTION_GONE");
+                return;
+            } catch (Exception failure) {
+                boolean permanent = retryPolicy.isPermanent(failure);
+                String code = failure instanceof NotificationDeliveryException ? failure.getMessage()
+                        : failure.getClass().getSimpleName();
+                poller.recordFailure(notification, permanent, retryPolicy.nextDelay(notification.attempt(), failure), code);
+                log.warn("Notification {} attempt {} failed: {}, permanent={}",
+                        notification.id(), notification.attempt(), code, permanent);
+                return;
             }
+            // Ошибка фиксации после отправки не является ошибкой доставки. После истечения
+            // аренды возможен повтор: внешние каналы не поддерживают общую транзакцию с БД.
+            poller.markAsSent(notification);
+        } catch (Exception databaseFailure) {
+            log.error("Could not finish notification {}: {}", notification.id(),
+                    databaseFailure.getClass().getSimpleName());
         }
     }
 
     private void dispatchNotification(PendingNotification notification) {
-        if ("TASK_REMINDER".equals(notification.payloadType())) {
-            dispatchTaskReminder(notification);
-        } else {
-            log.warn("Unknown notification type: {}", notification.payloadType());
+        if (!"TASK_REMINDER".equals(notification.payloadType())) {
+            throw new NotificationDeliveryException("UNKNOWN_PAYLOAD_TYPE", true, null);
         }
-    }
-
-    private void dispatchTaskReminder(PendingNotification notification) {
         NotificationSender sender = senders.stream()
-                .filter(s -> s.supports(notification.channel()))
+                .filter(candidate -> candidate.supports(notification.channel()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Нет отправителя для канала " + notification.channel()));
-
-        Map<String, Object> payload;
+                .orElseThrow(() -> new NotificationDeliveryException("UNSUPPORTED_CHANNEL", true, null));
+        ReminderPayload payload;
         try {
-            @SuppressWarnings("unchecked")
-            var parsed = (Map<String, Object>) objectMapper.readValue(notification.payload(), Map.class);
-            payload = parsed;
-        } catch (Exception e) {
-            log.error("Failed to parse task reminder payload: {}", notification.payload(), e);
-            throw new RuntimeException("Failed to dispatch task reminder", e);
+            payload = objectMapper.readValue(notification.payload(), ReminderPayload.class);
+            if (payload.taskTitle() == null || payload.taskTitle().isBlank()) {
+                throw new IllegalArgumentException("Missing title");
+            }
+        } catch (Exception invalidPayload) {
+            throw new NotificationDeliveryException("INVALID_PAYLOAD", true, null);
         }
-
-        // Вызов отправителя — вне try/catch по парсингу: PushSubscriptionGoneException
-        // и любые другие сигналы отправителя должны дойти до processNotifications
-        // как есть, не потеряться, завёрнутые в общий RuntimeException.
-        String title = (String) payload.get("taskTitle");
-        String deadline = (String) payload.get("deadline");
-        String timezone = (String) payload.get("timezone");
-        sender.sendTaskReminder(notification.destination(), title, deadline, timezone);
+        sender.sendTaskReminder(notification.destination(), payload.taskTitle(), payload.deadline(), payload.timezone());
     }
+
+    private record ReminderPayload(String taskTitle, String deadline, String timezone) {}
 }

@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 042-notification-delivery-lease
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE scheduled_notifications
+                ADD COLUMN lease_token UUID,
+                ADD COLUMN lease_until TIMESTAMP WITH TIME ZONE,
+                ADD COLUMN next_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                ADD COLUMN failed_at TIMESTAMP WITH TIME ZONE,
+                ADD COLUMN last_error VARCHAR(255);
+              UPDATE scheduled_notifications SET next_attempt_at = fire_at;
+              UPDATE scheduled_notifications
+                SET failed_at = NOW(), last_error = 'LEGACY_ATTEMPTS_EXHAUSTED'
+                WHERE sent = false AND retry_count >= 3;
+              CREATE INDEX idx_notif_delivery_ready ON scheduled_notifications (next_attempt_at, fire_at)
+                WHERE sent = false AND failed_at IS NULL;

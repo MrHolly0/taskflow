@@ -39,7 +39,7 @@ public class TelegramNotificationSender implements NotificationSender {
             sendMessage(chatId, text);
             log.info("Sent notification to chat {}", chatId);
         } catch (RestClientException e) {
-            log.error("Failed to send notification to chat {}: {}", chatId, e.getMessage());
+            log.error("Failed to send notification to chat {}: {}", chatId, e.getClass().getSimpleName());
             throw e;
         }
     }
@@ -49,12 +49,16 @@ public class TelegramNotificationSender implements NotificationSender {
      * не требует поднятия RestClient ради проверки чистой логики форматирования.
      */
     String buildMessageText(String title, String deadline, String timezone) {
-        return "📌 Напоминание о задаче\n\n<b>" + title + "</b>" + deadlineLine(deadline, timezone);
+        return "📌 Напоминание о задаче\n\n<b>" + escape(title) + "</b>" + deadlineLine(deadline, timezone);
     }
 
     private String deadlineLine(String iso, String timezone) {
         String humanized = DeadlineHumanizer.humanize(iso, timezone);
         return humanized == null ? "" : "\nДедлайн: " + humanized;
+    }
+
+    private String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private void sendMessage(Long chatId, String text) {
@@ -69,6 +73,24 @@ public class TelegramNotificationSender implements NotificationSender {
             .uri(url)
             .body(payload)
             .retrieve()
+            .onStatus(status -> status.isError(), (request, response) -> {
+                int status = response.getStatusCode().value();
+                java.time.Duration retryAfter = NotificationRetryPolicy.parseRetryAfter(
+                        response.getHeaders().getFirst("Retry-After"));
+                if (status == 429) {
+                    try {
+                        long seconds = objectMapper.readTree(response.getBody())
+                                .path("parameters").path("retry_after").asLong(0);
+                        if (seconds > 0) {
+                            retryAfter = java.time.Duration.ofSeconds(Math.min(seconds, 604800));
+                        }
+                    } catch (Exception ignored) {
+                        // При отсутствии JSON остаётся Retry-After или обычная задержка очереди.
+                    }
+                }
+                throw new NotificationDeliveryException("TELEGRAM_HTTP_" + status,
+                        status >= 400 && status < 500 && status != 408 && status != 429, retryAfter);
+            })
             .toEntity(String.class);
     }
 }

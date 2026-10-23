@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestClient;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 @SpringBootApplication
 @EnableScheduling
@@ -22,6 +23,9 @@ public class NotificationWorkerApplication {
 
     @Bean
     public RestClient restClient() {
-        return RestClient.create();
+        var requests = new SimpleClientHttpRequestFactory();
+        requests.setConnectTimeout(5000);
+        requests.setReadTimeout(15000);
+        return RestClient.builder().requestFactory(requests).build();
     }
 }

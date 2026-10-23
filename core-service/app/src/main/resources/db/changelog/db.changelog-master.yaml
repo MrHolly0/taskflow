@@ -81,3 +81,5 @@ databaseChangeLog:
       file: db/changelog/040-task-request-idempotency.yaml
   - include:
       file: db/changelog/041-telegram-update-inbox.yaml
+  - include:
+      file: db/changelog/042-notification-delivery-lease.yaml

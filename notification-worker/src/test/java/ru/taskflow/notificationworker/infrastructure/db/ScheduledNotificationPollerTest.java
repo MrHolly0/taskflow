@@ -1,5 +1,6 @@
 package ru.taskflow.notificationworker.infrastructure.db;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -9,18 +10,14 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/**
- * На H2/моках ошибка не проявляется — драйвер H2 принимает строку на месте
- * uuid без вопросов. Настоящий Postgres её отвергал: markAsSent/incrementRetryCount
- * передавали notificationId.toString() в колонку uuid, запрос падал, а поскольку
- * отправка идёт до пометки, сообщение уходило повторно на каждом опросе.
- * Отсюда и Testcontainers — тест должен видеть то же поведение, что стенд.
- */
 @Testcontainers
 class ScheduledNotificationPollerTest {
 
@@ -35,67 +32,157 @@ class ScheduledNotificationPollerTest {
         var dataSource = new DriverManagerDataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         jdbcTemplate = new JdbcTemplate(dataSource);
         poller = new ScheduledNotificationPoller(jdbcTemplate);
-        // @Value-поля не заполняются вне спринг-контекста — без этого
-        // batchSize/maxRetries остаются нулями, и pollPending() ничего не находит.
-        ReflectionTestUtils.setField(poller, "batchSize", 50);
-        ReflectionTestUtils.setField(poller, "maxRetries", 3);
-
-        // Только scheduled_notifications, без FK на users/tasks — этот класс
-        // работает с одной таблицей и не знает о существовании остальной схемы.
+        ReflectionTestUtils.setField(poller, "maxAttempts", 3);
+        ReflectionTestUtils.setField(poller, "leaseSeconds", 120);
         jdbcTemplate.execute("DROP TABLE IF EXISTS scheduled_notifications");
         jdbcTemplate.execute("""
                 CREATE TABLE scheduled_notifications (
-                    id UUID PRIMARY KEY,
-                    channel VARCHAR(16) NOT NULL,
-                    destination VARCHAR(320) NOT NULL,
-                    fire_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                    payload_type VARCHAR(32) NOT NULL,
-                    payload JSONB,
-                    sent BOOLEAN DEFAULT FALSE,
-                    sent_at TIMESTAMP WITH TIME ZONE,
-                    retry_count INT DEFAULT 0
+                    id UUID PRIMARY KEY, channel VARCHAR(16) NOT NULL, destination VARCHAR(320) NOT NULL,
+                    fire_at TIMESTAMP WITH TIME ZONE NOT NULL, payload_type VARCHAR(32) NOT NULL, payload JSONB,
+                    sent BOOLEAN DEFAULT FALSE, sent_at TIMESTAMP WITH TIME ZONE, retry_count INT DEFAULT 0,
+                    lease_token UUID, lease_until TIMESTAMP WITH TIME ZONE,
+                    next_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                    failed_at TIMESTAMP WITH TIME ZONE, last_error VARCHAR(255)
                 )
                 """);
     }
 
     @Test
-    void markAsSent_excludesNotificationFromNextPoll() {
+    void successfulClaimIsNotDeliveredAgain() {
         UUID id = insertPending();
+        var claim = poller.claimPending(1).getFirst();
+        assertThat(claim.id()).isEqualTo(id);
+        assertThat(claim.attempt()).isEqualTo(1);
+        assertThat(poller.isClaimActive(claim)).isTrue();
+        assertThat(poller.claimPending(1)).isEmpty();
 
-        var polled = poller.pollPending();
-        assertThat(polled).extracting(PendingNotification::id).containsExactly(id);
+        poller.markAsSent(claim);
 
-        poller.markAsSent(id);
-
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT sent FROM scheduled_notifications WHERE id = ?", Boolean.class, id))
+        assertThat(jdbcTemplate.queryForObject("SELECT sent FROM scheduled_notifications WHERE id = ?", Boolean.class, id))
                 .isTrue();
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT sent_at FROM scheduled_notifications WHERE id = ?", OffsetDateTime.class, id))
-                .isNotNull();
-
-        var polledAgain = poller.pollPending();
-        assertThat(polledAgain).isEmpty();
+        assertThat(poller.claimPending(1)).isEmpty();
     }
 
     @Test
-    void incrementRetryCount_updatesRowWithoutTypeError() {
+    void workersClaimDisjointRows() throws Exception {
+        for (int index = 0; index < 12; index++) {
+            insertPending();
+        }
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> poller.claimPending(6));
+            var second = executor.submit(() -> poller.claimPending(6));
+            var firstRows = first.get();
+            var secondRows = second.get();
+            assertThat(firstRows).hasSize(6);
+            assertThat(secondRows).hasSize(6);
+            var identifiers = new HashSet<UUID>();
+            firstRows.forEach(row -> identifiers.add(row.id()));
+            secondRows.forEach(row -> assertThat(identifiers.add(row.id())).isTrue());
+        }
+    }
+
+    @Test
+    void expiredLeaseCanBeReclaimedAndOldOwnerCannotAcknowledgeIt() {
         UUID id = insertPending();
+        var oldClaim = poller.claimPending(1).getFirst();
+        expireLease(id);
+        assertThat(poller.isClaimActive(oldClaim)).isFalse();
+        var newClaim = poller.claimPending(1).getFirst();
+        assertThat(newClaim.attempt()).isEqualTo(2);
+        assertThat(newClaim.leaseToken()).isNotEqualTo(oldClaim.leaseToken());
 
-        poller.incrementRetryCount(id);
+        poller.markAsSent(oldClaim);
+        poller.recordFailure(oldClaim, true, Duration.ZERO, "STALE_OWNER");
 
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT retry_count FROM scheduled_notifications WHERE id = ?", Integer.class, id))
-                .isEqualTo(1);
+        assertThat(poller.isClaimActive(newClaim)).isTrue();
+        poller.markAsSent(newClaim);
+        assertThat(poller.isClaimActive(newClaim)).isFalse();
+    }
+
+    @Test
+    void retriesWaitForNextAttemptAndExhaustedJobsStayVisible() {
+        UUID id = insertPending();
+        var claim = poller.claimPending(1).getFirst();
+        poller.recordFailure(claim, false, Duration.ofMinutes(1), "TIMEOUT");
+        assertThat(poller.claimPending(1)).isEmpty();
+        makeDue(id);
+        var secondClaim = poller.claimPending(1).getFirst();
+        poller.recordFailure(secondClaim, false, Duration.ZERO, "TIMEOUT");
+        var finalClaim = poller.claimPending(1).getFirst();
+        poller.recordFailure(finalClaim, false, Duration.ZERO, "TIMEOUT");
+
+        assertThat(poller.claimPending(1)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT failed_at FROM scheduled_notifications WHERE id = ?",
+                OffsetDateTime.class, id)).isNotNull();
+        assertThat(jdbcTemplate.queryForObject("SELECT sent FROM scheduled_notifications WHERE id = ?", Boolean.class, id))
+                .isFalse();
+    }
+
+    @Test
+    void repeatedWorkerCrashesEventuallyFailTheJob() {
+        UUID id = insertPending();
+        for (int attempt = 0; attempt < 3; attempt++) {
+            assertThat(poller.claimPending(1)).hasSize(1);
+            expireLease(id);
+        }
+        assertThat(poller.claimPending(1)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT last_error FROM scheduled_notifications WHERE id = ?",
+                String.class, id)).isEqualTo("ATTEMPTS_EXHAUSTED");
+    }
+
+    @Test
+    void cancellationRemovesAnAlreadyClaimedJob() {
+        UUID id = insertPending();
+        var claim = poller.claimPending(1).getFirst();
+        jdbcTemplate.update("DELETE FROM scheduled_notifications WHERE id = ? AND sent = false", id);
+        assertThat(poller.isClaimActive(claim)).isFalse();
+        poller.markAsSent(claim);
+        poller.recordFailure(claim, false, Duration.ZERO, "TIMEOUT");
+        assertThat(poller.claimPending(1)).isEmpty();
+    }
+
+    @Test
+    void permanentFailureDoesNotRetry() {
+        UUID id = insertPending();
+        var claim = poller.claimPending(1).getFirst();
+        poller.recordFailure(claim, true, Duration.ZERO, "TELEGRAM_HTTP_403");
+        assertThat(poller.claimPending(1)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT failed_at FROM scheduled_notifications WHERE id = ?",
+                OffsetDateTime.class, id)).isNotNull();
+    }
+
+    @Test
+    void queueMetricsKeepFailedAndLeasedJobsSeparateFromReady() {
+        insertPending();
+        insertPending();
+        insertPending();
+        var claims = poller.claimPending(2);
+        poller.recordFailure(claims.getFirst(), true, Duration.ZERO, "INVALID_PAYLOAD");
+        var registry = new SimpleMeterRegistry();
+        var metrics = new NotificationQueueMetrics(jdbcTemplate, registry);
+
+        metrics.refresh();
+
+        assertThat(registry.get("taskflow.notifications.ready").gauge().value()).isEqualTo(1);
+        assertThat(registry.get("taskflow.notifications.failed").gauge().value()).isEqualTo(1);
+        assertThat(registry.get("taskflow.notifications.leased").gauge().value()).isEqualTo(1);
+        assertThat(registry.get("taskflow.notifications.oldest.due.seconds").gauge().value()).isGreaterThan(0);
+    }
+
+    private void expireLease(UUID id) {
+        jdbcTemplate.update("UPDATE scheduled_notifications SET lease_until = NOW() - INTERVAL '1 second' WHERE id = ?", id);
+    }
+
+    private void makeDue(UUID id) {
+        jdbcTemplate.update("UPDATE scheduled_notifications SET next_attempt_at = NOW() - INTERVAL '1 second' WHERE id = ?", id);
     }
 
     private UUID insertPending() {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""
-                INSERT INTO scheduled_notifications (id, channel, destination, fire_at, payload_type, payload, sent, retry_count)
-                VALUES (?, ?, ?, ?, ?, ?::jsonb, false, 0)
-                """,
-                id, "TELEGRAM", "12345", OffsetDateTime.now().minusMinutes(1), "TASK_REMINDER", "{}");
+                INSERT INTO scheduled_notifications (id, channel, destination, fire_at, payload_type, payload, next_attempt_at)
+                VALUES (?, 'TELEGRAM', '12345', NOW() - INTERVAL '1 minute', 'TASK_REMINDER', '{}'::jsonb, NOW() - INTERVAL '1 minute')
+                """, id);
         return id;
     }
 }

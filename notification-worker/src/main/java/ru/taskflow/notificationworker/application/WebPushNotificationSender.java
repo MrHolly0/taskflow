@@ -15,6 +15,8 @@ import java.security.Security;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Web Push — стандарт, не сервис: обращаемся напрямую к push-службе браузера
@@ -61,10 +63,18 @@ public class WebPushNotificationSender implements NotificationSender {
         String payload = buildPayload(title, deadline, timezone);
 
         HttpResponse response;
+        Future<HttpResponse> request = null;
         try {
-            response = pushService.send(
+            request = pushService.sendAsync(
                     new Notification(subscription.endpoint(), subscription.p256dh(), subscription.auth(), payload));
+            response = request.get(20, TimeUnit.SECONDS);
         } catch (Exception e) {
+            if (request != null) {
+                request.cancel(true);
+            }
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             throw new IllegalStateException("Не удалось отправить push-уведомление", e);
         }
 
@@ -75,7 +85,10 @@ public class WebPushNotificationSender implements NotificationSender {
             throw new PushSubscriptionGoneException(destination);
         }
         if (status >= 300) {
-            throw new IllegalStateException("Push-служба ответила " + status);
+            var retryHeader = response.getFirstHeader("Retry-After");
+            throw new NotificationDeliveryException("PUSH_HTTP_" + status,
+                    status >= 400 && status < 500 && status != 408 && status != 429,
+                    NotificationRetryPolicy.parseRetryAfter(retryHeader == null ? null : retryHeader.getValue()));
         }
         // 2xx здесь означает «служба приняла запрос в очередь на доставку», не
         // «показано на устройстве» — та же ловушка, что и call_status: 1 у
