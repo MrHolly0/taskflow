@@ -34,6 +34,10 @@ import ru.taskflow.user.api.UserService;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -76,6 +80,55 @@ public class AssistantServiceImpl implements AssistantService {
     private final AuditService auditService;
     private final Clock clock;
     private final ObjectMapper objectMapper;
+    private final AssistantRequestStore requestStore;
+    private final ProposalApplyTransaction applyTransaction;
+
+    @Override
+    public Proposal handleText(UUID userId, String text, AssistantChannel channel, AssistantEntryPoint entryPoint,
+                               String requestKey) {
+        if (requestKey == null) {
+            return handleText(userId, text, channel, entryPoint);
+        }
+        String fingerprint = fingerprint("TEXT:" + channel + ":" + entryPoint, text.getBytes(StandardCharsets.UTF_8));
+        Optional<Proposal> existing = requestStore.find(userId, requestKey, fingerprint);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        AgentOutcome outcome = agentLoop.run(userId, text, userService.getTimezone(userId), entryPoint);
+        return requestStore.complete(userId, requestKey, fingerprint,
+                () -> toProposal(userId, text, channel, "TEXT", outcome, degradedSourceFor(channel)));
+    }
+
+    @Override
+    public Proposal handleVoice(UUID userId, byte[] audio, AssistantChannel channel, AssistantEntryPoint entryPoint,
+                                String requestKey) {
+        if (requestKey == null) {
+            return handleVoice(userId, audio, channel, entryPoint);
+        }
+        String fingerprint = fingerprint("VOICE:" + channel + ":" + entryPoint, audio);
+        Optional<Proposal> existing = requestStore.find(userId, requestKey, fingerprint);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        String text = nlpGatewayService.transcribe(audio);
+        if (isBlank(text)) {
+            return requestStore.complete(userId, requestKey, fingerprint,
+                    () -> degrade(userId, VOICE_TRANSCRIPTION_FAILED_TEXT, TaskSource.ASSISTANT_BOT_VOICE_DEGRADED, null));
+        }
+        AgentOutcome outcome = agentLoop.run(userId, text, userService.getTimezone(userId), entryPoint);
+        return requestStore.complete(userId, requestKey, fingerprint,
+                () -> toProposal(userId, text, channel, "VOICE", outcome, TaskSource.ASSISTANT_BOT_VOICE_DEGRADED));
+    }
+
+    private String fingerprint(String kind, byte[] input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            digest.update(kind.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest.digest(input));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
 
     @Override
     public Proposal handleText(UUID userId, String text, AssistantChannel channel, AssistantEntryPoint entryPoint) {
@@ -155,10 +208,10 @@ public class AssistantServiceImpl implements AssistantService {
     @Override
     @Transactional
     public Proposal setActionAccepted(UUID userId, UUID proposalId, int ordinal, boolean accepted) {
-        ProposalJpaEntity entity = proposalRepository.findWithActions(proposalId, userId)
+        ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
 
-        requirePending(entity, proposalId);
+        requireEditable(entity, proposalId);
 
         boolean matched = entity.getActions().stream()
                 .filter(action -> action.getOrdinal() == ordinal)
@@ -176,10 +229,10 @@ public class AssistantServiceImpl implements AssistantService {
     @Override
     @Transactional
     public Proposal updateActionReminder(UUID userId, UUID proposalId, int ordinal, OffsetDateTime reminderAt) {
-        ProposalJpaEntity entity = proposalRepository.findWithActions(proposalId, userId)
+        ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
 
-        requirePending(entity, proposalId);
+        requireEditable(entity, proposalId);
 
         ProposalActionJpaEntity action = entity.getActions().stream()
                 .filter(a -> a.getOrdinal() == ordinal)
@@ -238,10 +291,10 @@ public class AssistantServiceImpl implements AssistantService {
     @Override
     @Transactional
     public Proposal updateActionPlannedDate(UUID userId, UUID proposalId, int ordinal, OffsetDateTime plannedDate) {
-        ProposalJpaEntity entity = proposalRepository.findWithActions(proposalId, userId)
+        ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
 
-        requirePending(entity, proposalId);
+        requireEditable(entity, proposalId);
 
         ProposalActionJpaEntity action = entity.getActions().stream()
                 .filter(a -> a.getOrdinal() == ordinal)
@@ -278,10 +331,10 @@ public class AssistantServiceImpl implements AssistantService {
     @Override
     @Transactional
     public Proposal selectAlternative(UUID userId, UUID proposalId, int ordinal) {
-        ProposalJpaEntity entity = proposalRepository.findWithActions(proposalId, userId)
+        ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
 
-        requirePending(entity, proposalId);
+        requireEditable(entity, proposalId);
 
         entity.getActions().forEach(action -> action.setAccepted(action.getOrdinal() == ordinal));
 
@@ -289,20 +342,37 @@ public class AssistantServiceImpl implements AssistantService {
         return proposalMapper.toDto(saved);
     }
 
-    /**
-     * Без @Transactional намеренно, как и ProposalApplier.apply — если обернуть вызов
-     * proposalApplier.apply в транзакцию, первое же исключение из TaskService пометит
-     * её rollback-only и итоговое сохранение упадёт с UnexpectedRollbackException вместо
-     * честного частичного результата. См. обоснование в ProposalApplier.
-     */
+    // Блокировка предложения сериализует подтверждение и правки; каждое действие
+    // коммитится отдельно вместе с отметкой результата, чтобы пережить обрыв запроса.
     @Override
     public ApplyResult apply(UUID userId, UUID proposalId) {
-        ProposalJpaEntity entity = proposalRepository.findWithActions(proposalId, userId)
+        return applyTransaction.execute(() -> applyLocked(userId, proposalId));
+    }
+
+    private ApplyResult applyLocked(UUID userId, UUID proposalId) {
+        ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
 
+        ProposalStatus currentStatus = ProposalStatus.valueOf(entity.getStatus());
+        if (currentStatus == ProposalStatus.APPLIED || currentStatus == ProposalStatus.PARTIALLY_APPLIED
+                || currentStatus == ProposalStatus.FAILED) {
+            return resolvedResult(entity);
+        }
         requirePending(entity, proposalId);
 
         if (entity.getExpiresAt().isBefore(OffsetDateTime.now(clock))) {
+            long committed = entity.getActions().stream().filter(ProposalActionJpaEntity::isAccepted)
+                    .filter(action -> action.getAppliedTaskId() != null).count();
+            if (committed > 0) {
+                entity.getActions().stream().filter(ProposalActionJpaEntity::isAccepted)
+                        .filter(action -> action.getAppliedTaskId() == null)
+                        .forEach(action -> action.setApplyError("срок подтверждения истёк"));
+                entity.setStatus((committed == acceptedCount(entity)
+                        ? ProposalStatus.APPLIED : ProposalStatus.PARTIALLY_APPLIED).name());
+                entity.setResolvedAt(OffsetDateTime.now(clock));
+                proposalRepository.save(entity);
+                return resolvedResult(entity);
+            }
             entity.setStatus(ProposalStatus.EXPIRED.name());
             entity.setResolvedAt(OffsetDateTime.now(clock));
             proposalRepository.save(entity);
@@ -314,11 +384,22 @@ public class AssistantServiceImpl implements AssistantService {
         return result;
     }
 
+    private ApplyResult resolvedResult(ProposalJpaEntity entity) {
+        var outcomes = entity.getActions().stream().filter(ProposalActionJpaEntity::isAccepted)
+                .map(action -> new ru.taskflow.assistant.api.dto.ActionOutcome(action.getOrdinal(),
+                        action.getSummary(), action.getAppliedTaskId() != null, action.getApplyError(),
+                        action.getAppliedTaskId())).toList();
+        return new ApplyResult(ProposalStatus.valueOf(entity.getStatus()),
+                (int) outcomes.stream().filter(ru.taskflow.assistant.api.dto.ActionOutcome::success).count(),
+                outcomes.size(), outcomes);
+    }
+
     @Override
     @Transactional
     public void reject(UUID userId, UUID proposalId) {
-        ProposalJpaEntity entity = proposalRepository.findByIdAndUserId(proposalId, userId)
+        ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
+        requireEditable(entity, proposalId);
 
         entity.setStatus(ProposalStatus.REJECTED.name());
         entity.setResolvedAt(OffsetDateTime.now(clock));
@@ -329,6 +410,13 @@ public class AssistantServiceImpl implements AssistantService {
     @Transactional
     public int transferOwnership(UUID from, UUID to) {
         return proposalRepository.reassignOwner(from, to);
+    }
+
+    private void requireEditable(ProposalJpaEntity entity, UUID proposalId) {
+        requirePending(entity, proposalId);
+        if (entity.getActions().stream().anyMatch(action -> action.getAppliedTaskId() != null)) {
+            throw new ValidationException("Часть изменений уже сохранена, заверши применение предложения");
+        }
     }
 
     private void requirePending(ProposalJpaEntity entity, UUID proposalId) {

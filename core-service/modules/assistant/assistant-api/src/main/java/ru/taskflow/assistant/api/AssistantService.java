@@ -17,11 +17,15 @@ public interface AssistantService {
 
     Proposal handleText(UUID userId, String text, AssistantChannel channel, AssistantEntryPoint entryPoint);
 
+    Proposal handleText(UUID userId, String text, AssistantChannel channel, AssistantEntryPoint entryPoint, String requestKey);
+
     default Proposal handleVoice(UUID userId, byte[] audio, AssistantChannel channel) {
         return handleVoice(userId, audio, channel, AssistantEntryPoint.CHAT);
     }
 
     Proposal handleVoice(UUID userId, byte[] audio, AssistantChannel channel, AssistantEntryPoint entryPoint);
+
+    Proposal handleVoice(UUID userId, byte[] audio, AssistantChannel channel, AssistantEntryPoint entryPoint, String requestKey);
 
     Proposal findById(UUID userId, UUID proposalId);
 

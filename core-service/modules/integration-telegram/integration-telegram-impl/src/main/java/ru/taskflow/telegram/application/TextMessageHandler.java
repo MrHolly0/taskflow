@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.taskflow.assistant.api.AssistantChannel;
+import ru.taskflow.assistant.api.AssistantEntryPoint;
 import ru.taskflow.assistant.api.AssistantService;
 import ru.taskflow.assistant.api.FastPathResolver;
 import ru.taskflow.assistant.api.dto.ApplyResult;
@@ -31,26 +32,34 @@ public class TextMessageHandler {
     private final FastPathResolver fastPathResolver;
     private final ProposalMessageRenderer renderer;
     private final TelegramMessageSender sender;
+    private final TelegramUpdateCheckpoint checkpoint;
 
     public void handle(TelegramMessage message, UUID userId) {
-        Optional<Proposal> pending = assistantService.findLatestPending(userId);
-        Optional<Boolean> fastPath = fastPathResolver.resolve(message.text(), pending.isPresent());
-
-        if (fastPath.isPresent()) {
-            resolveFastPath(userId, pending.orElseThrow(), fastPath.get(), message.chat().id());
+        MessageDecision decision = checkpoint.once("decision", MessageDecision.class, () -> {
+            Optional<Proposal> pending = assistantService.findLatestPending(userId);
+            Optional<Boolean> fastPath = fastPathResolver.resolve(message.text(), pending.isPresent());
+            return new MessageDecision(fastPath.isPresent() ? pending.orElseThrow().id() : null,
+                    fastPath.orElse(null));
+        });
+        if (decision.proposalId() != null) {
+            resolveFastPath(userId, decision.proposalId(), decision.accepted(), message.chat().id());
             return;
         }
-
-        Proposal proposal = assistantService.handleText(userId, message.text(), AssistantChannel.TELEGRAM);
+        Proposal proposal = checkpoint.once("proposal", Proposal.class,
+                () -> assistantService.handleText(userId, message.text(), AssistantChannel.TELEGRAM,
+                        AssistantEntryPoint.CHAT, checkpoint.requestKey()));
         send(message.chat().id(), proposal);
     }
 
-    private void resolveFastPath(UUID userId, Proposal proposal, boolean accepted, long chatId) {
+    public record MessageDecision(UUID proposalId, Boolean accepted) {}
+
+    private void resolveFastPath(UUID userId, UUID proposalId, boolean accepted, long chatId) {
         if (accepted) {
-            ApplyResult result = assistantService.apply(userId, proposal.id());
+            ApplyResult result = checkpoint.once("apply", ApplyResult.class,
+                    () -> assistantService.apply(userId, proposalId));
             sender.sendMessage(chatId, renderer.renderApplyResult(result));
         } else {
-            assistantService.reject(userId, proposal.id());
+            assistantService.reject(userId, proposalId);
             sender.sendMessage(chatId, "Предложение отклонено.");
         }
     }

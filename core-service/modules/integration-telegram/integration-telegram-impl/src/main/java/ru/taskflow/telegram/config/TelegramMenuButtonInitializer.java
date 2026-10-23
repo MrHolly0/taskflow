@@ -50,7 +50,7 @@ public class TelegramMenuButtonInitializer {
             telegramApiClient.setDefaultMenuButton(miniappUrl, brandName);
             log.info("Telegram menu button set to {}", miniappUrl);
         } catch (Exception e) {
-            log.error("Failed to set Telegram menu button: {}", e.getMessage());
+            log.error("Failed to set Telegram menu button: {}", e.getClass().getSimpleName());
         }
     }
 }

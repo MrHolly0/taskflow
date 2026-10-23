@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -25,7 +26,6 @@ import ru.taskflow.assistant.api.AssistantEntryPoint;
 import ru.taskflow.assistant.api.AssistantService;
 import ru.taskflow.assistant.api.dto.ApplyResult;
 import ru.taskflow.assistant.api.dto.Proposal;
-import ru.taskflow.assistant.application.AssistantRateLimiter;
 import ru.taskflow.assistant.application.QuickAddPolicy;
 import ru.taskflow.assistant.infrastructure.web.dto.QuickResult;
 import ru.taskflow.assistant.infrastructure.web.dto.SetActionAcceptedRequest;
@@ -50,7 +50,6 @@ import java.util.UUID;
 public class AssistantController {
 
     private final AssistantService assistantService;
-    private final AssistantRateLimiter rateLimiter;
     private final QuickAddPolicy quickAddPolicy;
 
     @PostMapping(value = "/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -59,13 +58,10 @@ public class AssistantController {
     public Proposal handleMessage(
             @RequestParam(value = "text", required = false) String text,
             @RequestParam(value = "file", required = false) MultipartFile file,
-            @AuthenticationPrincipal AuthenticatedUser user
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestHeader(value = "Idempotency-Key", required = false) String requestKey
     ) throws IOException {
-        if (!rateLimiter.allow(user.userId())) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "слишком много обращений, попробуйте через минуту");
-        }
-        return resolveProposal(user.userId(), text, file, AssistantEntryPoint.CHAT);
+        return resolveProposal(user.userId(), text, file, AssistantEntryPoint.CHAT, requestKey);
     }
 
     @PostMapping(value = "/quick", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -77,13 +73,10 @@ public class AssistantController {
     public QuickResult quick(
             @RequestParam(value = "text", required = false) String text,
             @RequestParam(value = "file", required = false) MultipartFile file,
-            @AuthenticationPrincipal AuthenticatedUser user
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestHeader(value = "Idempotency-Key", required = false) String requestKey
     ) throws IOException {
-        if (!rateLimiter.allow(user.userId())) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "слишком много обращений, попробуйте через минуту");
-        }
-        Proposal proposal = resolveProposal(user.userId(), text, file, AssistantEntryPoint.QUICK_ADD);
+        Proposal proposal = resolveProposal(user.userId(), text, file, AssistantEntryPoint.QUICK_ADD, requestKey);
         if (!quickAddPolicy.shouldAutoApply(proposal)) {
             return new QuickResult(proposal, null);
         }
@@ -93,15 +86,17 @@ public class AssistantController {
 
     // Файл в приоритете над текстом, если пришли оба — клиент не должен
     // присылать оба поля одновременно, но если пришлёт, голос не теряем молча.
-    private Proposal resolveProposal(UUID userId, String text, MultipartFile file, AssistantEntryPoint entryPoint)
+    private Proposal resolveProposal(UUID userId, String text, MultipartFile file, AssistantEntryPoint entryPoint, String requestKey)
             throws IOException {
         if (file != null && !file.isEmpty()) {
-            return assistantService.handleVoice(userId, file.getBytes(), AssistantChannel.WEB, entryPoint);
+            return requestKey == null ? assistantService.handleVoice(userId, file.getBytes(), AssistantChannel.WEB, entryPoint)
+                    : assistantService.handleVoice(userId, file.getBytes(), AssistantChannel.WEB, entryPoint, requestKey);
         }
         if (text == null || text.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "нужен текст или аудио");
         }
-        return assistantService.handleText(userId, text, AssistantChannel.WEB, entryPoint);
+        return requestKey == null ? assistantService.handleText(userId, text, AssistantChannel.WEB, entryPoint)
+                : assistantService.handleText(userId, text, AssistantChannel.WEB, entryPoint, requestKey);
     }
 
     @GetMapping("/proposals/{id}")

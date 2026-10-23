@@ -19,7 +19,7 @@ public class QuickAddPolicy {
         if (proposal.status() != ProposalStatus.PENDING) {
             return false;
         }
-        if (proposal.isClarification() || !proposal.hasActions()) {
+        if (proposal.hasClarification() || !proposal.hasActions()) {
             return false;
         }
         return proposal.actions().stream().allMatch(a -> a.type() == AssistantActionType.CREATE);

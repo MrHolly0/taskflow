@@ -1,0 +1,99 @@
+databaseChangeLog:
+  - changeSet:
+      id: 040-task-request-idempotency
+      author: taskflow
+      changes:
+        - addColumn:
+            tableName: tasks
+            columns:
+              - column:
+                  name: recurrence_advanced
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: >
+              UPDATE tasks SET recurrence_advanced = true
+              WHERE status = 'DONE' AND EXISTS
+              (SELECT 1 FROM recurrences r WHERE r.task_id = tasks.id)
+        - createTable:
+            tableName: task_creation_requests
+            columns:
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_task_creation_request_user
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: request_key
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fingerprint
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: response_json
+                  type: TEXT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: task_creation_requests
+            columnNames: user_id, request_key
+            constraintName: pk_task_creation_requests
+        - createIndex:
+            tableName: task_creation_requests
+            indexName: idx_task_creation_requests_created
+            columns:
+              - column:
+                  name: created_at
+        - createTable:
+            tableName: assistant_request_results
+            columns:
+              - column:
+                  name: user_id
+                  type: UUID
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_assistant_request_result_user
+                    references: users(id)
+                    deleteCascade: true
+              - column:
+                  name: request_key
+                  type: VARCHAR(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fingerprint
+                  type: VARCHAR(64)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: response_json
+                  type: TEXT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP WITH TIME ZONE
+                  defaultValueComputed: NOW()
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: assistant_request_results
+            columnNames: user_id, request_key
+            constraintName: pk_assistant_request_results
+        - createIndex:
+            tableName: assistant_request_results
+            indexName: idx_assistant_request_results_created
+            columns:
+              - column:
+                  name: created_at

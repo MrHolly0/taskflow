@@ -29,6 +29,7 @@ public class CallbackHandler {
     private final AssistantService assistantService;
     private final ProposalMessageRenderer renderer;
     private final TelegramMessageSender sender;
+    private final TelegramUpdateCheckpoint checkpoint;
 
     public void handle(TelegramCallbackQuery callback, UUID userId) {
         String data = callback.data();
@@ -86,7 +87,8 @@ public class CallbackHandler {
     }
 
     private void applyProposal(TelegramCallbackQuery callback, UUID userId, Proposal proposal) {
-        ApplyResult result = assistantService.apply(userId, proposal.id());
+        ApplyResult result = checkpoint.once("apply", ApplyResult.class,
+                () -> assistantService.apply(userId, proposal.id()));
         sender.answerCallback(callback.id(), "Готово");
         sender.editMessage(callback.message().chat().id(), callback.message().messageId(),
                 renderer.renderApplyResult(result));
@@ -113,7 +115,9 @@ public class CallbackHandler {
                 .map(ProposedAction::accepted)
                 .orElse(true);
 
-        Proposal updated = assistantService.setActionAccepted(userId, proposal.id(), ordinal, !currentlyAccepted);
+        boolean desired = checkpoint.once("accepted", Boolean.class, () -> !currentlyAccepted);
+        Proposal updated = checkpoint.once("updated", Proposal.class,
+                () -> assistantService.setActionAccepted(userId, proposal.id(), ordinal, desired));
         sender.answerCallback(callback.id(), "Обновлено");
         sender.editMessage(callback.message().chat().id(), callback.message().messageId(),
                 renderer.render(updated), renderer.keyboard(updated));

@@ -14,6 +14,13 @@ import ru.taskflow.shared.exception.NotFoundException;
 import ru.taskflow.shared.exception.RateLimitExceededException;
 import ru.taskflow.shared.exception.ValidationException;
 
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.transaction.TransactionTimedOutException;
+import org.springframework.dao.ConcurrencyFailureException;
+import org.springframework.dao.QueryTimeoutException;
+import org.springframework.dao.DataAccessResourceFailureException;
+
 import java.net.URI;
 import java.util.stream.Collectors;
 
@@ -48,7 +55,7 @@ public class GlobalExceptionHandler {
             ex.getMessage()
         );
         problemDetail.setType(URI.create("about:blank"));
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(problemDetail);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).header("Retry-After", "5").body(problemDetail);
     }
 
     @ExceptionHandler(IdentityConflictException.class)
@@ -84,6 +91,27 @@ public class GlobalExceptionHandler {
         );
         problemDetail.setType(URI.create("about:blank"));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(problemDetail);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ProblemDetail> handleStatus(ResponseStatusException ex) {
+        var response = ResponseEntity.status(ex.getStatusCode());
+        response.headers(ex.getHeaders());
+        if (!ex.getHeaders().containsKey("Retry-After")) {
+            if (ex.getStatusCode().value() == 429) response.header("Retry-After", "60");
+            else if (ex.getStatusCode().value() == 503) response.header("Retry-After", "5");
+        }
+        return response.body(ProblemDetail.forStatusAndDetail(ex.getStatusCode(),
+                ex.getReason() == null ? "Не удалось выполнить запрос" : ex.getReason()));
+    }
+
+    @ExceptionHandler({ConcurrencyFailureException.class, QueryTimeoutException.class, DataAccessResourceFailureException.class,
+            CannotCreateTransactionException.class, TransactionTimedOutException.class})
+    public ResponseEntity<ProblemDetail> handleBusy(Exception ex) {
+        log.warn("Temporary database failure: {}", ex.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "5")
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Сервис сейчас занят. Попробуйте чуть позже."));
     }
 
     @ExceptionHandler(Exception.class)

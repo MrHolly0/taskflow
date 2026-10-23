@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import ru.taskflow.shared.security.AuthenticatedUser;
 import ru.taskflow.task.api.TaskPriority;
+import ru.taskflow.task.application.TaskCreationService;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskStatus;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
@@ -37,15 +38,17 @@ import java.util.Map;
 public class TaskController {
 
     private final TaskService taskService;
+    private final TaskCreationService taskCreationService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Создать задачу", description = "Создаёт новую задачу из формы или голоса")
     public TaskResponse create(
             @RequestBody @Valid CreateTaskRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String requestKey,
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        return taskService.create(user.userId(), request);
+        return taskCreationService.create(user.userId(), request, requestKey, false);
     }
 
     @GetMapping("/{id}")
@@ -218,8 +221,9 @@ public class TaskController {
     @Operation(summary = "Быстрый ввод", description = "Создаёт задачу в режиме черновика для подтверждения")
     public TaskResponse createQuick(
             @RequestBody @Valid CreateTaskRequest request,
+            @RequestHeader(name = "Idempotency-Key", required = false) String requestKey,
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
-        return taskService.createQuick(user.userId(), request);
+        return taskCreationService.create(user.userId(), request, requestKey, true);
     }
 }

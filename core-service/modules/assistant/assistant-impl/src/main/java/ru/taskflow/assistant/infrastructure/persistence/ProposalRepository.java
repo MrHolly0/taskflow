@@ -2,6 +2,8 @@ package ru.taskflow.assistant.infrastructure.persistence;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,6 +16,10 @@ import java.util.UUID;
 public interface ProposalRepository extends JpaRepository<ProposalJpaEntity, UUID> {
 
     Optional<ProposalJpaEntity> findByIdAndUserId(UUID id, UUID userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM ProposalJpaEntity p WHERE p.id = :id AND p.userId = :userId")
+    Optional<ProposalJpaEntity> findForUpdate(@Param("id") UUID id, @Param("userId") UUID userId);
 
     Optional<ProposalJpaEntity> findByShortCodeAndUserId(String shortCode, UUID userId);
 

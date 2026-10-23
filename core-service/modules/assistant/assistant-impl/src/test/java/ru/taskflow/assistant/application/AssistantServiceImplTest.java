@@ -66,6 +66,10 @@ class AssistantServiceImplTest {
     private TaskService taskService;
     @Mock
     private AuditService auditService;
+    @Mock
+    private AssistantRequestStore requestStore;
+    @Mock
+    private ProposalApplyTransaction applyTransaction;
 
     private final UUID userId = UUID.randomUUID();
     private final OffsetDateTime now = OffsetDateTime.parse("2026-08-12T10:00:00+03:00");
@@ -78,7 +82,9 @@ class AssistantServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new AssistantServiceImpl(agentLoop, nlpGatewayService, proposalFactory, proposalMapper,
-                proposalRepository, proposalApplier, userService, taskService, auditService, clock, objectMapper);
+                proposalRepository, proposalApplier, userService, taskService, auditService, clock, objectMapper, requestStore, applyTransaction);
+        org.mockito.Mockito.lenient().when(applyTransaction.execute(any()))
+                .thenAnswer(invocation -> invocation.<java.util.function.Supplier<ApplyResult>>getArgument(0).get());
     }
 
     private AgentOutcome emptyWindowOutcome(List<ru.taskflow.assistant.api.dto.ProposedAction> actions,
@@ -351,7 +357,7 @@ class AssistantServiceImplTest {
         ProposalActionJpaEntity first = action(1, true);
         ProposalActionJpaEntity second = action(2, false);
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), first, second);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
         when(proposalRepository.save(entity)).thenReturn(entity);
         Proposal expectedDto = new Proposal(UUID.randomUUID(), "CODE1234", userId, ProposalStatus.PENDING,
                 "текст", null, List.of(), now, now.plusHours(24));
@@ -368,7 +374,7 @@ class AssistantServiceImplTest {
     void selectAlternative_rejectsNonPending() {
         UUID proposalId = UUID.randomUUID();
         ProposalJpaEntity entity = proposal(ProposalStatus.APPLIED, now.plusHours(24), action(1, true));
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.selectAlternative(userId, proposalId, 1))
                 .isInstanceOf(ProposalNotPendingException.class);
@@ -378,7 +384,7 @@ class AssistantServiceImplTest {
     void setActionAccepted_rejectsNonPending() {
         UUID proposalId = UUID.randomUUID();
         ProposalJpaEntity entity = proposal(ProposalStatus.APPLIED, now.plusHours(24), action(1, true));
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.setActionAccepted(userId, proposalId, 1, false))
                 .isInstanceOf(ProposalNotPendingException.class);
@@ -393,7 +399,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"позвонить маме\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
         when(proposalRepository.save(entity)).thenReturn(entity);
         Proposal expectedDto = new Proposal(UUID.randomUUID(), "CODE1234", userId, ProposalStatus.PENDING,
                 "текст", null, List.of(), now, now.plusHours(24));
@@ -414,7 +420,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"позвонить маме\",\"reminder_at\":\"2026-08-12T12:00:00+03:00\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
         when(proposalRepository.save(entity)).thenReturn(entity);
         when(proposalMapper.toDto(entity)).thenReturn(
                 new Proposal(UUID.randomUUID(), "CODE1234", userId, ProposalStatus.PENDING,
@@ -433,7 +439,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"позвонить маме\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateActionReminder(userId, proposalId, 1, now.minusMinutes(1)))
                 .isInstanceOf(ValidationException.class);
@@ -445,7 +451,7 @@ class AssistantServiceImplTest {
         UUID proposalId = UUID.randomUUID();
         ProposalActionJpaEntity completeAction = action(1, true);
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), completeAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateActionReminder(userId, proposalId, 1, now.plusHours(2)))
                 .isInstanceOf(ValidationException.class);
@@ -459,7 +465,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"позвонить маме\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.APPLIED, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateActionReminder(userId, proposalId, 1, now.plusHours(2)))
                 .isInstanceOf(ProposalNotPendingException.class);
@@ -474,7 +480,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"разобрать шкаф\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
         when(proposalRepository.save(entity)).thenReturn(entity);
         Proposal expectedDto = new Proposal(UUID.randomUUID(), "CODE1234", userId, ProposalStatus.PENDING,
                 "текст", null, List.of(), now, now.plusHours(24));
@@ -495,7 +501,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"разобрать шкаф\",\"planned_date\":\"2026-08-15T00:00:00+03:00\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
         when(proposalRepository.save(entity)).thenReturn(entity);
         when(proposalMapper.toDto(entity)).thenReturn(
                 new Proposal(UUID.randomUUID(), "CODE1234", userId, ProposalStatus.PENDING,
@@ -512,7 +518,7 @@ class AssistantServiceImplTest {
         UUID proposalId = UUID.randomUUID();
         ProposalActionJpaEntity completeAction = action(1, true);
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), completeAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateActionPlannedDate(userId, proposalId, 1, now.plusDays(1)))
                 .isInstanceOf(ValidationException.class);
@@ -526,7 +532,7 @@ class AssistantServiceImplTest {
         createAction.setType("CREATE");
         createAction.setPayload("{\"title\":\"разобрать шкаф\"}");
         ProposalJpaEntity entity = proposal(ProposalStatus.APPLIED, now.plusHours(24), createAction);
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         assertThatThrownBy(() -> service.updateActionPlannedDate(userId, proposalId, 1, now.plusDays(1)))
                 .isInstanceOf(ProposalNotPendingException.class);
@@ -536,7 +542,7 @@ class AssistantServiceImplTest {
     void apply_rejectsExpiredProposal() {
         UUID proposalId = UUID.randomUUID();
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.minusHours(1), action(1, true));
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         ApplyResult result = service.apply(userId, proposalId);
 
@@ -548,13 +554,12 @@ class AssistantServiceImplTest {
     }
 
     @Test
-    void apply_rejectsAlreadyApplied() {
+    void applyReturnsPreviouslyCommittedResult() {
         UUID proposalId = UUID.randomUUID();
         ProposalJpaEntity entity = proposal(ProposalStatus.APPLIED, now.plusHours(24), action(1, true));
-        when(proposalRepository.findWithActions(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
-        assertThatThrownBy(() -> service.apply(userId, proposalId))
-                .isInstanceOf(ProposalNotPendingException.class);
+        assertThat(service.apply(userId, proposalId).status()).isEqualTo(ProposalStatus.APPLIED);
         verify(proposalApplier, never()).apply(any(), any());
     }
 
@@ -562,7 +567,7 @@ class AssistantServiceImplTest {
     void reject_setsRejectedStatus() {
         UUID proposalId = UUID.randomUUID();
         ProposalJpaEntity entity = proposal(ProposalStatus.PENDING, now.plusHours(24), action(1, true));
-        when(proposalRepository.findByIdAndUserId(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
 
         service.reject(userId, proposalId);
 

@@ -40,7 +40,8 @@ class VoiceMessageHandlerTest {
 
     @Test
     void handleVoice_createsProposalFromTranscript() {
-        var handler = new VoiceMessageHandler(apiClient, sender, assistantService, renderer);
+        var handler = new VoiceMessageHandler(apiClient, sender, assistantService, renderer,
+                new ru.taskflow.telegram.application.TelegramUpdateCheckpoint(null));
         var userId = UUID.randomUUID();
         var message = new TelegramMessage(
                 1L, new TelegramUser(1L, "u", "Name", null),
@@ -51,7 +52,8 @@ class VoiceMessageHandlerTest {
                 "закрой молоко", null, List.of(), now, now.plusHours(24));
 
         when(apiClient.downloadVoice("file123")).thenReturn(audio);
-        when(assistantService.handleVoice(userId, audio, AssistantChannel.TELEGRAM)).thenReturn(proposal);
+        when(assistantService.handleVoice(userId, audio, AssistantChannel.TELEGRAM,
+                ru.taskflow.assistant.api.AssistantEntryPoint.CHAT, null)).thenReturn(proposal);
         when(renderer.render(proposal)).thenReturn("Предлагаю: закрыть молоко");
         when(renderer.keyboard(proposal)).thenReturn(List.of(List.of()));
 

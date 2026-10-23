@@ -4,13 +4,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
 import ru.taskflow.notify.api.NotificationService;
 import ru.taskflow.task.api.TaskPriority;
+import ru.taskflow.task.api.TaskStatus;
+import ru.taskflow.shared.exception.ValidationException;
 import ru.taskflow.task.api.exception.ReminderNotFoundException;
 import ru.taskflow.task.infrastructure.persistence.ReminderJpaEntity;
 import ru.taskflow.task.infrastructure.persistence.ReminderRepository;
 import ru.taskflow.task.infrastructure.persistence.ReminderStatus;
 import ru.taskflow.task.infrastructure.persistence.TaskJpaEntity;
+import ru.taskflow.task.infrastructure.persistence.TaskRepository;
 import ru.taskflow.user.api.UserService;
 import ru.taskflow.user.api.dto.UserSettingsDto;
 
@@ -52,6 +56,7 @@ public class TaskReminderService {
     private final NotificationService notificationService;
     private final UserService userService;
     private final Clock clock;
+    private final TaskRepository taskRepository;
 
     /**
      * Обычное напоминание — за defaultReminderMinutes до срока. Если это
@@ -92,6 +97,9 @@ public class TaskReminderService {
      */
     @Transactional
     public void createStandaloneReminder(UUID userId, TaskJpaEntity task, OffsetDateTime fireAt) {
+        if (task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.CANCELLED) {
+            throw new ValidationException("Нельзя добавить напоминание для закрытой задачи");
+        }
         createReminder(userId, task, fireAt, null, chainStartOrNull(task));
     }
 
@@ -106,8 +114,14 @@ public class TaskReminderService {
      */
     @Transactional
     public void snoozeReminder(UUID taskId, UUID reminderId, OffsetDateTime until) {
-        var reminder = reminderRepository.findByIdAndTaskId(reminderId, taskId)
+        var reminder = reminderRepository.findForUpdate(reminderId, taskId)
                 .orElseThrow(() -> new ReminderNotFoundException(reminderId));
+        if (reminder.getStatus() != ReminderStatus.PENDING) {
+            return;
+        }
+        if (reminder.getTask().getStatus() == TaskStatus.DONE || reminder.getTask().getStatus() == TaskStatus.CANCELLED) {
+            throw new ValidationException("Нельзя отложить напоминание для закрытой задачи");
+        }
         reminder.setStatus(ReminderStatus.SNOOZED);
         reminderRepository.save(reminder);
         notificationService.cancelReminderNotifications(reminderId);
@@ -145,16 +159,30 @@ public class TaskReminderService {
      */
     @Transactional
     public void advancePersistentChains(OffsetDateTime now) {
-        List<ReminderJpaEntity> due = reminderRepository
-                .findByStatusAndChainStepIsNotNullAndFireAtBefore(ReminderStatus.PENDING, now);
-        for (ReminderJpaEntity reminder : due) {
+        var due = reminderRepository.findDueChainCandidates(now, PageRequest.of(0, 100));
+        for (var candidate : due) {
+            // Тот же порядок блокировок, что у ручных команд: задача, затем напоминание.
+            var task = taskRepository.findForUpdate(candidate.getTaskId(), candidate.getUserId()).orElse(null);
+            if (task == null) {
+                continue;
+            }
+            var reminder = reminderRepository.findForUpdate(candidate.getId(), candidate.getTaskId()).orElse(null);
+            if (reminder == null || reminder.getStatus() != ReminderStatus.PENDING
+                    || reminder.getChainStep() == null || !reminder.getFireAt().isBefore(now)) {
+                continue;
+            }
+            if (task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.CANCELLED
+                    || !task.isPersistentReminder()) {
+                reminder.setStatus(ReminderStatus.CANCELLED);
+                notificationService.cancelReminderNotifications(reminder.getId());
+                continue;
+            }
             reminder.setStatus(ReminderStatus.DISMISSED);
             reminderRepository.save(reminder);
             notificationService.cancelReminderNotifications(reminder.getId());
 
             int step = reminder.getChainStep();
             if (step < CHAIN_STEP_GAPS.size()) {
-                TaskJpaEntity task = reminder.getTask();
                 OffsetDateTime nextFireAt = reminder.getFireAt().plus(CHAIN_STEP_GAPS.get(step));
                 createReminder(task.getUserId(), task, nextFireAt, task.getDeadline(), step + 1);
             }
@@ -182,8 +210,11 @@ public class TaskReminderService {
      */
     @Transactional
     public void cancelReminder(UUID taskId, UUID reminderId) {
-        var reminder = reminderRepository.findByIdAndTaskId(reminderId, taskId)
+        var reminder = reminderRepository.findForUpdate(reminderId, taskId)
                 .orElseThrow(() -> new ReminderNotFoundException(reminderId));
+        if (reminder.getStatus() != ReminderStatus.PENDING) {
+            return;
+        }
         reminder.setStatus(ReminderStatus.CANCELLED);
         reminderRepository.save(reminder);
         notificationService.cancelReminderNotifications(reminderId);

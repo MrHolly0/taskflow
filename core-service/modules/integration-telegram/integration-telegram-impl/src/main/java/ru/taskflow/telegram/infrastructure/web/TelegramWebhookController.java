@@ -12,8 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-import ru.taskflow.telegram.application.UpdateIdempotencyService;
-import ru.taskflow.telegram.application.UpdateRouter;
+import ru.taskflow.telegram.application.TelegramUpdateInbox;
 import ru.taskflow.telegram.infrastructure.client.dto.TelegramUpdate;
 
 @Slf4j
@@ -23,16 +22,13 @@ import ru.taskflow.telegram.infrastructure.client.dto.TelegramUpdate;
 public class TelegramWebhookController {
 
     private final String webhookSecret;
-    private final UpdateIdempotencyService idempotencyService;
-    private final UpdateRouter updateRouter;
+    private final TelegramUpdateInbox inbox;
 
     public TelegramWebhookController(
             @Value("${app.telegram.webhook-secret:}") String webhookSecret,
-            UpdateIdempotencyService idempotencyService,
-            UpdateRouter updateRouter) {
+            TelegramUpdateInbox inbox) {
         this.webhookSecret = webhookSecret;
-        this.idempotencyService = idempotencyService;
-        this.updateRouter = updateRouter;
+        this.inbox = inbox;
     }
 
     @PostMapping
@@ -46,11 +42,6 @@ public class TelegramWebhookController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 
-        if (idempotencyService.isAlreadyProcessed(update.updateId())) {
-            log.debug("Duplicate update_id={}, skipping", update.updateId());
-            return;
-        }
-
-        updateRouter.route(update);
+        inbox.enqueue(update);
     }
 }

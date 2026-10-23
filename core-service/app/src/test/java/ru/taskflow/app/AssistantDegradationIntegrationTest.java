@@ -37,6 +37,14 @@ import static org.mockito.Mockito.when;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Testcontainers
 class AssistantDegradationIntegrationTest {
+    @MockBean
+    private ru.taskflow.assistant.application.AssistantRateLimiter admission;
+
+    @org.junit.jupiter.api.BeforeEach
+    void allowTestRequests() {
+        org.mockito.Mockito.when(admission.allow(org.mockito.ArgumentMatchers.any())).thenReturn(true);
+    }
+
 
     @Container
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");

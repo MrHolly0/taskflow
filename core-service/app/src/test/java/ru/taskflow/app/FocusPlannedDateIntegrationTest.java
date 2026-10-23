@@ -36,6 +36,7 @@ import static org.mockito.Mockito.doThrow;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Testcontainers
+@org.springframework.test.annotation.DirtiesContext(classMode = org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_CLASS)
 class FocusPlannedDateIntegrationTest {
 
     @Container
@@ -58,6 +59,13 @@ class FocusPlannedDateIntegrationTest {
     private JdbcTemplate jdbcTemplate;
     @MockBean
     private NlpGatewayService nlpGatewayService;
+    @MockBean
+    private ru.taskflow.assistant.application.AssistantRateLimiter limiter;
+
+    @org.junit.jupiter.api.BeforeEach
+    void allowRequests() {
+        when(limiter.allow(any())).thenReturn(true);
+    }
 
     @Test
     void lazyRequest_setsPlannedDateFromOriginalMessage_andSecondRequestDoesNotCallAgain() {

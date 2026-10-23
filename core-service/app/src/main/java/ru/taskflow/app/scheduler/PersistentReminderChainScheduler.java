@@ -19,9 +19,10 @@ import java.time.OffsetDateTime;
 public class PersistentReminderChainScheduler {
 
     private final TaskReminderService taskReminderService;
+    private final ClusterJobRunner jobs;
 
     @Scheduled(cron = "0 */5 * * * *")
     public void advanceChains() {
-        taskReminderService.advancePersistentChains(OffsetDateTime.now());
+        jobs.run(910003L, () -> taskReminderService.advancePersistentChains(OffsetDateTime.now()));
     }
 }

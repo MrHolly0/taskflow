@@ -45,6 +45,9 @@ class ProposalApplierTest {
     @Mock
     private AuditService auditService;
 
+    @Mock
+    private ProposalActionTransaction actionTransaction;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ProposalApplier applier;
@@ -53,7 +56,9 @@ class ProposalApplierTest {
 
     @BeforeEach
     void setUp() {
-        applier = new ProposalApplier(actionValidator, taskService, auditService, objectMapper);
+        applier = new ProposalApplier(actionValidator, taskService, auditService, objectMapper, actionTransaction);
+        org.mockito.Mockito.lenient().when(actionTransaction.execute(any(), any()))
+                .thenAnswer(invocation -> invocation.<java.util.function.Supplier<UUID>>getArgument(1).get());
     }
 
     private ProposalJpaEntity proposal(String sourceChannel, String inputKind, ProposalActionJpaEntity... actions) {
@@ -123,6 +128,19 @@ class ProposalApplierTest {
         // (например, включить настойчивость только что созданной задаче).
         assertThat(result.outcomes()).extracting(ActionOutcome::taskId)
                 .containsExactly(createdId, t1, t2);
+    }
+
+    @Test
+    void resumedProposalSkipsAlreadyCommittedAction() {
+        UUID taskId = UUID.randomUUID();
+        var committed = action(0, AssistantActionType.CREATE, null, "{\"title\":\"новая\"}", true);
+        committed.setAppliedTaskId(taskId);
+
+        var result = applier.apply(userId, proposal("WEB", "TEXT", committed));
+
+        assertThat(result.appliedCount()).isEqualTo(1);
+        assertThat(result.outcomes().getFirst().taskId()).isEqualTo(taskId);
+        org.mockito.Mockito.verifyNoInteractions(taskService, actionTransaction, actionValidator);
     }
 
     @Test

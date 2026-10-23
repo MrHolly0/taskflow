@@ -19,7 +19,7 @@ import java.util.List;
 public class ProposalMessageRenderer {
 
     public String render(Proposal proposal) {
-        if (proposal.isClarification()) {
+        if (proposal.hasClarification()) {
             return proposal.clarification();
         }
         if (!proposal.hasActions()) {

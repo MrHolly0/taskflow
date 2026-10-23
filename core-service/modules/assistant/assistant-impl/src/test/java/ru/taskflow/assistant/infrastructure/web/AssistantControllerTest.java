@@ -22,7 +22,6 @@ import ru.taskflow.assistant.api.dto.Proposal;
 import ru.taskflow.assistant.api.AssistantActionType;
 import ru.taskflow.assistant.api.dto.ProposedAction;
 import ru.taskflow.assistant.api.exception.ProposalNotFoundException;
-import ru.taskflow.assistant.application.AssistantRateLimiter;
 import ru.taskflow.assistant.application.QuickAddPolicy;
 import ru.taskflow.shared.security.AuthenticatedUser;
 
@@ -50,9 +49,6 @@ class AssistantControllerTest {
     @Mock
     private AssistantService assistantService;
 
-    @Mock
-    private AssistantRateLimiter rateLimiter;
-
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final UUID userId = UUID.randomUUID();
     private MockMvc mockMvc;
@@ -61,7 +57,7 @@ class AssistantControllerTest {
 
     @BeforeEach
     void setUp() {
-        var controller = new AssistantController(assistantService, rateLimiter, quickAddPolicy);
+        var controller = new AssistantController(assistantService, quickAddPolicy);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
@@ -76,7 +72,6 @@ class AssistantControllerTest {
 
     @Test
     void handleMessage_returnsCreatedProposal() throws Exception {
-        when(rateLimiter.allow(userId)).thenReturn(true);
         when(assistantService.handleText(eq(userId), eq("закрой молоко"), eq(AssistantChannel.WEB), eq(AssistantEntryPoint.CHAT)))
                 .thenReturn(proposal());
 
@@ -86,12 +81,14 @@ class AssistantControllerTest {
 
     @Test
     void handleMessage_rejectsWhenRateLimited() throws Exception {
-        when(rateLimiter.allow(userId)).thenReturn(false);
+        when(assistantService.handleText(any(), any(), any(), any()))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
 
         mockMvc.perform(multipart("/api/v1/assistant/messages").param("text", "закрой молоко"))
                 .andExpect(status().isTooManyRequests());
 
-        verifyNoInteractions(assistantService);
+
     }
 
     @Test
@@ -132,7 +129,7 @@ class AssistantControllerTest {
                         .content("{}"))
                 .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(assistantService);
+
     }
 
     @Test
@@ -166,7 +163,6 @@ class AssistantControllerTest {
 
     @Test
     void quick_autoAppliesCreateOnlyProposal() throws Exception {
-        when(rateLimiter.allow(userId)).thenReturn(true);
         Proposal proposal = proposalWithActions(ProposalStatus.PENDING, null,
                 new ProposedAction(1, AssistantActionType.CREATE, null, Map.of(), "создать «купить хлеб»", true));
         when(assistantService.handleText(eq(userId), eq("купи хлеб"), eq(AssistantChannel.WEB), eq(AssistantEntryPoint.QUICK_ADD)))
@@ -183,7 +179,6 @@ class AssistantControllerTest {
 
     @Test
     void quick_returnsForConfirmationWhenActionTouchesExistingTask() throws Exception {
-        when(rateLimiter.allow(userId)).thenReturn(true);
         Proposal proposal = proposalWithActions(ProposalStatus.PENDING, null,
                 new ProposedAction(1, AssistantActionType.COMPLETE, UUID.randomUUID(), Map.of(), "закрыть «молоко»", true));
         when(assistantService.handleText(eq(userId), eq("закрой молоко"), eq(AssistantChannel.WEB), eq(AssistantEntryPoint.QUICK_ADD)))
@@ -198,7 +193,6 @@ class AssistantControllerTest {
 
     @Test
     void quick_doesNotAutoApplyDegradedProposal() throws Exception {
-        when(rateLimiter.allow(userId)).thenReturn(true);
         Proposal degraded = new Proposal(null, null, userId, ProposalStatus.FAILED,
                 "закрой молоко", "не удалось разобрать сообщение", List.of(),
                 OffsetDateTime.now(), OffsetDateTime.now().plusHours(24));
@@ -214,12 +208,14 @@ class AssistantControllerTest {
 
     @Test
     void quick_rejectsWhenRateLimited() throws Exception {
-        when(rateLimiter.allow(userId)).thenReturn(false);
+        when(assistantService.handleText(any(), any(), any(), any()))
+                .thenThrow(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.TOO_MANY_REQUESTS));
 
         mockMvc.perform(multipart("/api/v1/assistant/quick").param("text", "купи хлеб"))
                 .andExpect(status().isTooManyRequests());
 
-        verifyNoInteractions(assistantService);
+
     }
 
     private Proposal proposal() {

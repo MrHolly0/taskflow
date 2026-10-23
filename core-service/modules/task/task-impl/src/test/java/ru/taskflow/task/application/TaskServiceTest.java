@@ -71,6 +71,8 @@ class TaskServiceTest {
     private FocusHintGenerator focusHintGenerator;
     @Mock
     private FocusPlannedDateGenerator focusPlannedDateGenerator;
+    @Mock
+    private FocusGenerationPersistence focusGenerationPersistence;
 
     // Реальный Clock.fixed, не мок — прокрутке следующего вхождения (А) нужно
     // настоящее сравнение дат, а не настраивать заглушку под каждый шаг.
@@ -101,7 +103,7 @@ class TaskServiceTest {
         taskService = new TaskServiceImpl(taskRepository, groupRepository, tagRepository, taskMapper,
                 taskReminderService, reminderRepository, recurrenceRepository, auditService, groupStyleResolver,
                 clock, focusTaskRanker, userService, new FocusHoursGateConfig(), new FocusHintConfig(),
-                focusHintGenerator, focusPlannedDateGenerator);
+                focusHintGenerator, focusPlannedDateGenerator, focusGenerationPersistence);
     }
 
     @Test
@@ -177,7 +179,7 @@ class TaskServiceTest {
     void update_setsPersistentReminderFlag() {
         var existing = taskEntity();
         existing.setId(taskId);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(existing));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(existing));
         when(taskRepository.save(existing)).thenReturn(existing);
         when(taskMapper.toResponse(existing)).thenReturn(mockResponse(taskId, "задача"));
         var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null, null, null, null, true);
@@ -194,7 +196,7 @@ class TaskServiceTest {
         var existing = taskEntity();
         existing.setId(taskId);
         existing.setPersistentReminder(true);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(existing));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(existing));
         when(taskRepository.save(existing)).thenReturn(existing);
         when(taskMapper.toResponse(existing)).thenReturn(mockResponse(taskId, "задача"));
         var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null, null, null, null, false);
@@ -210,7 +212,7 @@ class TaskServiceTest {
         var existing = taskEntity();
         existing.setId(taskId);
         existing.setPersistentReminder(true);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(existing));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(existing));
         when(taskRepository.save(existing)).thenReturn(existing);
         when(taskMapper.toResponse(existing)).thenReturn(mockResponse(taskId, "задача"));
         var request = new UpdateTaskRequest("новое название", null, null, null, null, null, null, null, null, null,
@@ -226,7 +228,7 @@ class TaskServiceTest {
     void snoozeReminder_delegatesToTaskReminderService() {
         UUID reminderId = UUID.randomUUID();
         OffsetDateTime until = OffsetDateTime.parse("2026-08-30T09:00:00Z");
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(taskEntity()));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(taskEntity()));
 
         taskService.snoozeReminder(userId, taskId, reminderId, until);
 
@@ -332,7 +334,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest("новый заголовок", null, null, null, null, null, null, null, null);
         var response = mockResponse(taskId, "новый заголовок");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -350,7 +352,7 @@ class TaskServiceTest {
         entity.setGroup(group);
         entity.setPlannedDate(OffsetDateTime.parse("2026-10-07T00:00:00Z"));
         entity.setPlannedDateSetAt(OffsetDateTime.now(clock));
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(entity)).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
         var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null,
@@ -381,7 +383,7 @@ class TaskServiceTest {
         entity.setGroup(group);
         entity.setPlannedDate(planned);
         entity.setPlannedDateSetAt(setAt);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(entity)).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
         var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null,
@@ -399,14 +401,14 @@ class TaskServiceTest {
     @Test
     void update_clearCannotTouchAnotherUsersTask() {
         var otherUserId = UUID.randomUUID();
-        when(taskRepository.findByIdAndUserId(taskId, otherUserId)).thenReturn(Optional.empty());
+        when(taskRepository.findForUpdate(taskId, otherUserId)).thenReturn(Optional.empty());
         var request = new UpdateTaskRequest(null, null, null, null, null, null, null, null,
                 null, null, null, null, true, true);
 
         assertThatThrownBy(() -> taskService.update(otherUserId, taskId, request))
                 .isInstanceOf(TaskNotFoundException.class);
 
-        verify(taskRepository).findByIdAndUserId(taskId, otherUserId);
+        verify(taskRepository).findForUpdate(taskId, otherUserId);
         verifyNoMoreInteractions(taskRepository);
         verifyNoInteractions(auditService, groupRepository, taskReminderService);
     }
@@ -417,7 +419,7 @@ class TaskServiceTest {
         var entity = taskEntity();
         entity.setStatus(TaskStatus.DONE);
         entity.setCompletedAt(OffsetDateTime.now(clock));
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(entity)).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
         var request = new UpdateTaskRequest(null, null, null, status, null, null, null, null, null);
@@ -435,7 +437,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest("новое название", null, null, null, null, null, null, null, null);
         var response = mockResponse(taskId, "новое название");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -456,7 +458,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest(null, null, null, null, null, null, "Работа", null, null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(groupRepository.findByUserIdAndName(userId, "Работа")).thenReturn(Optional.of(existingGroup));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
@@ -473,7 +475,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest(null, null, null, null, null, null, "Новая группа", null, null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(groupRepository.findByUserIdAndName(userId, "Новая группа")).thenReturn(Optional.empty());
         when(groupStyleResolver.resolve("Новая группа")).thenReturn(new GroupStyleResolver.GroupStyle("blue", "folder"));
         when(groupRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -494,7 +496,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest(null, null, null, null, null, null, "Спорт", null, null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(groupRepository.findByUserIdAndName(userId, "Спорт")).thenReturn(Optional.empty());
         when(groupStyleResolver.resolve("Спорт")).thenReturn(new GroupStyleResolver.GroupStyle("cyan", "run"));
         when(groupRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
@@ -519,7 +521,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest(null, null, null, null, null, null, "Работа", null, null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(groupRepository.findByUserIdAndName(userId, "Работа")).thenReturn(Optional.of(existingGroup));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
@@ -534,7 +536,7 @@ class TaskServiceTest {
     @Test
     void complete_setsStatusDone() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
 
         taskService.complete(userId, taskId);
 
@@ -543,9 +545,37 @@ class TaskServiceTest {
     }
 
     @Test
+    void completionRetryKeepsTimestampAndSkipsSideEffects() {
+        var entity = taskEntity();
+        entity.setStatus(TaskStatus.DONE);
+        var completedAt = OffsetDateTime.parse("2026-08-10T12:00:00Z");
+        entity.setCompletedAt(completedAt);
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
+
+        taskService.complete(userId, taskId);
+
+        assertThat(entity.getCompletedAt()).isEqualTo(completedAt);
+        verify(taskRepository, never()).save(any());
+        verifyNoInteractions(taskReminderService, recurrenceRepository, auditService);
+    }
+
+    @Test
+    void reopenedOccurrenceDoesNotAdvanceRecurrenceAgain() {
+        var entity = taskEntity();
+        entity.setRecurrenceAdvanced(true);
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
+
+        taskService.complete(userId, taskId);
+
+        assertThat(entity.getStatus()).isEqualTo(TaskStatus.DONE);
+        verifyNoInteractions(recurrenceRepository);
+        verify(taskRepository).save(entity);
+    }
+
+    @Test
     void complete_cancelsNotifications() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
 
         taskService.complete(userId, taskId);
 
@@ -557,7 +587,7 @@ class TaskServiceTest {
     @Test
     void complete_withoutRecurrence_doesNotCreateNextOccurrence() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(recurrenceRepository.findById(taskId)).thenReturn(Optional.empty());
 
         taskService.complete(userId, taskId);
@@ -570,7 +600,7 @@ class TaskServiceTest {
         var deadline = OffsetDateTime.parse("2026-01-01T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(deadline);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -591,7 +621,7 @@ class TaskServiceTest {
         var deadline = OffsetDateTime.parse("2026-01-02T10:00:00Z"); // пятница
         var entity = taskEntity();
         entity.setDeadline(deadline);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId)).thenReturn(Optional.of(
@@ -609,7 +639,7 @@ class TaskServiceTest {
         var friday = OffsetDateTime.parse("2026-01-02T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(friday);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -627,7 +657,7 @@ class TaskServiceTest {
         var jan31 = OffsetDateTime.parse("2026-01-31T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(jan31);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -646,7 +676,7 @@ class TaskServiceTest {
         var endsAt = OffsetDateTime.parse("2026-01-01T23:59:59Z");
         var entity = taskEntity();
         entity.setDeadline(deadline);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(recurrenceRepository.findById(taskId))
                 .thenReturn(Optional.of(recurrenceEntity(RecurrenceType.DAILY, 1, null, null, endsAt)));
 
@@ -666,7 +696,7 @@ class TaskServiceTest {
         var anchor = OffsetDateTime.parse("2025-05-28T09:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(anchor);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -686,7 +716,7 @@ class TaskServiceTest {
         var anchor = OffsetDateTime.parse("2025-05-04T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(anchor);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -707,7 +737,7 @@ class TaskServiceTest {
         var anchor = OffsetDateTime.parse("2025-05-20T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(anchor);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId)).thenReturn(Optional.of(
@@ -729,7 +759,7 @@ class TaskServiceTest {
         var anchor = OffsetDateTime.parse("2025-05-23T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(anchor);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -751,7 +781,7 @@ class TaskServiceTest {
         var anchor = OffsetDateTime.parse("2025-04-15T10:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(anchor);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -775,7 +805,7 @@ class TaskServiceTest {
         var endsAt = OffsetDateTime.parse("2025-05-30T00:00:00Z");
         var entity = taskEntity();
         entity.setDeadline(anchor);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(recurrenceRepository.findById(taskId))
                 .thenReturn(Optional.of(recurrenceEntity(RecurrenceType.DAILY, 1, null, null, endsAt)));
 
@@ -790,7 +820,7 @@ class TaskServiceTest {
         entity.setDeadline(OffsetDateTime.parse("2026-01-01T10:00:00Z"));
         var request = new UpdateTaskRequest(null, null, null, TaskStatus.CANCELLED, null, null, null, null, null);
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "задача"));
         when(recurrenceRepository.findById(taskId)).thenReturn(Optional.empty());
@@ -812,7 +842,7 @@ class TaskServiceTest {
         entity.setEstimateMinutes(45);
         entity.setSource(ru.taskflow.task.api.TaskSource.MANUAL);
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -835,7 +865,7 @@ class TaskServiceTest {
     void complete_newOccurrence_getsRelativeReminderThroughPlanForDeadline() {
         var entity = taskEntity();
         entity.setDeadline(OffsetDateTime.parse("2026-01-01T10:00:00Z"));
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -854,7 +884,7 @@ class TaskServiceTest {
         var plannedDate = OffsetDateTime.parse("2026-01-01T09:00:00Z");
         var entity = taskEntity();
         entity.setPlannedDate(plannedDate);
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -872,7 +902,7 @@ class TaskServiceTest {
     @Test
     void complete_noAnchorAtAll_stillCreatesNextOccurrenceWithoutDate() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(recurrenceRepository.findById(taskId))
@@ -902,7 +932,7 @@ class TaskServiceTest {
     @Test
     void delete_marksAsDeleted() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
 
         taskService.delete(userId, taskId);
 
@@ -913,7 +943,7 @@ class TaskServiceTest {
     @Test
     void delete_cancelsNotifications() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
 
         taskService.delete(userId, taskId);
 
@@ -926,7 +956,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest(null, null, null, TaskStatus.CANCELLED, null, null, null, null, null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -942,7 +972,7 @@ class TaskServiceTest {
         var request = new UpdateTaskRequest(null, null, TaskPriority.HIGH, null, null, null, null, null, null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -953,7 +983,7 @@ class TaskServiceTest {
 
     @Test
     void delete_throwsNotFound_whenMissing() {
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.empty());
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> taskService.delete(userId, taskId))
                 .isInstanceOf(TaskNotFoundException.class);
@@ -1148,11 +1178,8 @@ class TaskServiceTest {
 
         taskService.getFocusTasks(userId, null);
 
-        assertThat(shown.getLastShownInFocusAt()).isEqualTo(OffsetDateTime.now(clock));
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<TaskJpaEntity>> captor = ArgumentCaptor.forClass(List.class);
-        verify(taskRepository).saveAll(captor.capture());
-        assertThat(captor.getValue()).containsExactly(shown);
+        verify(taskRepository).markShownInFocus(userId, List.of(taskId), OffsetDateTime.now(clock));
+        verify(taskRepository, never()).saveAll(any());
     }
 
     // Отметка ставится в момент выдачи — задача, которую отсеял лимит
@@ -1187,7 +1214,7 @@ class TaskServiceTest {
         var gated = new TaskServiceImpl(taskRepository, groupRepository, tagRepository, taskMapper,
                 taskReminderService, reminderRepository, recurrenceRepository, auditService, groupStyleResolver,
                 clock, focusTaskRanker, userService, config, new FocusHintConfig(), focusHintGenerator,
-                focusPlannedDateGenerator);
+                focusPlannedDateGenerator, focusGenerationPersistence);
         var tied = taskEntity();
         tied.setTitle("Позвонить в банк");
         when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
@@ -1197,7 +1224,7 @@ class TaskServiceTest {
 
         assertThat(result.tasks()).isEmpty();
         assertThat(tied.getLastShownInFocusAt()).isNull();
-        verify(taskRepository).saveAll(List.of());
+        verify(taskRepository, never()).markShownInFocus(any(), any(), any());
     }
 
     @Test
@@ -1208,7 +1235,7 @@ class TaskServiceTest {
         var gated = new TaskServiceImpl(taskRepository, groupRepository, tagRepository, taskMapper,
                 taskReminderService, reminderRepository, recurrenceRepository, auditService, groupStyleResolver,
                 dayClock, focusTaskRanker, userService, config, new FocusHintConfig(), focusHintGenerator,
-                focusPlannedDateGenerator);
+                focusPlannedDateGenerator, focusGenerationPersistence);
         var tied = taskEntity();
         tied.setTitle("Позвонить в банк");
         when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
@@ -1218,7 +1245,7 @@ class TaskServiceTest {
         var result = gated.getFocusTasks(userId, null);
 
         assertThat(result.tasks()).hasSize(1);
-        assertThat(tied.getLastShownInFocusAt()).isNotNull();
+        verify(taskRepository).markShownInFocus(eq(userId), eq(List.of(taskId)), any(OffsetDateTime.class));
     }
 
     @Test
@@ -1228,7 +1255,7 @@ class TaskServiceTest {
         var gated = new TaskServiceImpl(taskRepository, groupRepository, tagRepository, taskMapper,
                 taskReminderService, reminderRepository, recurrenceRepository, auditService, groupStyleResolver,
                 clock, focusTaskRanker, userService, config, new FocusHintConfig(), focusHintGenerator,
-                focusPlannedDateGenerator);
+                focusPlannedDateGenerator, focusGenerationPersistence);
         var untied = taskEntity();
         untied.setTitle("купить молоко");
         when(taskRepository.findFocusTasks(eq(userId), any(OffsetDateTime.class)))
@@ -1247,7 +1274,7 @@ class TaskServiceTest {
         var gated = new TaskServiceImpl(taskRepository, groupRepository, tagRepository, taskMapper,
                 taskReminderService, reminderRepository, recurrenceRepository, auditService, groupStyleResolver,
                 clock, focusTaskRanker, userService, config, new FocusHintConfig(), focusHintGenerator,
-                focusPlannedDateGenerator);
+                focusPlannedDateGenerator, focusGenerationPersistence);
         var tied = taskEntity();
         tied.setTitle("Позвонить в банк");
         when(taskRepository.findUpcomingFocusTasks(eq(userId), any(OffsetDateTime.class)))
@@ -1281,7 +1308,7 @@ class TaskServiceTest {
                 OffsetDateTime.now().plusDays(1));
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -1302,7 +1329,7 @@ class TaskServiceTest {
                 null);
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -1318,7 +1345,7 @@ class TaskServiceTest {
                 OffsetDateTime.now().plusDays(1));
         var response = mockResponse(taskId, "задача");
 
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(response);
 
@@ -1332,7 +1359,7 @@ class TaskServiceTest {
     @Test
     void clearRecurrence_deletesExistingRule() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         var recurrence = recurrenceEntity(RecurrenceType.DAILY, 1, null, null, null);
         when(recurrenceRepository.findById(taskId)).thenReturn(Optional.of(recurrence));
 
@@ -1344,7 +1371,7 @@ class TaskServiceTest {
     @Test
     void clearRecurrence_isNoOpWhenNoneExists() {
         var entity = taskEntity();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
         when(recurrenceRepository.findById(taskId)).thenReturn(Optional.empty());
 
         taskService.clearRecurrence(userId, taskId);
@@ -1354,7 +1381,7 @@ class TaskServiceTest {
 
     @Test
     void clearRecurrence_throwsNotFound_whenTaskMissing() {
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.empty());
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> taskService.clearRecurrence(userId, taskId))
                 .isInstanceOf(TaskNotFoundException.class);
@@ -1363,6 +1390,7 @@ class TaskServiceTest {
 
     private TaskJpaEntity taskEntity() {
         var e = new TaskJpaEntity();
+        e.setId(taskId);
         e.setUserId(userId);
         e.setTitle("задача");
         return e;
@@ -1463,7 +1491,7 @@ class TaskServiceTest {
     void cancelReminder_delegatesToTaskReminderService_afterOwnershipCheck() {
         var entity = taskEntity();
         UUID reminderId = UUID.randomUUID();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
 
         taskService.cancelReminder(userId, taskId, reminderId);
 
@@ -1473,7 +1501,7 @@ class TaskServiceTest {
     @Test
     void cancelReminder_throwsNotFound_whenTaskDoesNotBelongToUser() {
         UUID reminderId = UUID.randomUUID();
-        when(taskRepository.findByIdAndUserId(taskId, userId)).thenReturn(Optional.empty());
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> taskService.cancelReminder(userId, taskId, reminderId))
                 .isInstanceOf(TaskNotFoundException.class);

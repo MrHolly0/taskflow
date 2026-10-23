@@ -7,6 +7,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 import ru.taskflow.assistant.api.FocusHintGeneration;
 import ru.taskflow.assistant.api.FocusHintGenerator;
 import ru.taskflow.assistant.api.FocusPlannedDateGenerator;
@@ -88,6 +89,7 @@ public class TaskServiceImpl implements TaskService {
     private final FocusHintConfig focusHintConfig;
     private final FocusHintGenerator focusHintGenerator;
     private final FocusPlannedDateGenerator focusPlannedDateGenerator;
+    private final FocusGenerationPersistence focusGenerationPersistence;
 
     /**
      * Создаёт новую задачу для пользователя.
@@ -280,8 +282,9 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public TaskResponse update(UUID userId, UUID taskId, UpdateTaskRequest request) {
-        var task = taskRepository.findByIdAndUserId(taskId, userId)
+        var task = taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
+        TaskStatus previousStatus = task.getStatus();
 
         boolean startedAfterHint = request.status() == TaskStatus.IN_PROGRESS
                 && task.getStatus() != TaskStatus.IN_PROGRESS
@@ -373,6 +376,10 @@ public class TaskServiceImpl implements TaskService {
                 ? saveRecurrence(updatedTask, request.recurrence())
                 : recurrenceRepository.findById(taskId).map(this::toRule).orElse(null);
 
+        if (request.status() == TaskStatus.DONE && previousStatus != TaskStatus.DONE) {
+            advanceRecurrence(userId, updatedTask);
+        }
+
         return withRecurrence(taskMapper.toResponse(updatedTask), recurrence);
     }
 
@@ -392,16 +399,27 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public void complete(UUID userId, UUID taskId) {
-        var task = taskRepository.findByIdAndUserId(taskId, userId)
+        var task = taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
+        if (task.getStatus() == TaskStatus.DONE) {
+            return;
+        }
         task.setStatus(TaskStatus.DONE);
-        task.setCompletedAt(OffsetDateTime.now());
+        task.setCompletedAt(OffsetDateTime.now(clock));
         taskRepository.save(task);
         taskReminderService.cancelForTask(taskId);
         auditService.record(userId, taskId, AuditEventType.STATUS_CHANGED, Map.of("status", "DONE"));
 
-        recurrenceRepository.findById(taskId).ifPresent(recurrence ->
-                createNextOccurrence(userId, task, recurrence, userService.getTimezone(userId)));
+        advanceRecurrence(userId, task);
+    }
+
+    private void advanceRecurrence(UUID userId, TaskJpaEntity task) {
+        if (!task.isRecurrenceAdvanced()) {
+            recurrenceRepository.findById(task.getId()).ifPresent(recurrence -> {
+                createNextOccurrence(userId, task, recurrence, userService.getTimezone(userId));
+                task.setRecurrenceAdvanced(true);
+            });
+        }
     }
 
     /**
@@ -547,7 +565,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public void delete(UUID userId, UUID taskId) {
-        var task = taskRepository.findByIdAndUserId(taskId, userId)
+        var task = taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         task.setDeleted(true);
         task.setDeletedAt(OffsetDateTime.now());
@@ -559,7 +577,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public void clearRecurrence(UUID userId, UUID taskId) {
-        taskRepository.findByIdAndUserId(taskId, userId)
+        taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         recurrenceRepository.findById(taskId).ifPresent(recurrenceRepository::delete);
     }
@@ -661,53 +679,52 @@ public class TaskServiceImpl implements TaskService {
                 .filter(t -> passesHoursGate(t, now, zone))
                 .limit(3)
                 .toList();
-        entities.forEach(t -> t.setLastShownInFocusAt(now));
-        taskRepository.saveAll(entities);
+        if (!entities.isEmpty()) {
+            taskRepository.markShownInFocus(userId, entities.stream().map(TaskJpaEntity::getId).toList(), now);
+        }
         return new FocusResponse(withRemindersBatch(entities));
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public PlannedDateSuggestionResponse suggestPlannedDate(UUID userId, UUID taskId) {
-        var task = taskRepository.findByIdAndUserId(taskId, userId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId));
+        var task = focusGenerationPersistence.find(userId, taskId);
         if (task.getDeadline() != null || task.getPlannedDate() != null
                 || task.getPlannedDateSuggestionAttemptedAt() != null) {
             return new PlannedDateSuggestionResponse(task.getPlannedDate());
         }
         var now = OffsetDateTime.now(clock);
         var zone = userService.getTimezone(userId);
-        task.setPlannedDateSuggestionAttemptedAt(now);
+        if (!focusGenerationPersistence.claimPlannedDate(userId, taskId, now)) {
+            return new PlannedDateSuggestionResponse(focusGenerationPersistence.find(userId, taskId).getPlannedDate());
+        }
         try {
             var generation = focusPlannedDateGenerator.generate(
                     task.getId(), task.getTitle(), task.getDescription(),
                     LocalDate.now(clock.withZone(zone)), zone);
             if (generation.plannedDate() != null) {
-                task.setPlannedDate(generation.plannedDate());
-                task.setPlannedDateSetAt(now);
+                focusGenerationPersistence.savePlannedDate(userId, task, now, generation.plannedDate());
             }
         } catch (RuntimeException e) {
             log.warn("Не удалось подобрать день исполнения для задачи {}: {}", task.getId(), e.getMessage());
         }
-        taskRepository.save(task);
-        return new PlannedDateSuggestionResponse(task.getPlannedDate());
+        return new PlannedDateSuggestionResponse(focusGenerationPersistence.find(userId, taskId).getPlannedDate());
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public FocusHintResponse getFocusHint(UUID userId, UUID taskId) {
-        var task = taskRepository.findByIdAndUserId(taskId, userId)
-                .orElseThrow(() -> new TaskNotFoundException(taskId));
+        var task = focusGenerationPersistence.find(userId, taskId);
         if (!eligibleForFocusHint(task)) {
             return new FocusHintResponse(null);
         }
 
         FocusHintGeneration generation = null;
-        if (task.getFirstStepGeneratedAt() == null) {
+        var now = OffsetDateTime.now(clock);
+        if (task.getFirstStepGeneratedAt() == null && focusGenerationPersistence.claimHint(userId, taskId, now)) {
             generation = focusHintGenerator.generate(task.getTitle(), task.getDescription());
-            task.setFirstStepHint(generation.hint());
-            task.setFirstStepGeneratedAt(OffsetDateTime.now(clock));
-            taskRepository.save(task);
+            focusGenerationPersistence.saveHint(userId, task, now, generation.hint());
+            task = focusGenerationPersistence.find(userId, taskId);
         }
 
         if (task.getFirstStepHint() != null) {
@@ -934,7 +951,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public void scheduleReminder(UUID userId, UUID taskId, OffsetDateTime fireAt) {
-        var task = taskRepository.findByIdAndUserId(taskId, userId)
+        var task = taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         taskReminderService.createStandaloneReminder(userId, task, fireAt);
     }
@@ -950,7 +967,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public void cancelReminder(UUID userId, UUID taskId, UUID reminderId) {
-        taskRepository.findByIdAndUserId(taskId, userId)
+        taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         taskReminderService.cancelReminder(taskId, reminderId);
     }
@@ -958,7 +975,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public void snoozeReminder(UUID userId, UUID taskId, UUID reminderId, OffsetDateTime until) {
-        taskRepository.findByIdAndUserId(taskId, userId)
+        taskRepository.findForUpdate(taskId, userId)
                 .orElseThrow(() -> new TaskNotFoundException(taskId));
         taskReminderService.snoozeReminder(taskId, reminderId, until);
     }

@@ -3,6 +3,8 @@ package ru.taskflow.telegram;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
+import ru.taskflow.telegram.application.TelegramUpdateCheckpoint;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.taskflow.assistant.api.AssistantActionType;
@@ -50,6 +52,9 @@ class CallbackHandlerTest {
 
     @Mock
     private TelegramMessageSender sender;
+
+    @Spy
+    private TelegramUpdateCheckpoint checkpoint = new TelegramUpdateCheckpoint(null);
 
     @InjectMocks
     private CallbackHandler handler;

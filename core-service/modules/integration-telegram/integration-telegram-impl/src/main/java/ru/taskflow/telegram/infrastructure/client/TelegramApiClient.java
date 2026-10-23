@@ -3,22 +3,28 @@ package ru.taskflow.telegram.infrastructure.client;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.client.RestClient;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+
+import java.time.Duration;
 
 import java.util.Map;
 
 @Slf4j
 public class TelegramApiClient {
 
-    private final String botToken;
     private final RestClient apiClient;
     private final RestClient fileClient;
 
     public TelegramApiClient(String botToken) {
-        this.botToken = botToken;
+        var requests = new SimpleClientHttpRequestFactory();
+        requests.setConnectTimeout(Duration.ofSeconds(5));
+        requests.setReadTimeout(Duration.ofSeconds(20));
         this.apiClient = RestClient.builder()
+                .requestFactory(requests)
                 .baseUrl("https://api.telegram.org/bot" + botToken)
                 .build();
         this.fileClient = RestClient.builder()
+                .requestFactory(requests)
                 .baseUrl("https://api.telegram.org/file/bot" + botToken)
                 .build();
     }

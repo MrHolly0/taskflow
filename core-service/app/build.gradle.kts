@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -52,7 +53,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform {
-        excludeTags("live")
+        excludeTags("live", "load")
     }
 }
 
@@ -64,6 +65,15 @@ tasks.register<Test>("liveTest") {
     useJUnitPlatform {
         includeTags("live")
     }
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    testLogging.showStandardStreams = true
+}
+
+tasks.register<Test>("loadTest") {
+    description = "Изолированный HTTP-прогон с сотней пользователей"
+    group = "verification"
+    useJUnitPlatform { includeTags("load") }
     testClassesDirs = sourceSets["test"].output.classesDirs
     classpath = sourceSets["test"].runtimeClasspath
     testLogging.showStandardStreams = true

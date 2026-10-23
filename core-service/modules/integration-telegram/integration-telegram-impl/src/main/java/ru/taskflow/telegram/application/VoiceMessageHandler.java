@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.taskflow.assistant.api.AssistantChannel;
+import ru.taskflow.assistant.api.AssistantEntryPoint;
 import ru.taskflow.assistant.api.AssistantService;
 import ru.taskflow.assistant.api.dto.Proposal;
 import ru.taskflow.telegram.infrastructure.client.TelegramApiClient;
@@ -28,12 +29,13 @@ public class VoiceMessageHandler {
     private final TelegramMessageSender sender;
     private final AssistantService assistantService;
     private final ProposalMessageRenderer renderer;
+    private final TelegramUpdateCheckpoint checkpoint;
 
     public void handle(TelegramMessage message, UUID userId) {
         String fileId = message.voice().fileId();
-        byte[] data = apiClient.downloadVoice(fileId);
-
-        Proposal proposal = assistantService.handleVoice(userId, data, AssistantChannel.TELEGRAM);
+        Proposal proposal = checkpoint.once("proposal", Proposal.class,
+                () -> assistantService.handleVoice(userId, apiClient.downloadVoice(fileId),
+                        AssistantChannel.TELEGRAM, AssistantEntryPoint.CHAT, checkpoint.requestKey()));
 
         String text = renderer.render(proposal);
         List<List<TelegramMessageSender.InlineButton>> keyboard = renderer.keyboard(proposal);

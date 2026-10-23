@@ -77,3 +77,7 @@ databaseChangeLog:
       file: db/changelog/038-task-first-step-hint.yaml
   - include:
       file: db/changelog/039-planned-date-suggestion-attempt.yaml
+  - include:
+      file: db/changelog/040-task-request-idempotency.yaml
+  - include:
+      file: db/changelog/041-telegram-update-inbox.yaml

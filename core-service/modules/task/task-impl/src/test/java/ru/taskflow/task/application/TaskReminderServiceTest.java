@@ -41,6 +41,8 @@ class TaskReminderServiceTest {
     private NotificationService notificationService;
     @Mock
     private UserService userService;
+    @Mock
+    private ru.taskflow.task.infrastructure.persistence.TaskRepository taskRepository;
 
     private final UUID userId = UUID.randomUUID();
     private final OffsetDateTime now = OffsetDateTime.parse("2026-08-26T12:00:00+03:00");
@@ -50,7 +52,7 @@ class TaskReminderServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new TaskReminderService(reminderRepository, notificationService, userService, clock);
+        service = new TaskReminderService(reminderRepository, notificationService, userService, clock, taskRepository);
     }
 
     private TaskJpaEntity task(TaskPriority priority, OffsetDateTime deadline) {
@@ -187,7 +189,7 @@ class TaskReminderServiceTest {
         UUID reminderId = UUID.randomUUID();
         var reminder = new ReminderJpaEntity();
         reminder.setStatus(ReminderStatus.PENDING);
-        when(reminderRepository.findByIdAndTaskId(reminderId, taskId)).thenReturn(Optional.of(reminder));
+        when(reminderRepository.findForUpdate(reminderId, taskId)).thenReturn(Optional.of(reminder));
 
         service.cancelReminder(taskId, reminderId);
 
@@ -204,7 +206,7 @@ class TaskReminderServiceTest {
     void cancelReminder_throwsNotFound_whenReminderDoesNotBelongToTask() {
         UUID taskId = UUID.randomUUID();
         UUID reminderId = UUID.randomUUID();
-        when(reminderRepository.findByIdAndTaskId(reminderId, taskId)).thenReturn(Optional.empty());
+        when(reminderRepository.findForUpdate(reminderId, taskId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.cancelReminder(taskId, reminderId))
                 .isInstanceOf(ReminderNotFoundException.class);
@@ -268,7 +270,7 @@ class TaskReminderServiceTest {
         reminder.setTask(task);
         reminder.setStatus(ReminderStatus.PENDING);
         reminder.setChainStep(1);
-        when(reminderRepository.findByIdAndTaskId(reminderId, taskId)).thenReturn(Optional.of(reminder));
+        when(reminderRepository.findForUpdate(reminderId, taskId)).thenReturn(Optional.of(reminder));
         OffsetDateTime until = now.plusMinutes(30);
 
         service.snoozeReminder(taskId, reminderId, until);
@@ -320,8 +322,7 @@ class TaskReminderServiceTest {
         due.setStatus(ReminderStatus.PENDING);
         due.setChainStep(0);
         due.setFireAt(now.minusMinutes(1));
-        when(reminderRepository.findByStatusAndChainStepIsNotNullAndFireAtBefore(ReminderStatus.PENDING, now))
-                .thenReturn(List.of(due));
+        pendingCandidate(due);
 
         service.advancePersistentChains(now);
 
@@ -344,8 +345,7 @@ class TaskReminderServiceTest {
         lastStep.setStatus(ReminderStatus.PENDING);
         lastStep.setChainStep(3); // после трёх автоматических шагов запас исчерпан
         lastStep.setFireAt(now.minusMinutes(1));
-        when(reminderRepository.findByStatusAndChainStepIsNotNullAndFireAtBefore(ReminderStatus.PENDING, now))
-                .thenReturn(List.of(lastStep));
+        pendingCandidate(lastStep);
 
         service.advancePersistentChains(now);
 
@@ -353,4 +353,15 @@ class TaskReminderServiceTest {
         verify(reminderRepository, times(1)).save(any());
         verify(notificationService, never()).scheduleReminder(any(), any(), any(), any(), any(), any());
     }
+    private void pendingCandidate(ReminderJpaEntity reminder) {
+        var task = reminder.getTask();
+        var candidate = org.mockito.Mockito.mock(ReminderRepository.DueChainCandidate.class);
+        when(candidate.getId()).thenReturn(reminder.getId());
+        when(candidate.getTaskId()).thenReturn(task.getId());
+        when(candidate.getUserId()).thenReturn(userId);
+        when(reminderRepository.findDueChainCandidates(eq(now), any())).thenReturn(List.of(candidate));
+        when(taskRepository.findForUpdate(task.getId(), userId)).thenReturn(Optional.of(task));
+        when(reminderRepository.findForUpdate(reminder.getId(), task.getId())).thenReturn(Optional.of(reminder));
+    }
+
 }

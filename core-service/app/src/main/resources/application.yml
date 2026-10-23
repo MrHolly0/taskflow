@@ -5,6 +5,9 @@ spring:
     serialization:
       write-dates-as-timestamps: false
   data:
+    web:
+      pageable:
+        max-page-size: 100
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
@@ -13,6 +16,15 @@ spring:
     username: ${DB_USER:taskflow}
     password: ${DB_PASSWORD:taskflow}
     driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 8
+      minimum-idle: 1
+      connection-timeout: 5000
+      connection-init-sql: "SET statement_timeout = '15s'"
+  servlet:
+    multipart:
+      max-file-size: 16MB
+      max-request-size: 18MB
   jpa:
     hibernate:
       ddl-auto: none
@@ -31,10 +43,20 @@ spring:
       mail:
         smtp:
           auth: true
+          connectiontimeout: 5000
+          timeout: 15000
+          writetimeout: 15000
           starttls:
             enable: true
 
 server:
+  tomcat:
+    threads:
+      max: 32
+      min-spare: 2
+    max-connections: 256
+    accept-count: 64
+    connection-timeout: 5s
   port: ${SERVER_PORT:8080}
   # Доверять X-Forwarded-For только от nginx (соединение из приватной сети —
   # у настоящего интернет-клиента такого адреса быть не может), а не любому,
@@ -115,6 +137,13 @@ resilience4j:
       nlp-worker:
         max-attempts: 3
         wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        enable-randomized-wait: true
+        randomized-wait-factor: 0.5
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
       nlp-worker-tools:
         max-attempts: 1
 
@@ -129,7 +158,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized

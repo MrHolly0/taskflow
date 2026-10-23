@@ -2,10 +2,8 @@ package ru.taskflow.telegram.infrastructure.client;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.util.List;
 import java.util.Map;
@@ -17,30 +15,32 @@ import java.util.stream.Collectors;
 public class TelegramMessageSender {
 
     private final TelegramApiClient apiClient;
+    private final TelegramRequestRetry retry;
 
-    @Retryable(retryFor = RestClientException.class, maxAttempts = 3, backoff = @Backoff(delay = 500))
     public void sendMessage(long chatId, String text) {
-        apiClient.sendMessage(chatId, text, "HTML");
+        retry.execute(() -> apiClient.sendMessage(chatId, text, "HTML"));
     }
 
-    @Retryable(retryFor = RestClientException.class, maxAttempts = 3, backoff = @Backoff(delay = 500))
     public void sendMessage(long chatId, String text, List<List<InlineButton>> keyboard) {
-        apiClient.sendMessageWithKeyboard(chatId, text, "HTML", replyMarkup(keyboard));
+        retry.execute(() -> apiClient.sendMessageWithKeyboard(chatId, text, "HTML", replyMarkup(keyboard)));
     }
 
-    @Retryable(retryFor = RestClientException.class, maxAttempts = 3, backoff = @Backoff(delay = 500))
     public void editMessage(long chatId, long messageId, String text) {
-        apiClient.editMessageText(chatId, messageId, text, "HTML");
+        retry.execute(() -> apiClient.editMessageText(chatId, messageId, text, "HTML"));
     }
 
-    @Retryable(retryFor = RestClientException.class, maxAttempts = 3, backoff = @Backoff(delay = 500))
     public void editMessage(long chatId, long messageId, String text, List<List<InlineButton>> keyboard) {
-        apiClient.editMessageTextWithKeyboard(chatId, messageId, text, "HTML", replyMarkup(keyboard));
+        retry.execute(() -> apiClient.editMessageTextWithKeyboard(chatId, messageId, text, "HTML", replyMarkup(keyboard)));
     }
 
-    @Retryable(retryFor = RestClientException.class, maxAttempts = 3, backoff = @Backoff(delay = 500))
     public void answerCallback(String callbackQueryId, String text) {
-        apiClient.answerCallbackQuery(callbackQueryId, text);
+        try {
+            retry.execute(() -> apiClient.answerCallbackQuery(callbackQueryId, text));
+        } catch (HttpClientErrorException.BadRequest e) {
+            String body = e.getResponseBodyAsString();
+            if (!body.contains("query is too old") && !body.contains("query ID is invalid")) throw e;
+            log.debug("Telegram callback expired before acknowledgement");
+        }
     }
 
     private Map<String, Object> replyMarkup(List<List<InlineButton>> keyboard) {
@@ -55,7 +55,7 @@ public class TelegramMessageSender {
     public void sendMessageWithWebApp(long chatId, String text, String buttonText, String webAppUrl) {
         var button = Map.of("text", buttonText, "web_app", Map.of("url", webAppUrl));
         var replyMarkup = Map.of("inline_keyboard", List.of(List.of(button)));
-        apiClient.sendMessageWithKeyboard(chatId, text, "HTML", replyMarkup);
+        retry.execute(() -> apiClient.sendMessageWithKeyboard(chatId, text, "HTML", replyMarkup));
     }
 
     public record InlineButton(String text, String callbackData) {}

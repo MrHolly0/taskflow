@@ -9,8 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
-import ru.taskflow.telegram.application.UpdateIdempotencyService;
-import ru.taskflow.telegram.application.UpdateRouter;
+import ru.taskflow.telegram.application.TelegramUpdateInbox;
 import ru.taskflow.telegram.infrastructure.web.TelegramWebhookController;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -25,22 +24,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TelegramWebhookControllerTest {
 
     @Mock
-    private UpdateIdempotencyService idempotencyService;
-
-    @Mock
-    private UpdateRouter updateRouter;
+    private TelegramUpdateInbox inbox;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        var controller = new TelegramWebhookController("test-secret", idempotencyService, updateRouter);
+        var controller = new TelegramWebhookController("test-secret", inbox);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 
     @Test
-    void correctSecret_returns200_andRoutesUpdate() throws Exception {
-        when(idempotencyService.isAlreadyProcessed(anyLong())).thenReturn(false);
+    void correctSecret_returns200_afterDurableAcceptance() throws Exception {
 
         mockMvc.perform(post("/api/telegram/webhook")
                         .header("X-Telegram-Bot-Api-Secret-Token", "test-secret")
@@ -48,7 +43,7 @@ class TelegramWebhookControllerTest {
                         .content(updateJson(1L)))
                 .andExpect(status().isOk());
 
-        verify(updateRouter).route(any());
+        verify(inbox).enqueue(any());
     }
 
     @Test
@@ -59,12 +54,11 @@ class TelegramWebhookControllerTest {
                         .content(updateJson(2L)))
                 .andExpect(status().isForbidden());
 
-        verifyNoInteractions(updateRouter, idempotencyService);
+        verifyNoInteractions(inbox);
     }
 
     @Test
-    void duplicateUpdate_returns200_withoutRouting() throws Exception {
-        when(idempotencyService.isAlreadyProcessed(3L)).thenReturn(true);
+    void repeatedWebhookUsesSameDurableAcceptance() throws Exception {
 
         mockMvc.perform(post("/api/telegram/webhook")
                         .header("X-Telegram-Bot-Api-Secret-Token", "test-secret")
@@ -72,7 +66,7 @@ class TelegramWebhookControllerTest {
                         .content(updateJson(3L)))
                 .andExpect(status().isOk());
 
-        verifyNoInteractions(updateRouter);
+        verify(inbox).enqueue(any());
     }
 
     private static String updateJson(long updateId) {

@@ -4,6 +4,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +22,19 @@ import java.util.UUID;
 public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
 
     Optional<TaskJpaEntity> findByIdAndUserId(UUID id, UUID userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM TaskJpaEntity t WHERE t.id = :id AND t.userId = :userId")
+    Optional<TaskJpaEntity> findForUpdate(@Param("id") UUID id, @Param("userId") UUID userId);
+
+    @Modifying
+    @Query("""
+            UPDATE TaskJpaEntity t SET t.lastShownInFocusAt = :shownAt
+            WHERE t.userId = :userId AND t.id IN :ids AND t.isDeleted = false
+              AND t.status IN (ru.taskflow.task.api.TaskStatus.TODO, ru.taskflow.task.api.TaskStatus.IN_PROGRESS)
+            """)
+    int markShownInFocus(@Param("userId") UUID userId, @Param("ids") List<UUID> ids,
+                         @Param("shownAt") OffsetDateTime shownAt);
 
     /**
      * LEFT JOIN FETCH коллекции (tags) не даёт Hibernate резать запрос

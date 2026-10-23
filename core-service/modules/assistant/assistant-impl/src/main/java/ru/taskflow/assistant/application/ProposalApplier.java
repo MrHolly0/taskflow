@@ -30,14 +30,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * Применяет подтверждённое предложение. Каждое действие идёт через TaskService
- * отдельным вызовом — метод намеренно не транзакционный, см. спеку части 2в:
- * если обернуть его в @Transactional, первое же исключение из TaskService
- * (а его методы транзакционны сами по себе) пометит внешнюю транзакцию
- * rollback-only, и честное "применено 2 из 3" превратится в жёсткий отказ
- * всего запроса при финальном сохранении.
- */
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -49,6 +41,7 @@ public class ProposalApplier {
     private final TaskService taskService;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
+    private final ProposalActionTransaction actionTransaction;
 
     public ApplyResult apply(UUID userId, ProposalJpaEntity proposal) {
         List<ProposalActionJpaEntity> accepted = proposal.getActions().stream()
@@ -76,33 +69,22 @@ public class ProposalApplier {
         return new ApplyResult(status, appliedCount, accepted.size(), outcomes);
     }
 
-    /**
-     * Возвращает true, если действие применено успешно. Любая ошибка — валидации,
-     * исключение из TaskService при ревалидации или при диспетчеризации — ловится
-     * здесь целиком одним try и не идёт дальше по стеку, чтобы не сорвать применение
-     * остальных действий предложения. Запись в аудит — намеренно отдельный,
-     * "лучше-по-возможности" try внутри: если TaskService уже применил действие,
-     * а аудит не записался, действие всё равно должно считаться применённым —
-     * откатить TaskService нельзя (он транзакционен сам по себе), и падать на
-     * "применено, но не залогировано" означало бы врать пользователю об отказе
-     * там, где данные реально изменились.
-     */
     private boolean applyOne(UUID userId, ProposalJpaEntity proposal, ProposalActionJpaEntity action) {
+        if (action.getAppliedTaskId() != null) {
+            return true;
+        }
         try {
             AssistantActionType type = AssistantActionType.valueOf(action.getType());
-
-            ActionValidator.ValidationResult validation =
-                    actionValidator.revalidateForApply(userId, type, action.getTargetTaskId());
-            if (!validation.valid()) {
-                action.setApplyError(validation.error());
-                return false;
-            }
-
             Map<String, Object> payload = readPayload(action.getPayload());
-            UUID targetTaskId = validation.targetTaskId();
-
-            UUID appliedTaskId = dispatch(userId, proposal, type, targetTaskId, payload);
+            UUID appliedTaskId = actionTransaction.execute(action.getId(), () -> {
+                var validation = actionValidator.revalidateForApply(userId, type, action.getTargetTaskId());
+                if (!validation.valid()) {
+                    throw new ActionApplyException(validation.error());
+                }
+                return dispatch(userId, proposal, type, validation.targetTaskId(), payload);
+            });
             action.setAppliedTaskId(appliedTaskId);
+            action.setApplyError(null);
             recordAudit(userId, appliedTaskId, type, payload, action.getOrdinal());
             return true;
         } catch (Exception e) {

@@ -57,7 +57,7 @@ public record Proposal(
         return rejections != null && !rejections.isEmpty();
     }
 
-    public boolean isClarification() {
+    public boolean hasClarification() {
         return clarification != null && !clarification.isBlank();
     }
 }

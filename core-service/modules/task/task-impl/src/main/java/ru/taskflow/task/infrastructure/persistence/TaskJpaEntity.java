@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 import ru.taskflow.task.api.TaskPriority;
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "tasks")
+@DynamicUpdate
 @SQLRestriction("is_deleted = false")
 @Getter
 @Setter
@@ -114,6 +116,9 @@ public class TaskJpaEntity {
 
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
+
+    @Column(name = "recurrence_advanced", nullable = false)
+    private boolean recurrenceAdvanced;
 
     @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(

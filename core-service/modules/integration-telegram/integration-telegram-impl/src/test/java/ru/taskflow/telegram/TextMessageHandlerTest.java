@@ -3,6 +3,8 @@ package ru.taskflow.telegram;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.Spy;
+import ru.taskflow.telegram.application.TelegramUpdateCheckpoint;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.taskflow.assistant.api.AssistantChannel;
@@ -44,6 +46,9 @@ class TextMessageHandlerTest {
     @Mock
     private TelegramMessageSender sender;
 
+    @Spy
+    private TelegramUpdateCheckpoint checkpoint = new TelegramUpdateCheckpoint(null);
+
     @InjectMocks
     private TextMessageHandler handler;
 
@@ -55,7 +60,8 @@ class TextMessageHandlerTest {
         Proposal proposal = proposal();
         when(assistantService.findLatestPending(userId)).thenReturn(Optional.empty());
         when(fastPathResolver.resolve("закрой молоко", false)).thenReturn(Optional.empty());
-        when(assistantService.handleText(userId, "закрой молоко", AssistantChannel.TELEGRAM)).thenReturn(proposal);
+        when(assistantService.handleText(userId, "закрой молоко", AssistantChannel.TELEGRAM,
+                ru.taskflow.assistant.api.AssistantEntryPoint.CHAT, null)).thenReturn(proposal);
         when(renderer.render(proposal)).thenReturn("Предлагаю: закрыть молоко");
         when(renderer.keyboard(proposal)).thenReturn(List.of(List.of()));
 
