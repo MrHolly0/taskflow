@@ -28,8 +28,7 @@ if [ -n "$GEOIP_DB_PATH" ] && [ ! -f "$GEOIP_DB_PATH" ]; then
     for TAG in "$THIS_MONTH_TAG" "$PREV_MONTH_TAG"; do
         URL="https://download.db-ip.com/free/dbip-country-lite-${TAG}.mmdb.gz"
         echo "geoip: пробую скачать базу за ${TAG} ($URL)"
-        if wget -q -O "${GEOIP_DB_PATH}.gz" "$URL"; then
-            gunzip -f "${GEOIP_DB_PATH}.gz"
+        if wget -q -T 10 -O "${GEOIP_DB_PATH}.gz" "$URL" && gunzip -f "${GEOIP_DB_PATH}.gz"; then
             echo "geoip: база скачана в ${GEOIP_DB_PATH}"
             break
         fi

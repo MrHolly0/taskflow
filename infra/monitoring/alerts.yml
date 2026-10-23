@@ -1,0 +1,38 @@
+groups:
+  - name: munin
+    rules:
+      - alert: MuninServiceDown
+        expr: up{job="munin"} == 0
+        for: 2m
+        annotations:
+          summary: "Сервис Мунина недоступен"
+      - alert: MuninNotificationDeliveryFailed
+        expr: taskflow_notifications_failed > 0
+        for: 2m
+        annotations:
+          summary: "Есть окончательно не доставленные уведомления"
+      - alert: MuninNotificationBacklog
+        expr: taskflow_notifications_oldest_due_seconds > 120
+        for: 2m
+        annotations:
+          summary: "Очередь уведомлений отстаёт более чем на две минуты"
+      - alert: MuninServerErrors
+        expr: sum(rate(http_server_requests_seconds_count{job="munin",status=~"5.."}[5m])) > 0.2
+        for: 5m
+        annotations:
+          summary: "Участились ошибки сервера"
+      - alert: MuninDatabasePoolBusy
+        expr: hikaricp_connections_pending > 0
+        for: 2m
+        annotations:
+          summary: "Запросы ожидают соединения с базой"
+      - alert: MuninTelegramProcessingFailed
+        expr: telegram_inbox_failed > 0
+        for: 2m
+        annotations:
+          summary: "Есть не обработанные сообщения Telegram"
+      - alert: MuninTelegramBacklog
+        expr: telegram_inbox_oldest_age_seconds > 120
+        for: 2m
+        annotations:
+          summary: "Обработка сообщений Telegram отстаёт"

@@ -30,6 +30,11 @@ services:
         VITE_TELEGRAM_BOT_ID: ${VITE_TELEGRAM_BOT_ID:-8738130486}
     restart: unless-stopped
   nginx:
+    build:
+      args:
+        VITE_API_URL: /api/v1
+        VITE_TELEGRAM_BOT_ID: ${VITE_TELEGRAM_BOT_ID:-8738130486}
+        VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     ports: !override
       - "127.0.0.1:80:80"
     restart: unless-stopped

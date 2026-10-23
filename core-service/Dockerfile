@@ -32,8 +32,8 @@ RUN chmod +x /app/docker-entrypoint.sh
 EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=10s --timeout=5s --retries=5 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=5 \
+    CMD wget -q --spider http://127.0.0.1:8080/actuator/health || exit 1
 
 # Run application
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

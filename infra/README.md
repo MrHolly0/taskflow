@@ -1,175 +1,79 @@
-# infra
+# Запуск Мунина
 
-Docker Compose конфигурации для разработки и production. Включают PostgreSQL, Redis, pgAdmin и все сервисы TaskFlow.
+Публичный стенд использует один вход nginx. Он отдаёт собранный React-фронт и проксирует API; отдельный Node-процесс в рабочем экземпляре не нужен. TLS обеспечивает туннель Tuna. Туннели и контейнеры других проектов команды ниже не меняют.
 
-## Локальный экземпляр с публичным туннелем
-
-Из корня репозитория, с заполненным `infra/.env`:
+Из корня проекта, с заполненным `infra/.env`:
 
 ```bash
 docker compose -p infra --env-file infra/.env \
   -f infra/docker-compose.yml -f infra/docker-compose.share.yml \
-  up -d --build postgres redis core-service nlp-worker notification-worker miniapp nginx
+  up -d --build postgres redis core-service nlp-worker notification-worker nginx db-backup
 ```
 
-Система доступна на `http://127.0.0.1:80`. Используется сохранённая база проекта `infra`, профиль ядра `prod` и собранный фронт без демо-входа. API работает через тот же адрес; наружу открыт только nginx на loopback-интерфейсе. Требуется Docker Compose 2.24.4 или новее.
+Адрес — `http://127.0.0.1:80`. Наружу через Tuna передаётся только этот порт; БД и внутренние HTTP-порты не публикуются. Нужен Docker Compose 2.24.4 или новее. Запуск отдельного preview-фронта на порту 3000 доступен через профиль `preview`, pgAdmin — через `tools`; они не входят в обычный запуск.
+
+После смены публичного адреса:
 
 ```bash
-tuna http 127.0.0.1:80 --location=ru --inspect=false
 bash infra/set-public-url.sh https://адрес-туннеля
 ```
 
-Вторую команду запускают в другом терминале после появления HTTPS-туннеля. Она обновляет `PUBLIC_BASE_URL`, пересоздаёт только ядро и сервис уведомлений этого экземпляра и перезапускает его nginx для обновления адреса ядра. Новый адрес также нужно указать в настройках Telegram-бота: Mini App и домен Login Widget. После смены туннеля синхронизацию нужно повторить. Уже работающие туннели и другие Docker-проекты эти команды не затрагивают.
+Команда обновляет локальный `PUBLIC_BASE_URL` и пересоздаёт только ядро и воркер уведомлений проекта `infra`. Домен и Mini App в настройках Telegram-бота должны совпадать с адресом. Для текущего статичного туннеля менять их при обычном перезапуске не нужно.
 
-## Окружение разработки
+## Ресурсы
 
-```bash
-# Запустить все сервисы (dev)
-docker compose -f docker-compose.yml up -d
+У контейнеров есть жёсткие ограничения памяти, CPU, числа процессов и ротация журналов (3 файла по 10 МБ). Значения `mem_limit` — потолки, а не выделение всей памяти при старте. Максимальная куча JVM ядра — 512 МБ, воркеров — 256 МБ; лимиты контейнеров оставляют место для потоков и памяти JVM вне кучи. Пул БД ядра ограничен 8 соединениями, уведомлений — 6.
 
-# Просмотр логов
-docker compose -f docker-compose.yml logs -f [имя-сервиса]
+Redis использует именованный том, AOF и ограничение данных 128 МБ. Политика `noeviction` сохраняет ключи авторизации и ограничений: при заполнении новые записи отклоняются, а не вытесняют защитные ключи. Кэш расшифровок разделяет этот бюджет; при росте нагрузки его стоит вынести отдельно. Ранее созданный анонимный том Redis не удаляется автоматически; переход на именованный том не переносит его содержимое. PostgreSQL и сохранённые пользовательские задачи остаются в прежнем `postgres_data`.
 
-# Остановить
-docker compose -f docker-compose.yml down
+## Ограничения запросов и повторы
 
-# Очистить всё
-docker compose -f docker-compose.yml down -v
-```
+Nginx ограничивает поток API по IP (20 запросов/с, изменения — 5/с; короткие всплески допускаются). Это общий бюджет для пользователей за одним NAT; при его исчерпании возвращается 429. Ядро ограничивает поток по пользователю: 300 чтений и 120 изменений в минуту. Ассистент допускает 10 обращений в минуту через сайт и Telegram вместе, максимум 4 обращения одновременно на экземпляр ядра. Переполнение возвращает 429/503 и `Retry-After`. При горизонтальном масштабировании общий минутный лимит остаётся в Redis, а лимит параллельности действует на каждый экземпляр.
 
-Сервисы (dev):
-- **postgres:16** — Порт 5432, БД `taskflow`
-- **redis:7** — Порт 6379
-- **pgAdmin** — Порт 5050, администратор PostgreSQL
-- **core-service** — Порт 8080, основной Spring Boot app
-- **nlp-worker** — Порт 8081, NLP сервис
-- **notification-worker** — Порт 8082, напоминания
-- **miniapp** — Порт 3000, React фронтенд
-- **nginx** — Порт 80/443, reverse proxy
+Ручное создание задачи и обращения к ассистенту принимают `Idempotency-Key` длиной до 128 символов. Повтор с тем же ключом и телом возвращает сохранённый результат; другое тело с тем же ключом — 409. Ключ ограничен учётной записью. Клиент сохраняет ключ после неопределённой ошибки сети и меняет после успешного ответа или изменения ввода. Для голоса предусмотрен увеличенный сетевой таймаут: ответ nginx ожидается до 180 секунд, клиент ассистента — до 190 секунд. Другие запросы клиента ограничены 45 секундами. Результаты запросов хранятся 30 дней; после этого старый ключ нельзя использовать как гарантию от повторного создания.
 
-## Production окружение
+Предложения ассистента применяют действия отдельными транзакциями с сохранением результата каждого действия. Повторное подтверждение продолжает незавершённую обработку, не создавая повторно уже зафиксированные задачи. Завершение повторяющейся задачи защищено блокировкой и постоянной отметкой создания следующего вхождения.
 
-```bash
-# Запустить с prod настройками
-docker compose -f docker-compose.prod.yml up -d --build
+Telegram webhook сначала сохраняет update в PostgreSQL, затем подтверждает приём. Входящая очередь ограничена, обработка выполняется отдельно с арендой, восстановлением и возрастающей задержкой со случайным разбросом. Отправка сообщений во внешние каналы имеет семантику at-least-once: при сбое после внешней отправки, но до записи результата возможна повторная доставка.
 
-# Просмотр логов
-docker compose -f docker-compose.prod.yml logs -f
+Списки задач, групп и колонок доски загружаются страницами. Поиск и фильтры выполняются на сервере, счётчики считаются агрегатными запросами. Полная история не загружается при открытии страницы.
 
-# Остановить
-docker compose -f docker-compose.prod.yml down
-```
+## Резервные копии
 
-Отличия от dev:
-- Health checks включены
-- Restart policies: `on-failure`
-- Нет pgAdmin (безопасность)
-- TLS/HTTPS через nginx + Let's Encrypt
+Сервис `db-backup` создаёт дамп сразу после запуска и затем раз в сутки. Файл сначала пишется во временный путь, проверяется `pg_restore --list` и только потом становится доступной копией. При ошибке следующая попытка — через 5 минут. По умолчанию хранится 7 дней (`BACKUP_RETENTION_DAYS`), том `backups` не публикуется в сети. Healthcheck замечает отсутствие свежей копии.
 
-## Переменные окружения
+Скопировать выбранный дамп на хост можно командой `docker compose ... cp db-backup:/backups/имя.dump /безопасный/каталог/`. Периодически нужно переносить копии на отдельный носитель: локальный том не защищает от потери самого компьютера. Восстановление проверяется на отдельной пустой БД, не поверх рабочего экземпляра.
 
-Создайте файл `.env` в корне проекта (см. `.env.example`):
+## Наблюдение
+
+Метрики JVM, HTTP, пула БД, входящей очереди Telegram и уведомлений доступны внутри сети на `/actuator/prometheus`. Публичный nginx закрывает `/actuator`.
+
+Локальный Prometheus запускается отдельно, чтобы не расходовать память без необходимости:
 
 ```bash
-# БД
-DB_HOST=postgres
-DB_PORT=5432
-DB_NAME=taskflow
-DB_USER=taskflow
-DB_PASSWORD=ваш_безопасный_пароль
-
-# Redis
-REDIS_HOST=redis
-REDIS_PORT=6379
-
-# Telegram
-TELEGRAM_BOT_TOKEN=ваш_токен_бота
-TELEGRAM_WEBHOOK_SECRET=ваш_секрет_webhook
-
-# LLM
-GROQ_API_KEY=ваш_groq_ключ
-GROQ_WHISPER_API_KEY=ваш_groq_whisper_ключ
-YANDEX_GPT_API_KEY=ваш_yandex_ключ
-YANDEX_GPT_FOLDER_ID=ваш_folder_id
-
-# Опционально
-ENVIRONMENT=production
-APP_NOTIFICATION_POLL_INTERVAL_MS=30000
+docker compose -p infra --env-file infra/.env \
+  -f infra/docker-compose.yml -f infra/docker-compose.share.yml \
+  --profile monitoring up -d prometheus
 ```
 
-## nginx конфигурация
+Интерфейс — `http://127.0.0.1:9090`, хранение до 7 дней / 256 МБ. Правила отмечают недоступность сервисов, отставание очередей, окончательные ошибки отправки и ожидание соединений БД. Уведомления во внешние каналы требуют отдельного Alertmanager; в этой конфигурации предупреждения видны в интерфейсе Prometheus.
 
-Reverse proxy маршруты:
-- `/` → miniapp (React фронтенд)
-- `/api/` → core-service:8080
-- `/telegram/webhook` → core-service:8080
-- `/swagger-ui.html` → core-service:8080
+## Проверки
 
-Для HTTPS на production:
 ```bash
-# Генерировать сертификат
-docker compose -f docker-compose.prod.yml exec nginx certbot certonly \
-  --webroot -w /var/www/certbot \
-  -d yourdomain.com
-
-# Авто-обновление через cron (еженедельно)
-0 3 * * 0 docker compose -f docker-compose.prod.yml exec -T nginx certbot renew
+cd miniapp
+pnpm typecheck
+pnpm test --maxWorkers=2
+pnpm build
 ```
 
-## Постоянные тома
+Из корня проекта, с Java 21 и доступным Docker:
 
-- `postgres_data/` — Файлы БД PostgreSQL
-- `redis_data/` — Снимки Redis
-- `taskflow_logs/` — Логи приложения (только prod)
-- `nginx_conf/` — Конфигурация nginx
-- `certbot_data/` — Сертификаты Let's Encrypt
-
-## Health checks
-
-Все сервисы имеют health endpoints:
 ```bash
-curl http://localhost:8080/actuator/health   # core-service
-curl http://localhost:8081/health             # nlp-worker
-curl http://localhost:8082/health             # notification-worker
+TESTCONTAINERS_RYUK_DISABLED=true ./gradlew test --no-daemon --max-workers=2
+TESTCONTAINERS_RYUK_DISABLED=true ./gradlew :core-service:app:loadTest --no-daemon --max-workers=2
 ```
 
-## Стратегия резервного копирования (production)
+Обычные тесты исключают обращения к живым платным моделям и нагрузочный сценарий. `loadTest` создаёт отдельные PostgreSQL/Redis, 100 тестовых пользователей и выполняет HTTP-запросы с ограниченной параллельностью. Он не использует рабочую БД и не проверяет пропускную способность внешних моделей.
 
-Ежедневное копирование PostgreSQL (в 2 часа ночи):
-```bash
-docker compose -f docker-compose.prod.yml exec postgres \
-  pg_dump -U taskflow taskflow > backup_$(date +%Y%m%d).sql
-```
-
-Восстановление:
-```bash
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U taskflow taskflow < backup_20260426.sql
-```
-
-## Решение проблем
-
-**Порт уже занят**:
-```bash
-# Изменить порт в docker-compose.yml или использовать
-docker compose -f docker-compose.yml up -d -p "8080:8080"
-```
-
-**Ошибка подключения к БД**:
-```bash
-# Посмотреть логи postgres
-docker compose -f docker-compose.yml logs postgres
-
-# Проверить через psql
-docker compose -f docker-compose.yml exec postgres \
-  psql -U taskflow -d taskflow -c "SELECT 1"
-```
-
-**Сервис медленный/зависает**:
-```bash
-# Перезагрузить один сервис
-docker compose -f docker-compose.yml restart core-service
-
-# Полная пересборка
-docker compose -f docker-compose.yml up -d --build
-```
+Отдельный `docker-compose.prod.yml` предназначен для самостоятельного сервера. TLS на сервере нужно настроить на внешнем прокси; текущий nginx обслуживает HTTP.

@@ -1,4 +1,9 @@
 server:
+  tomcat:
+    threads:
+      max: 24
+      min-spare: 2
+    accept-count: 32
   port: ${NLP_PORT:8081}
 
 spring:
@@ -40,7 +45,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized

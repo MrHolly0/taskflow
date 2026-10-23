@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+rule_files:
+  - /etc/prometheus/alerts.yml
+scrape_configs:
+  - job_name: munin
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [core-service:8080, notification-worker:8082, nlp-worker:8081]

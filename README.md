@@ -190,7 +190,7 @@ Telegram Bot       Mini App (Telegram)      Браузер
 docker compose -f infra/docker-compose.prod.yml up -d
 ```
 
-Это запустит nginx (reverse proxy), все три сервиса, PostgreSQL и Redis с persistence.
+Это запустит nginx (reverse proxy), все три сервиса, PostgreSQL и Redis с persistence. Ограничения ресурсов, резервное копирование и публичный стенд описаны в [infra/README.md](infra/README.md).
 
 ---
 

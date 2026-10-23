@@ -1,7 +1,16 @@
-version: '3.8'
+x-runtime: &runtime
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  pids_limit: 256
 
 services:
   postgres:
+    <<: *runtime
+    mem_limit: 384m
+    cpus: "1.0"
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
@@ -17,8 +26,11 @@ services:
     restart: unless-stopped
 
   redis:
+    <<: *runtime
+    mem_limit: 192m
+    cpus: "0.5"
     image: redis:7-alpine
-    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required} --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
@@ -29,6 +41,9 @@ services:
     restart: unless-stopped
 
   core-service:
+    <<: *runtime
+    mem_limit: 768m
+    cpus: "2.0"
     build:
       context: ..
       dockerfile: core-service/Dockerfile
@@ -53,6 +68,7 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM}
+      JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=2
       SERVER_PORT: 8080
       GEOIP_DB_PATH: /data/geoip/dbip-country-lite.mmdb
       APP_NAME: ${APP_NAME:-Мунин}
@@ -70,6 +86,9 @@ services:
     restart: unless-stopped
 
   nlp-worker:
+    <<: *runtime
+    mem_limit: 512m
+    cpus: "1.5"
     build:
       context: ..
       dockerfile: nlp-worker/Dockerfile
@@ -78,6 +97,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:ActiveProcessorCount=2
       NLP_PORT: 8081
     depends_on:
       redis:
@@ -85,6 +105,9 @@ services:
     restart: unless-stopped
 
   notification-worker:
+    <<: *runtime
+    mem_limit: 512m
+    cpus: "1.0"
     build:
       context: ..
       dockerfile: notification-worker/Dockerfile
@@ -95,6 +118,7 @@ services:
       DB_USER: ${DB_USER:?DB_USER is required}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:ActiveProcessorCount=2
       NOTIFICATION_PORT: 8082
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -109,9 +133,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      core-service:
+        condition: service_healthy
     restart: unless-stopped
 
   miniapp:
+    profiles: [preview]
+    <<: *runtime
+    mem_limit: 64m
+    cpus: "0.5"
     build:
       context: ../miniapp
       dockerfile: Dockerfile
@@ -122,9 +152,16 @@ services:
     restart: unless-stopped
 
   nginx:
+    <<: *runtime
+    mem_limit: 64m
+    cpus: "0.5"
     build:
-      context: ./nginx
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: infra/nginx/Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+        VITE_TELEGRAM_BOT_ID: ${VITE_TELEGRAM_BOT_ID:-8738130486}
+        VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?VAPID_PUBLIC_KEY is required}
     ports:
       - "80:80"
       - "443:443"
@@ -133,13 +170,58 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - nginx_cache:/var/cache/nginx
     depends_on:
-      - core-service
-      - miniapp
-      - nlp-worker
-      - notification-worker
+      core-service:
+        condition: service_healthy
+      nlp-worker:
+        condition: service_healthy
+      notification-worker:
+        condition: service_healthy
     restart: unless-stopped
 
+  db-backup:
+    <<: *runtime
+    image: postgres:16-alpine
+    mem_limit: 96m
+    cpus: "0.25"
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${DB_NAME:-taskflow}
+      PGUSER: ${DB_USER:-taskflow}
+      PGPASSWORD: ${DB_PASSWORD:-taskflow}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+    volumes:
+      - backups:/backups
+      - ./backup-loop.sh:/usr/local/bin/backup-loop:ro
+    entrypoint: ["sh", "/usr/local/bin/backup-loop"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -n \"$$(find /backups -name '*.dump' -mmin -1560 -print -quit)\""]
+      interval: 1h
+      timeout: 5s
+      retries: 2
+      start_period: 2m
+
+  prometheus:
+    <<: *runtime
+    profiles: [monitoring]
+    image: prom/prometheus:v3.13.3
+    mem_limit: 192m
+    cpus: "0.5"
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d", "--storage.tsdb.retention.size=256MB"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+
 volumes:
+  backups:
+  prometheus_data:
   postgres_data:
   redis_data:
   nginx_cache:
