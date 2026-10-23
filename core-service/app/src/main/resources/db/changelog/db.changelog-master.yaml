@@ -83,3 +83,5 @@ databaseChangeLog:
       file: db/changelog/041-telegram-update-inbox.yaml
   - include:
       file: db/changelog/042-notification-delivery-lease.yaml
+  - include:
+      file: db/changelog/043-task-read-indexes.yaml

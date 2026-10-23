@@ -1,14 +1,15 @@
+import { fromZonedTime } from 'date-fns-tz';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IconArrowRight, IconLoader2 } from '@tabler/icons-react';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import { TaskDetailModal } from '@/app/components/TaskDetailModal';
-import { useGroups, useTasksList, useTaskStats, useUpdateTask } from '@/lib/hooks/useTasks';
+import { useGroups, useTasksList, useTaskPage, useTaskOverview, useTaskStats, useUpdateTask } from '@/lib/hooks/useTasks';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
 import { useSettings } from '@/lib/hooks/useSettings';
 import { useStore } from '@/lib/store';
-import { isActiveTask, useTaskUi } from '@/lib/task-ui';
+import { useTaskUi } from '@/lib/task-ui';
 import { zonedDayKey } from '@/lib/utils';
 import '@/styles/stats.css';
 
@@ -50,7 +51,6 @@ function dayLabel(key: string, weekday = false): string {
 
 export function StatsPage() {
   const statsQuery = useTaskStats();
-  const tasksQuery = useTasksList();
   const { data: groups = [] } = useGroups();
   const settingsQuery = useSettings();
   const { timezone, isReady: timezoneReady } = useUserTimezone();
@@ -77,9 +77,18 @@ export function StatsPage() {
     setGoalDraft(String(value));
   }, [goalKey]);
 
+  const today = zonedDayKey(new Date(), timezone);
+  const keys = timezoneReady ? recentDays(today) : [];
+  const since = fromZonedTime(`${selectedDay ?? keys[0] ?? today}T00:00:00`, timezone).toISOString();
+  const untilDay = selectedDay ? new Date(`${selectedDay}T12:00:00Z`) : null;
+  if (untilDay) untilDay.setUTCDate(untilDay.getUTCDate() + 1);
+  const until = untilDay ? fromZonedTime(`${untilDay.toISOString().slice(0, 10)}T00:00:00`, timezone).toISOString() : undefined;
+  const tasksQuery = useTasksList({ status: 'DONE', order: 'completed', size: 24, completedSince: since,
+    completedUntil: until, group: selectedGroup === null ? 'all' : selectedGroup || 'none' }, timezoneReady);
+  const nextQuery = useTaskPage({ status: 'active', order: 'recommendation', size: 1 });
+  const overview = useTaskOverview();
   const statsTasks = statsQuery.data ?? [],
     tasks = tasksQuery.data ?? [];
-  const keys = timezoneReady ? recentDays(zonedDayKey(new Date(), timezone)) : [];
   const windowKeys = new Set(keys);
   const inWindow = (value?: string | null) =>
     Boolean(value && windowKeys.has(zonedDayKey(value, timezone)));
@@ -103,21 +112,11 @@ export function StatsPage() {
       (!selectedDay || zonedDayKey(task.completedAt!, timezone) === selectedDay) &&
       (selectedGroup === null || (task.groupId ?? '') === selectedGroup)
   );
-  const progressGroups = [...new Set(completed.map((task) => task.groupId ?? ''))]
-    .map((id) => {
-      const wins = completed.filter((task) => (task.groupId ?? '') === id);
-      return {
-        id,
-        name: groups.find((group) => group.id === id)?.name ?? wins[0]?.groupName ?? 'Без группы',
-        wins,
-      };
-    })
-    .sort((a, b) => b.wins.length - a.wins.length);
-  const active = tasks.filter(isActiveTask);
-  const next =
-    active.find((task) => task.status === 'TODO' && task.priority === 'URGENT') ??
-    active.find((task) => task.status === 'TODO') ??
-    active.find((task) => task.status === 'IN_PROGRESS');
+  const progressGroups = (overview.data?.groups ?? []).filter(group => group.weeklyDone > 0).map(group => ({
+    id: group.groupId, count: group.weeklyDone,
+    name: groups.find(item => item.id === group.groupId)?.name ?? 'Без группы',
+  })).sort((a, b) => b.count - a.count);
+  const next = nextQuery.data?.content[0];
   const remaining = Math.max(0, goal - done);
   const heading =
     remaining === 0
@@ -315,7 +314,7 @@ export function StatsPage() {
                 </div>
               ) : (
                 <>
-                  {done > completed.length && (
+                  {!selectedDay && selectedGroup === null && done > tasksQuery.total && (
                     <p className="stats-note">
                       В итогах учтены и завершения, убранные из списка. Ниже — {completed.length} из{' '}
                       {done} доступных дел.
@@ -337,13 +336,17 @@ export function StatsPage() {
                           </time>
                         </article>
                       ))}
-                      {receipts.length > receiptLimit && (
+                      {(receipts.length > receiptLimit || tasksQuery.hasNextPage) && (
                         <Button
                           className="stats-show-more"
                           variant="outline"
-                          onClick={() => setReceiptLimit(receiptLimit + 12)}
+                          disabled={tasksQuery.isFetchingNextPage}
+                          onClick={() => {
+                            if (receipts.length <= receiptLimit && tasksQuery.hasNextPage) void tasksQuery.fetchNextPage();
+                            setReceiptLimit(receiptLimit + 12);
+                          }}
                         >
-                          Ещё сделанные дела · {receipts.length - receiptLimit}
+                          Ещё сделанные дела · {Math.max(0, tasksQuery.total - receiptLimit)}
                         </Button>
                       )}
                     </>
@@ -404,13 +407,14 @@ export function StatsPage() {
             <h2>Что продвинулось</h2>
             {tasksQuery.isPending ? (
               <p className="stats-note">Загружаем направления…</p>
-            ) : tasksQuery.isError ? (
-              <p className="stats-note">Направления появятся после загрузки списка дел.</p>
+            ) : tasksQuery.isError || overview.isError ? (
+              <div className="stats-note">
+                <p>Не удалось загрузить направления.</p>
+                <Button variant="outline" onClick={() => { void overview.refetch(); void tasksQuery.refetch(); }}>Повторить</Button>
+              </div>
             ) : (
               <>
-                {done > completed.length && (
-                  <p className="stats-note">По доступным в списке делам.</p>
-                )}
+
                 {progressGroups.length ? (
                   progressGroups.map((group) => (
                     <button
@@ -424,8 +428,8 @@ export function StatsPage() {
                       }}
                     >
                       <strong>{group.name}</strong>
-                      <span>{group.wins.length} готово</span>
-                      <p>{group.wins[0].title}</p>
+                      <span>{group.count} готово</span>
+                      <p>За последние семь дней</p>
                     </button>
                   ))
                 ) : (
@@ -435,7 +439,10 @@ export function StatsPage() {
             )}
             {!tasksQuery.isPending && !tasksQuery.isError && (
               <section className="stats-next-step">
-                {next ? (
+                {nextQuery.isPending ? <p role="status">Подбираем следующее дело…</p>
+                  : nextQuery.isError ? <div role="alert"><p>Не удалось загрузить следующее дело.</p>
+                    <Button variant="outline" onClick={() => void nextQuery.refetch()}>Повторить</Button></div>
+                  : next ? (
                   <>
                     <p className="stats-eyebrow">Можно продолжить с этого</p>
                     <h3>{next.title}</h3>

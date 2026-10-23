@@ -16,7 +16,11 @@ export const useTaskUi = create<TaskUiState>((set) => ({
   revealedAt: 0,
   openCapture: () => set({ captureOpen: true }),
   closeCapture: () => set({ captureOpen: false }),
-  reveal: (ids) => set({ revealIds: ids, revealedAt: Date.now() }),
+  reveal: (ids) => {
+    const at = Date.now();
+    set({ revealIds: ids, revealedAt: at });
+    setTimeout(() => set(state => state.revealedAt === at ? { revealIds: [], revealedAt: 0 } : state), 8000);
+  },
 }));
 
 export function useTaskReveal(id: string) {

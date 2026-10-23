@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   DndContext, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor,
@@ -12,7 +12,7 @@ import {
   IconCircleCheck, IconChevronLeft, IconChevronRight, IconBell, IconSearch, IconX,
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
-import { useTasksList, useUpdateTask, type TaskResponse } from '@/lib/hooks/useTasks';
+import { useTasksList, useTaskOverview, updateTaskLists, useUpdateTask, type TaskResponse } from '@/lib/hooks/useTasks';
 import { groupBoardTasks, isBoardStatus, type BoardStatus } from '@/lib/board';
 import { formatDeadline, formatReminderTime, cn } from '@/lib/utils';
 import { plural } from '@/lib/plural';
@@ -109,8 +109,9 @@ function DraggableTaskCard({ task, onOpen }: { task: TaskResponse; onOpen: () =>
   );
 }
 
-function DroppableColumn({ column, tasks, narrow, searching, onOpen, onAdd }: {
+function DroppableColumn({ column, tasks, narrow, searching, onOpen, onAdd, total, hasNext, loadingMore, onMore }: {
   column: Column; tasks: TaskResponse[]; narrow: boolean; searching: boolean;
+  total: number; hasNext: boolean; loadingMore: boolean; onMore: () => void;
   onOpen: (id: string) => void; onAdd: (status: BoardStatus) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -118,13 +119,13 @@ function DroppableColumn({ column, tasks, narrow, searching, onOpen, onAdd }: {
   const [extra, setExtra] = useState(0);
   const Icon = column.icon;
   const visible = tasks.slice(0, batch + extra);
-  const remaining = tasks.length - visible.length;
+  const remaining = Math.max(0, total - visible.length);
   return (
     <section ref={setNodeRef} data-status={column.id}
       aria-label={column.label} className={cn('board-column', isOver && 'board-drop-target')}>
       <div className="board-column-head">
         <div className="board-column-heading">
-          <h2><Icon className="board-status-icon" /><span>{column.label}</span><small aria-label={`${tasks.length} ${plural(tasks.length, ['задача', 'задачи', 'задач'])}`}>{tasks.length}</small></h2>
+          <h2><Icon className="board-status-icon" /><span>{column.label}</span><small aria-label={`${total} ${plural(total, ['задача', 'задачи', 'задач'])}`}>{total}</small></h2>
           <button className="board-icon-button" aria-label={`Добавить задачу: ${column.label}`}
             onClick={() => onAdd(column.id)}><IconPlus /></button>
         </div>
@@ -136,7 +137,10 @@ function DroppableColumn({ column, tasks, narrow, searching, onOpen, onAdd }: {
           <p>{searching ? 'Ничего не найдено' : 'Здесь пока нет задач'}</p>
           {!searching && <button onClick={() => onAdd(column.id)}>Добавить задачу</button>}
         </div>}
-        {remaining > 0 && <button className="board-load-more" onClick={() => setExtra(value => value + batch)}>
+        {remaining > 0 && <button className="board-load-more" disabled={loadingMore} onClick={() => {
+          if (visible.length >= tasks.length && hasNext) onMore();
+          setExtra(value => value + batch);
+        }}>
           Ещё {Math.min(batch, remaining)} из {remaining}
         </button>}
       </div>
@@ -163,7 +167,6 @@ function useIsNarrow() {
 }
 
 export function BoardPage() {
-  const { data: tasks = [], isLoading, error, refetch } = useTasksList();
   const update = useUpdateTask();
   const queryClient = useQueryClient();
   const [activeTask, setActiveTask] = useState<TaskResponse | null>(null);
@@ -177,12 +180,27 @@ export function BoardPage() {
   const narrow = useIsNarrow();
   const horizontal = narrow && boardView === 'horizontal';
   const containerRef = useRef<HTMLDivElement>(null);
-  const previous = useRef<Map<string, string>>();
   const reveal = useTaskUi(state => state.reveal);
   const revealedAt = useTaskUi(state => state.revealedAt);
   const revealIds = useTaskUi(state => state.revealIds);
   useMinuteTick();
 
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const pins = revealedAt ? revealIds.slice(0, 20) : undefined;
+  const todo = useTasksList({ status: 'TODO', query: debouncedSearch, size: 24, revealIds: pins });
+  const working = useTasksList({ status: 'IN_PROGRESS', query: debouncedSearch, size: 24, revealIds: pins });
+  const done = useTasksList({ status: 'DONE', query: debouncedSearch, size: 24, revealIds: pins });
+  const columns = { TODO: todo, IN_PROGRESS: working, DONE: done };
+  const tasks = useMemo(() => [...new Map([...(todo.data ?? []), ...(working.data ?? []), ...(done.data ?? [])].map(task => [task.id, task])).values()],
+    [todo.data, working.data, done.data]);
+  const isLoading = todo.isLoading || working.isLoading || done.isLoading;
+  const error = todo.error || working.error || done.error;
+  const refetch = () => Promise.all([todo.refetch(), working.refetch(), done.refetch()]);
+  const overview = useTaskOverview();
   const goTo = (next: number) => {
     const container = containerRef.current;
     const first = container?.children[0] as HTMLElement | undefined;
@@ -191,19 +209,6 @@ export function BoardPage() {
       behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     setIndex(next);
   };
-
-  useEffect(() => {
-    if (isLoading) return;
-    if (previous.current) {
-      const changed = tasks.find(task => isBoardStatus(task.status) &&
-        (!previous.current!.has(task.id) || previous.current!.get(task.id) !== task.status));
-      if (changed) {
-        setLeadingId(changed.id);
-        reveal([changed.id]);
-      }
-    }
-    previous.current = new Map(tasks.map(task => [task.id, task.status]));
-  }, [tasks, isLoading, reveal]);
 
   useEffect(() => {
     if (!revealedAt || Date.now() - revealedAt > 8000) return;
@@ -231,10 +236,10 @@ export function BoardPage() {
     const status = String(over.id);
     setLeadingId(task.id);
     void queryClient.cancelQueries({ queryKey: ['tasks', 'list'] });
-    queryClient.setQueryData<TaskResponse[]>(['tasks', 'list'], items =>
-      items?.map(item => item.id === task.id ? { ...item, status } : item));
+    updateTaskLists(queryClient, { ...task, status });
     update.mutate({ id: task.id, status }, {
       onSuccess: () => {
+        reveal([task.id]);
         toast.success(`Задача перенесена: ${COLUMNS.find(column => column.id === status)?.label}.`, {
           action: { label: 'Отменить', onClick: () => update.mutate({ id: task.id, status: task.status }, {
             onError: () => toast.error('Не удалось вернуть задачу. Попробуй ещё раз.'),
@@ -242,8 +247,7 @@ export function BoardPage() {
         });
       },
       onError: () => {
-        queryClient.setQueryData<TaskResponse[]>(['tasks', 'list'], items =>
-          items?.map(item => item.id === task.id ? task : item));
+        updateTaskLists(queryClient, task);
         void queryClient.invalidateQueries({ queryKey: ['tasks'] });
         toast.error('Не удалось перенести задачу. Она осталась в прежнем статусе.');
       },
@@ -253,7 +257,7 @@ export function BoardPage() {
   return <>
     <div className="munin-page munin-board-page">
       <header className="munin-page-head">
-        <div><h1>Доска</h1><p className="board-summary">{tasks.filter(task => task.status === 'TODO' || task.status === 'IN_PROGRESS').length} активных · {tasks.filter(task => task.status === 'DONE').length} готово{search.trim() && ' · поиск'}</p></div>
+        <div><h1>Доска</h1><p className="board-summary">{overview.data?.active ?? '…'} активных · {overview.data?.statuses.DONE ?? '…'} готово{search.trim() && ' · поиск'}</p></div>
         <Button onClick={() => setCreateStatus('TODO')}><IconPlus className="h-4 w-4" />Задача</Button>
       </header>
       <div className="board-workbar">
@@ -292,7 +296,9 @@ export function BoardPage() {
               if (first) setIndex(Math.max(0, Math.min(2, Math.round(event.currentTarget.scrollLeft / (first.offsetWidth + 12)))));
             }}>
             {COLUMNS.map(column => <DroppableColumn key={column.id} column={column} narrow={narrow} searching={Boolean(search.trim())}
-              tasks={tasksByStatus[column.id]} onOpen={setSelectedId} onAdd={setCreateStatus} />)}
+              tasks={tasksByStatus[column.id]} total={columns[column.id].total}
+              hasNext={Boolean(columns[column.id].hasNextPage)} loadingMore={columns[column.id].isFetchingNextPage}
+              onMore={() => void columns[column.id].fetchNextPage()} onOpen={setSelectedId} onAdd={setCreateStatus} />)}
           </div>
           {activeTask && <CancelDropZone />}
           <DragOverlay dropAnimation={matchMedia('(prefers-reduced-motion: reduce)').matches ? null : {

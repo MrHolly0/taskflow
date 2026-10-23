@@ -28,14 +28,15 @@ import {
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import {
-  useTasksList,
+  useTaskPage,
+  useTaskOverview,
   useGroups,
   useUpdateTask,
   useDeleteGroup,
   type GroupResponse,
   type TaskResponse,
 } from '@/lib/hooks/useTasks';
-import { useTaskUi, isActiveTask } from '@/lib/task-ui';
+import { useTaskUi } from '@/lib/task-ui';
 import { cn } from '@/lib/utils';
 import { Button } from '@/app/components/ui/button';
 import { GroupEditor, GroupEmblem } from '@/app/components/GroupEditor';
@@ -242,12 +243,6 @@ export function GroupsPage() {
     error: groupError,
     refetch: refetchGroups,
   } = useGroups();
-  const {
-    data: tasks = [],
-    isLoading: loadingTasks,
-    error: taskError,
-    refetch: refetchTasks,
-  } = useTasksList();
   const update = useUpdateTask(),
     remove = useDeleteGroup();
   const reveal = useTaskUi((s) => s.reveal),
@@ -269,6 +264,16 @@ export function GroupsPage() {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const selected = groups.find((g) => g.id === selectedId) || groups[0];
   const preview = groups.find((g) => g.id === previewId);
+  const taskPage = useTaskPage({ group: selected?.id ?? 'none', status: history ? 'history' : 'active',
+    size: 12, revealIds: pinned ? [pinned] : revealedAt ? revealIds.slice(0, 20) : undefined }, page - 1, Boolean(selected));
+  const previewPage = useTaskPage({ group: previewId ?? 'none', status: 'active', size: 4 }, 0, Boolean(activeId && previewId));
+  const overview = useTaskOverview();
+  const tasks = taskPage.data?.content ?? [];
+  const loadingTasks = taskPage.isLoading;
+  const taskError = taskPage.error || overview.error;
+  const refetchTasks = () => Promise.all([taskPage.refetch(), overview.refetch()]);
+  const groupCounts = overview.data?.groups ?? [];
+  const selectedCounts = groupCounts.find(group => group.groupId === selected?.id);
   const activeTask = tasks.find((t) => t.id === activeId);
   const stageRef = useRef<HTMLDivElement>(null);
   const frozenHeight = useRef(510);
@@ -280,20 +285,11 @@ export function GroupsPage() {
     g.name.toLocaleLowerCase('ru').includes(query.toLocaleLowerCase('ru'))
   );
   const visibleGroups = query ? matching : matching.slice(0, limit);
-  const members = tasks.filter((t) => t.groupId === selected?.id);
-  const items = members
-    .filter((t) => (history ? !isActiveTask(t) : isActiveTask(t)))
-    .sort((a, b) => {
-      if (a.id === pinned) return -1;
-      if (b.id === pinned) return 1;
-      const ai = revealIds.indexOf(a.id),
-        bi = revealIds.indexOf(b.id);
-      if (Date.now() - revealedAt < 8000 && ai !== bi)
-        return (ai < 0 ? 10000 : ai) - (bi < 0 ? 10000 : bi);
-      return Date.parse(b.createdAt) - Date.parse(a.createdAt);
-    });
-  const pages = Math.max(1, Math.ceil(items.length / 12)),
-    current = Math.min(page, pages);
+  const items = tasks;
+  const total = taskPage.data?.totalElements ?? 0;
+  const pages = Math.max(1, Math.ceil(total / 12));
+  const current = Math.min(page, pages);
+  useEffect(() => { if (taskPage.data && page > pages) setPage(pages); }, [taskPage.data, page, pages]);
   useEffect(() => {
     if (!activeId || !hoverId || hoverId === selected?.id) return;
     const timer = setTimeout(() => setPreviewId(hoverId), 550);
@@ -440,7 +436,7 @@ export function GroupsPage() {
                   <GroupTile
                     key={group.id}
                     group={group}
-                    count={tasks.filter((t) => t.groupId === group.id && isActiveTask(t)).length}
+                    count={groupCounts.find(item => item.groupId === group.id)?.active ?? 0}
                     selected={group.id === selected?.id}
                     onOpen={() => open(group)}
                     onEdit={() => setEditor({ group })}
@@ -481,8 +477,8 @@ export function GroupsPage() {
                     <div>
                       <h2>{selected.name}</h2>
                       <p>
-                        {members.filter(isActiveTask).length} активных ·{' '}
-                        {members.filter((t) => !isActiveTask(t)).length} в истории
+                        {selectedCounts?.active ?? 0} активных ·{' '}
+                        {selectedCounts?.history ?? 0} в истории
                       </p>
                     </div>
                     <Dropdown.Root>
@@ -522,7 +518,7 @@ export function GroupsPage() {
                     </button>
                   </div>
                   <div className="group-task-grid">
-                    {items.slice((current - 1) * 12, current * 12).map((task) => (
+                    {items.map((task) => (
                       <DraggableTask
                         key={task.id}
                         task={task}
@@ -544,8 +540,8 @@ export function GroupsPage() {
                   {pages > 1 && (
                     <nav className="munin-pager" aria-label="Страницы задач группы">
                       <span>
-                        {(current - 1) * 12 + 1}–{Math.min(current * 12, items.length)} из{' '}
-                        {items.length}
+                        {(current - 1) * 12 + 1}–{Math.min(current * 12, total)} из{' '}
+                        {total}
                       </span>
                       <Button
                         variant="outline"
@@ -580,7 +576,7 @@ export function GroupsPage() {
               {activeId && preview && (
                 <Preview
                   group={preview}
-                  tasks={tasks.filter((t) => t.groupId === preview.id && isActiveTask(t))}
+                  tasks={previewPage.data?.content ?? []}
                 />
               )}
             </div>

@@ -24,7 +24,7 @@ const DISMISS_KEY = 'notif-channel-prompt-dismissed';
 // значить что-то конкретное.
 export function NotificationChannelPrompt() {
   const { ready, hasAnyWorkingChannel } = useNotificationChannelStatus();
-  const { data: tasks } = useTasksList();
+  const { data: tasks } = useTasksList({ status: 'active', order: 'deadline', size: 1 }, ready && !hasAnyWorkingChannel);
   const updateSettings = useUpdateSettings();
   const { subscribe } = usePushSubscription();
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === 'true');

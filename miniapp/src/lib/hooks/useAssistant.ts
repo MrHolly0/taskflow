@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthenticatedClient as getClient } from '@/lib/authenticated-client';
 
@@ -48,32 +49,44 @@ export interface QuickResult {
 }
 
 export const useSendAssistantMessage = () => {
+  const requestKey = useRef<{ text?: string; file?: File; key: string } | null>(null);
   return useMutation({
     mutationFn: async ({ text, file }: { text?: string; file?: File }) => {
+      if (!requestKey.current || requestKey.current.text !== text || requestKey.current.file !== file) {
+        requestKey.current = { text, file, key: crypto.randomUUID() };
+      }
       const formData = new FormData();
       if (text) formData.append('text', text);
       if (file) formData.append('file', file);
       const response = await getClient().post<Proposal>('/assistant/messages', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': 'multipart/form-data', 'Idempotency-Key': requestKey.current.key },
+        timeout: 190000,
       });
       return response.data;
     },
+    onSuccess: () => { requestKey.current = null; },
   });
 };
 
 export const useQuickAdd = () => {
   const queryClient = useQueryClient();
+  const requestKey = useRef<{ text?: string; file?: File; key: string } | null>(null);
   return useMutation({
     mutationFn: async ({ text, file }: { text?: string; file?: File }) => {
+      if (!requestKey.current || requestKey.current.text !== text || requestKey.current.file !== file) {
+        requestKey.current = { text, file, key: crypto.randomUUID() };
+      }
       const formData = new FormData();
       if (text) formData.append('text', text);
       if (file) formData.append('file', file);
       const response = await getClient().post<QuickResult>('/assistant/quick', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 'Content-Type': 'multipart/form-data', 'Idempotency-Key': requestKey.current.key },
+        timeout: 190000,
       });
       return response.data;
     },
     onSuccess: (result) => {
+      requestKey.current = null;
       if (result.applied) {
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
       }

@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { shouldRetryQuery, queryRetryDelay } from '@/lib/request-policy';
 import { Toaster } from '@/app/components/ui/sonner';
 import { AppLayout } from '@/app/components/layout/AppLayout';
 import { AuthPage } from '@/app/pages/AuthPage';
@@ -26,6 +27,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30000,
+      retry: shouldRetryQuery,
+      retryDelay: queryRetryDelay,
       refetchOnWindowFocus: false,
     },
   },

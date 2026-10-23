@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
 import { IconSearch, IconPlus, IconAdjustmentsHorizontal, IconX } from '@tabler/icons-react';
-import { useTasksList, useGroups, useCompleteTask, useUpdateTask } from '@/lib/hooks/useTasks';
+import { useTaskPage, useTaskOverview, useGroups, useCompleteTask, useUpdateTask } from '@/lib/hooks/useTasks';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
 import { useMinuteTick } from '@/lib/hooks/useMinuteTick';
-import { endOfZonedDay } from '@/lib/utils';
-import { useTaskUi, isActiveTask } from '@/lib/task-ui';
+import { useTaskUi } from '@/lib/task-ui';
 import { toast } from 'sonner';
 import { Button } from '@/app/components/ui/button';
 import {
@@ -31,13 +30,23 @@ export function AllTasksPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
-  const { data: all = [], isLoading, error, refetch } = useTasksList();
   const { data: groups = [] } = useGroups();
   const complete = useCompleteTask();
   const update = useUpdateTask();
-  const { timezone, isReady, error: timezoneError, refetch: refetchTimezone } = useUserTimezone();
+  const { isReady, error: timezoneError, refetch: refetchTimezone } = useUserTimezone();
   const revealIds = useTaskUi((s) => s.revealIds);
   const revealedAt = useTaskUi((s) => s.revealedAt);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const { data: result, isLoading, error, refetch } = useTaskPage({
+    status, group, query: debouncedSearch, context, order, size: 20,
+    revealIds: order === 'default' && revealedAt ? revealIds.slice(0, 20) : undefined,
+  }, page - 1, isReady);
+  const overview = useTaskOverview();
+  const all = result?.content ?? [];
   useMinuteTick();
   useEffect(() => {
     setPage(1);
@@ -52,55 +61,11 @@ export function AllTasksPage() {
       setPage(1);
     }
   }, [revealedAt]);
-  const filtered = (() => {
-    const endToday = endOfZonedDay(0, timezone),
-      endWeek = endOfZonedDay(6, timezone);
-    return all
-      .filter((task) => {
-        if (search && !task.title.toLocaleLowerCase('ru').includes(search.toLocaleLowerCase('ru')))
-          return false;
-        if (group !== 'all' && (group === 'none' ? Boolean(task.groupId) : task.groupId !== group))
-          return false;
-        if (status === 'active' && !isActiveTask(task)) return false;
-        if (status === 'history' && isActiveTask(task)) return false;
-        if (!['active', 'history', 'all'].includes(status) && task.status !== status) return false;
-        const target = task.plannedDate || task.deadline;
-        if (context === 'now')
-          return (
-            isActiveTask(task) &&
-            (task.priority === 'URGENT' ||
-              task.status === 'IN_PROGRESS' ||
-              Boolean(task.deadline && new Date(task.deadline) < new Date()))
-          );
-        if (context === 'today')
-          return isActiveTask(task) && (!target || new Date(target) <= endToday);
-        if (context === 'week')
-          return isActiveTask(task) && (!target || new Date(target) <= endWeek);
-        return true;
-      })
-      .sort((a, b) => {
-        if (order === 'default' && Date.now() - revealedAt < 8000) {
-          const ai = revealIds.indexOf(a.id),
-            bi = revealIds.indexOf(b.id);
-          if (ai !== bi) return (ai < 0 ? 1000 : ai) - (bi < 0 ? 1000 : bi);
-        }
-        if (order === 'deadline')
-          return (
-            (a.deadline ? Date.parse(a.deadline) : Infinity) -
-            (b.deadline ? Date.parse(b.deadline) : Infinity)
-          );
-        if (order === 'priority') {
-          const p = ['URGENT', 'HIGH', 'MEDIUM', 'LOW'];
-          return p.indexOf(a.priority) - p.indexOf(b.priority);
-        }
-        if (order === 'status')
-          return Number(b.status === 'IN_PROGRESS') - Number(a.status === 'IN_PROGRESS');
-        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
-      });
-  })();
-  const pages = Math.max(1, Math.ceil(filtered.length / 20)),
-    current = Math.min(page, pages),
-    visible = filtered.slice((current - 1) * 20, current * 20);
+  const total = result?.totalElements ?? 0;
+  const pages = Math.max(1, Math.ceil(total / 20));
+  const current = Math.min(page, pages);
+  const visible = all;
+  useEffect(() => { if (result && page > pages) setPage(pages); }, [result, page, pages]);
   const reset = () => {
     setContext('all');
     setSearch('');
@@ -110,11 +75,11 @@ export function AllTasksPage() {
     setPage(1);
   };
   const bulk = async (done: boolean) => {
-    const results = await Promise.allSettled(
-      selection.map((id) =>
-        done ? complete.mutateAsync(id) : update.mutateAsync({ id, status: 'CANCELLED' })
-      )
-    );
+    const results: PromiseSettledResult<unknown>[] = [];
+    for (let index = 0; index < selection.length; index += 4) {
+      results.push(...await Promise.allSettled(selection.slice(index, index + 4).map(id =>
+        done ? complete.mutateAsync(id) : update.mutateAsync({ id, status: 'CANCELLED' }))));
+    }
     const failed = results.filter((r) => r.status === 'rejected').length;
     failed
       ? toast.error(`Не изменилось ${failed} задач. Попробуй ещё раз.`)
@@ -234,7 +199,7 @@ export function AllTasksPage() {
       )}
       <div className="task-list-caption">
         <span>
-          {all.filter(isActiveTask).length} активных · {all.filter((t) => !isActiveTask(t)).length}{' '}
+          {overview.data?.active ?? '…'} активных · {overview.data?.history ?? '…'}{' '}
           в истории
         </span>
         <button
@@ -307,20 +272,20 @@ export function AllTasksPage() {
           </div>
           {!visible.length && (
             <div className="empty-task-list">
-              <h2>{all.length ? 'По этим условиям ничего нет' : 'Здесь появятся твои задачи'}</h2>
+              <h2>{(overview.data?.active ?? 0) + (overview.data?.history ?? 0) > 0 ? 'По этим условиям ничего нет' : 'Здесь появятся твои задачи'}</h2>
               <button
                 className="text-button"
-                onClick={all.length ? reset : () => setCreateOpen(true)}
+                onClick={(overview.data?.active ?? 0) + (overview.data?.history ?? 0) > 0 ? reset : () => setCreateOpen(true)}
               >
-                {all.length ? 'Сбросить фильтры' : 'Добавить первое дело'}
+                {(overview.data?.active ?? 0) + (overview.data?.history ?? 0) > 0 ? 'Сбросить фильтры' : 'Добавить первое дело'}
               </button>
             </div>
           )}
           {pages > 1 && (
             <nav className="munin-pager" aria-label="Страницы задач">
               <span>
-                {(current - 1) * 20 + 1}–{Math.min(current * 20, filtered.length)} из{' '}
-                {filtered.length}
+                {(current - 1) * 20 + 1}–{Math.min(current * 20, total)} из{' '}
+                {total}
               </span>
               <Button
                 variant="outline"

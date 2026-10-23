@@ -3,6 +3,8 @@ import { IconArrowLeft, IconPhone, IconCopy, IconCheck } from '@tabler/icons-rea
 import { Button, buttonVariants } from '@/app/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatPhoneInput } from '@/lib/phoneMask';
+import { sequentialPoll } from '@/lib/sequential-poll';
+import { queryRetryDelay } from '@/lib/request-policy';
 
 const TOTAL_WAIT_SECONDS = 5 * 60;
 const POLL_INTERVAL_MS = 2000;
@@ -38,29 +40,25 @@ export function PhoneWaitingStep<T extends PhoneConfirmationStatus>({
   const [cancelling, setCancelling] = useState(false);
   const [copied, setCopied] = useState(false);
   const stoppedRef = useRef(false);
+  const stopPoll = useRef<(() => void) | undefined>();
   const dialableNumber = `+${confirmationNumber.replace(/\D/g, '')}`;
 
   useEffect(() => {
     stoppedRef.current = false;
-    const pollTimer = setInterval(() => {
-      if (stoppedRef.current) return;
-      pollStatus(phone)
-        .then((result) => {
-          if (stoppedRef.current || result.status === 'waiting') return;
-          stoppedRef.current = true;
-          clearInterval(pollTimer);
-          if (result.status === 'expired') {
-            setExpired(true);
-          } else {
-            onConfirmed(result);
-          }
-        })
-        .catch(() => {
-          // Сеть моргнула — не глушим ожидание, попробуем на следующем тике.
-        });
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(pollTimer);
+    setSecondsLeft(TOTAL_WAIT_SECONDS);
+    setExpired(false);
+    const stop = sequentialPoll(() => pollStatus(phone), result => {
+      if (stoppedRef.current) return false;
+      if (result.status === 'waiting') return true;
+      stoppedRef.current = true;
+      if (result.status === 'expired') setExpired(true);
+      else onConfirmed(result);
+      return false;
+    }, (failures, error) => failures
+      ? Math.max(POLL_INTERVAL_MS, queryRetryDelay(failures, error))
+      : POLL_INTERVAL_MS + Math.random() * 250);
+    stopPoll.current = stop;
+    return () => { stoppedRef.current = true; stop(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone]);
 
@@ -68,6 +66,7 @@ export function PhoneWaitingStep<T extends PhoneConfirmationStatus>({
     if (expired || stoppedRef.current) return;
     if (secondsLeft <= 0) {
       stoppedRef.current = true;
+      stopPoll.current?.();
       setExpired(true);
       return;
     }
@@ -89,6 +88,7 @@ export function PhoneWaitingStep<T extends PhoneConfirmationStatus>({
     if (cancelling) return;
     setCancelling(true);
     stoppedRef.current = true;
+    stopPoll.current?.();
     try {
       await cancel(phone);
     } catch {

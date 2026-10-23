@@ -1,0 +1,37 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { sequentialPoll } from './sequential-poll';
+afterEach(() => vi.useRealTimers());
+it('не запускает второй запрос, пока первый не завершился', async () => {
+  vi.useFakeTimers();
+  let resolve!: (value: number) => void;
+  const request = vi.fn(() => new Promise<number>(done => { resolve = done; }));
+  const receive = vi.fn(() => true);
+  const stop = sequentialPoll(request, receive, () => 2000);
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(request).toHaveBeenCalledTimes(1);
+  resolve(1);
+  await vi.advanceTimersByTimeAsync(1999);
+  expect(request).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(request).toHaveBeenCalledTimes(2);
+  stop();
+  resolve(2);
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(receive).toHaveBeenCalledTimes(1);
+  expect(request).toHaveBeenCalledTimes(2);
+});
+it('увеличивает задержку после ошибок и прекращает опрос после подтверждения', async () => {
+  vi.useFakeTimers();
+  const request = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue('confirmed');
+  const delay = vi.fn(failures => failures ? 10000 : 2000);
+  const stop = sequentialPoll(request, () => false, delay);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(delay).toHaveBeenLastCalledWith(1, expect.any(Error));
+  await vi.advanceTimersByTimeAsync(9999);
+  expect(request).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  await vi.advanceTimersByTimeAsync(60000);
+  expect(request).toHaveBeenCalledTimes(2);
+  stop();
+});

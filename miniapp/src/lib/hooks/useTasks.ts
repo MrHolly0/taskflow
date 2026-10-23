@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useRef } from 'react';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { getAuthenticatedClient as getClient } from '@/lib/authenticated-client';
 
 export interface ReminderResponse {
@@ -204,46 +205,86 @@ export interface CreateGroupRequest {
 
 export const useCreateTask = () => {
   const queryClient = useQueryClient();
-
+  const pending = useRef<{ body: string; key: string } | null>(null);
   return useMutation({
     mutationFn: async (request: CreateTaskRequest) => {
-      const response = await getClient().post<Task>('/tasks/quick', request);
+      const body = JSON.stringify(request);
+      if (!pending.current || pending.current.body !== body) pending.current = { body, key: crypto.randomUUID() };
+      const response = await getClient().post<Task>('/tasks/quick', request, {
+        headers: { 'Idempotency-Key': pending.current.key },
+      });
       return response.data;
     },
-    onSuccess: (task) => {
-      queryClient.setQueryData<Task[]>(['tasks', 'list'], previous => previous ? [task, ...previous] : previous);
+    onSuccess: () => {
+      pending.current = null;
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['groups'] });
     },
   });
 };
 
-interface TasksPage {
+export interface TasksPage {
   content: Task[];
   totalElements: number;
+  number: number;
+  size: number;
 }
-
-export const useTasksList = () => {
-  return useQuery({
-    queryKey: ['tasks', 'list'],
-    queryFn: async () => {
-      const tasks: Task[] = [];
-      let page = 0;
-      let total = Infinity;
-      while (tasks.length < total) {
-        const response = await getClient().get<TasksPage>('/tasks', {
-          params: { page, size: 100, sort: 'createdAt,desc' },
-        });
-        tasks.push(...response.data.content);
-        total = response.data.totalElements;
-        if (!response.data.content.length) break;
-        page++;
-      }
-      return tasks;
-    },
-    staleTime: 1000 * 60 * 2,
+export interface TaskListFilters {
+  status?: string;
+  group?: string;
+  query?: string;
+  context?: string;
+  order?: string;
+  completedSince?: string;
+  completedUntil?: string;
+  revealIds?: string[];
+  size?: number;
+}
+export interface TaskOverview {
+  active: number;
+  history: number;
+  statuses: Record<string, number>;
+  groups: { groupId: string; active: number; history: number; weeklyDone: number }[];
+}
+const listParams = (filters: TaskListFilters) => ({
+  ...filters, revealIds: filters.revealIds?.join(',') || undefined,
+});
+export const useTaskPage = (filters: TaskListFilters, page = 0, enabled = true) => useQuery({
+  queryKey: ['tasks', 'page', filters, page],
+  queryFn: async ({ signal }) => (await getClient().get<TasksPage>('/tasks/view', {
+    params: { ...listParams(filters), page }, signal,
+  })).data,
+  staleTime: 120000,
+  enabled,
+});
+export const useTaskOverview = () => useQuery({
+  queryKey: ['tasks', 'overview'],
+  queryFn: async ({ signal }) => (await getClient().get<TaskOverview>('/tasks/overview', { signal })).data,
+  staleTime: 120000,
+});
+export const useTasksList = (filters: TaskListFilters = {}, enabled = true) => {
+  const result = useInfiniteQuery({
+    queryKey: ['tasks', 'list', filters],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam, signal }) => (await getClient().get<TasksPage>('/tasks/view', {
+      params: { ...listParams(filters), page: pageParam, size: filters.size ?? 24 }, signal,
+    })).data,
+    getNextPageParam: (last) => (last.number + 1) * last.size < last.totalElements ? last.number + 1 : undefined,
+    staleTime: 120000,
+    enabled,
   });
+  const data = useMemo(() => result.data ? [...new Map(result.data.pages.flatMap(page => page.content).map(task => [task.id, task])).values()] : undefined, [result.data]);
+  return { ...result, data,
+    total: result.data?.pages[0]?.totalElements ?? 0 };
 };
+
+export function updateTaskLists(queryClient: ReturnType<typeof useQueryClient>, task: Task) {
+  queryClient.setQueriesData<InfiniteData<TasksPage>>({ queryKey: ['tasks', 'list'] }, previous => previous ? {
+    ...previous, pages: previous.pages.map(page => ({ ...page,
+      content: page.content.map(item => item.id === task.id ? task : item),
+    })),
+  } : previous);
+}
 
 export const useTaskStats = () => {
   return useQuery({
@@ -284,7 +325,7 @@ export const useUpdateTask = () => {
       return response.data;
     },
     onSuccess: (task) => {
-      queryClient.setQueryData<Task[]>(['tasks', 'list'], (previous) => previous?.map(item => item.id === task.id ? task : item));
+      updateTaskLists(queryClient, task);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
   });

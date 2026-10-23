@@ -42,8 +42,8 @@ export function createAuthenticatedClient(options: ClientOptions = {}) {
     setItem: (key, value) => localStorage.setItem(key, value),
     removeItem: key => localStorage.removeItem(key),
   };
-  const client = axios.create({ baseURL, adapter: options.adapter });
-  const refreshClient = axios.create({ baseURL, adapter: options.adapter });
+  const client = axios.create({ baseURL, adapter: options.adapter, timeout: 45000 });
+  const refreshClient = axios.create({ baseURL, adapter: options.adapter, timeout: 45000 });
   let refreshing: Promise<void> | null = null;
   let invalidated = false;
 
