@@ -62,13 +62,19 @@ public class ExperimentalAgentLoop {
                 var calls = session.finish(result);
                 AgentOutcome validated = validator.validatePlan(user, text,
                         new LlmToolResponse(calls, null, inputTokens, outputTokens, false), session.window(), start, modelMs);
+                if (mode == PlanningMode.BATCH_PLAN && !validated.rejections().isEmpty())
+                    throw new PlanningException("ACTION_VALIDATION", String.join("; ", validated.rejections()));
                 return new AgentOutcome(validated.actions(), validated.rejections(), validated.clarification(),
                         validated.clarificationOptions(), validated.assistantText(), validated.window(), attempt + 1,
                         validated.llmFailed(), validated.ambiguous(), validated.ambiguityReason(), inputTokens, outputTokens,
                         Duration.between(start, clock.instant()).toMillis(), modelMs, 0, validated.declineReason());
             } catch (Exception e) {
                 PlanningException issue = e instanceof PlanningException p ? p : new PlanningException("INVALID_PLAN");
-                if (attempt == 0 && Set.of("EXPECTED_SINGLE_TOOL", "INVALID_PLAN", "PROGRAM_ERROR", "TARGET_REQUIRED", "SELECT_REQUIRED", "EXPECTED_OBJECT", "UNKNOWN_FIELD", "NOT_FOUND").contains(issue.getMessage())) {
+                boolean repairable = Set.of("EXPECTED_SINGLE_TOOL", "INVALID_PLAN", "PROGRAM_ERROR", "TARGET_REQUIRED",
+                        "SELECT_REQUIRED", "EXPECTED_OBJECT", "UNKNOWN_FIELD", "NOT_FOUND").contains(issue.getMessage())
+                        || mode == PlanningMode.BATCH_PLAN && Set.of("ACTION_VALIDATION", "UNISSUED_REFERENCE").contains(issue.getMessage());
+                if (attempt == 0 && repairable) {
+                    if (mode == PlanningMode.BATCH_PLAN) session.beginRepair();
                     if (response.toolCalls() != null && response.toolCalls().size() == 1) {
                         history.add(LlmMessage.assistantToolCalls(response.toolCalls()));
                         history.add(LlmMessage.toolResult(response.toolCalls().getFirst().id(), name,
@@ -83,12 +89,15 @@ public class ExperimentalAgentLoop {
                         if (mode == PlanningMode.BATCH_PLAN && response.text() != null)
                             history.add(new LlmMessage("assistant", response.text(), null, null));
                         history.add(LlmMessage.user(mode == PlanningMode.BATCH_PLAN
-                                ? "Верни один корректный JSON-объект steps или clarification или decline, без имени функции. Ошибка: " + issue.getMessage()
+                                ? "План целиком отклонён, ничего не выполнено. Верни один исправленный JSON-объект steps или clarification или decline. "
+                                        + "Не удаляй правильные части исходной команды. Ошибка: " + issue.getMessage() + ". "
+                                        + issue.question().substring(0, Math.min(1000, issue.question().length()))
                                 : "Верни ровно один вызов " + name + " с корректными аргументами."));
                     }
                     continue;
                 }
-                return failure(issue.getMessage(), issue.question(), session.window(), attempt + 1,
+                return failure(issue.getMessage(), "ACTION_VALIDATION".equals(issue.getMessage())
+                        ? "Не удалось подготовить все изменения. Уточни команду или попробуй ещё раз." : issue.question(), session.window(), attempt + 1,
                         inputTokens, outputTokens, start, modelMs);
             }
         }

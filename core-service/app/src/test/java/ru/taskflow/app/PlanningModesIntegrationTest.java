@@ -284,4 +284,64 @@ class PlanningModesIntegrationTest {
         assertThat(outcome.actions().get(1).accepted()).isFalse();
     }
 
+    @Test void jsonRepairsRejectedFieldsWithoutLosingOtherActions() {
+        UUID user = user();
+        String invalid = "{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить блокнот\"}},"
+                + "{\"action\":{\"type\":\"create\",\"title\":\"Посетить выставку\",\"deadline\":\"2030-11-15\"}}]}";
+        String fixed = invalid.replace("2030-11-15\"", "2030-11-15T09:00:00+03:00\"");
+        when(model.callWithTools(any())).thenReturn(
+                new LlmToolResponse(List.of(), invalid, 10, 20, false),
+                new LlmToolResponse(List.of(), fixed, 30, 40, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Купить блокнот и посетить выставку 15 ноября 2030",
+                ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.rejections()).isEmpty();
+        assertThat(outcome.actions()).hasSize(2);
+        assertThat(outcome.passes()).isEqualTo(2);
+        assertThat(outcome.inputTokens()).isEqualTo(40);
+        assertThat(outcome.outputTokens()).isEqualTo(60);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?", Integer.class, user)).isZero();
+    }
+
+    @Test void jsonDoesNotReturnAPartialPlanAfterTwoInvalidAttempts() {
+        UUID user = user();
+        String invalid = "{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить блокнот\"}},"
+                + "{\"action\":{\"type\":\"create\",\"title\":\"Выставка\",\"deadline\":\"не дата\"}}]}";
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(), invalid, 10, 20, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Купить блокнот и посетить выставку",
+                ZoneId.of("UTC"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.actions()).isEmpty();
+        assertThat(outcome.rejections()).contains("ACTION_VALIDATION");
+        verify(model, times(2)).callWithTools(any());
+    }
+
+    @Test void jsonCanRepairAnEmptySelectionWithoutKeepingThePreviousFailure() {
+        UUID user = user();
+        var target = task(user, "Проверить договор", null, null);
+        when(model.callWithTools(any())).thenReturn(
+                new LlmToolResponse(List.of(), "{\"steps\":[{\"select\":{\"query\":\"документ\"},\"action\":{\"type\":\"complete\"}}]}", 10, 20, false),
+                new LlmToolResponse(List.of(), "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"complete\"}}]}", 30, 40, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Договор проверен",
+                ZoneId.of("UTC"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.rejections()).isEmpty();
+        assertThat(outcome.actions()).extracting(a -> a.targetTaskId()).containsExactly(target.id());
+        assertThat(tasks.findById(user, target.id()).status()).isEqualTo(TaskStatus.TODO);
+    }
+
+    @Test void jsonRepairKeepsTheOriginalSearchBudget() {
+        UUID user = user();
+        task(user, "Проверить договор", null, null);
+        String step = "{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"complete\"}}";
+        String missing = "{\"select\":{\"query\":\"нет такой задачи\"},\"action\":{\"type\":\"complete\"}}";
+        String first = "{\"steps\":[" + String.join(",", Collections.nCopies(7, step)) + "," + missing + "]}";
+        when(model.callWithTools(any())).thenReturn(
+                new LlmToolResponse(List.of(), first, 10, 20, false),
+                new LlmToolResponse(List.of(), "{\"steps\":[" + step + "]}", 30, 40, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Заверши проверку договора",
+                ZoneId.of("UTC"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.actions()).isEmpty();
+        assertThat(outcome.rejections()).contains("TOOL_LIMIT");
+        assertThat(tasks.findById(user, tasks.selectForAssistant(user,
+                new AssistantTaskSelector("договор", null, null, null, false, null, null, false)).tasks().getFirst().id()).status())
+                .isEqualTo(TaskStatus.TODO);
+    }
 }

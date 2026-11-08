@@ -141,6 +141,7 @@ public class PlanningSession {
 
     public TaskContextWindow window() { return new TaskContextWindow(initial.rendered(), Map.copyOf(refs), Map.copyOf(titles)); }
     public int calls() { return calls; }
+    void beginRepair() { failure = null; }
     static void fields(JsonNode node, Set<String> allowed) {
         if (node == null || !node.isObject()) throw new PlanningException("EXPECTED_OBJECT");
         node.fieldNames().forEachRemaining(name -> { if (!allowed.contains(name)) throw new PlanningException("UNKNOWN_FIELD"); });

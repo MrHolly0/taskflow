@@ -77,7 +77,9 @@ class PlanningComparisonLiveTest {
         List<Measurement> measurements=new ArrayList<>();
         boolean followup = "true".equals(System.getenv("PLANNING_LIVE_FOLLOWUP"));
         if (followup) scenarios = scenarios.stream().filter(s -> Set.of("hidden-complete", "group-overdue", "reminder").contains(s.id())).toList();
-        List<PlanningMode> modes = followup ? List.of(PlanningMode.BATCH_PLAN, PlanningMode.CODE_MODE) : List.of(PlanningMode.values());
+        List<PlanningMode> modes = followup ? List.of(PlanningMode.BATCH_PLAN, PlanningMode.CODE_MODE)
+                : Arrays.stream(System.getenv().getOrDefault("PLANNING_MODES", "DIRECT,BATCH_PLAN,CODE_MODE").split(","))
+                        .map(PlanningMode::valueOf).toList();
         for(Scenario scenario:scenarios)for(PlanningMode mode:modes) {
             long start=System.nanoTime();
             try {
