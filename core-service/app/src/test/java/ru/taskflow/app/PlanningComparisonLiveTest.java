@@ -120,8 +120,10 @@ class PlanningComparisonLiveTest {
         final AtomicInteger attempts=new AtomicInteger();
         final List<String> errors=new ArrayList<>();
         final List<JsonNode> responses=new ArrayList<>();
-        final int callLimit = Math.min(25, Integer.parseInt(System.getenv().getOrDefault("PLANNING_LIVE_CALL_LIMIT", "25")));
+        final int callLimit = Math.min(3000, Integer.parseInt(System.getenv().getOrDefault("PLANNING_LIVE_CALL_LIMIT", "25")));
         final String model=System.getenv().getOrDefault("PLANNING_BENCH_MODEL","openai/gpt-oss-120b");
+        final PlanningApiBudget budget = System.getenv("PLANNING_LIVE_BUDGET_FILE") == null ? null
+                : new PlanningApiBudget(Path.of(System.getenv("PLANNING_LIVE_BUDGET_FILE")));
         final RestClient client;
         final ObjectMapper mapper;
         LiveGateway(ObjectMapper mapper){
@@ -145,15 +147,54 @@ class PlanningComparisonLiveTest {
                     }else wire.put("content",m.content());
                     if(m.toolCallId()!=null)wire.put("tool_call_id",m.toolCallId());messages.add(wire);
                 }
+                if (budget != null && !budget.reserve()) {
+                    errors.add("BUDGET_OR_APPROVAL");
+                    return LlmToolResponse.unavailable();
+                }
                 attempts.incrementAndGet();
-                String body=client.post().uri("/chat/completions").header("Authorization","Bearer "+System.getenv("GROQ_API_KEY"))
-                    .body(Map.of("model",model,"messages",messages,"tools",req.tools(),"tool_choice","auto","temperature",0.1,"max_completion_tokens",3000)).retrieve().body(String.class);
+                Map<String,Object> request=new LinkedHashMap<>(Map.of("model",model,"messages",messages,"tools",req.tools(),
+                        "tool_choice","auto","temperature",0.1,"max_completion_tokens",3000));
+                if (req.reasoningEffort()!=null) request.put("reasoning_effort",req.reasoningEffort());
+                if (req.requiredTool()!=null) request.put("tool_choice",Map.of("type","function","function",Map.of("name",req.requiredTool())));
+                if (Boolean.TRUE.equals(req.jsonOutput())) {
+                    request.remove("tools"); request.remove("tool_choice");
+                    request.put("response_format",Map.of("type","json_object"));
+                }
+                long before=System.nanoTime();
+                var entity=client.post().uri("/chat/completions").header("Authorization","Bearer "+System.getenv("GROQ_API_KEY"))
+                    .body(request).retrieve().toEntity(String.class);
+                String body=entity.getBody();
                 JsonNode root=mapper.readTree(body),message=root.path("choices").path(0).path("message");
-                var trace=mapper.createObjectNode(); trace.set("tool_calls",message.path("tool_calls")); responses.add(trace);
+                var trace=mapper.createObjectNode();
+                trace.set("tool_calls",message.path("tool_calls"));
+                if (message.path("content").isTextual()) trace.put("text",message.path("content").asText());
+                trace.set("usage",root.path("usage"));
+                trace.put("httpMs",(System.nanoTime()-before)/1000000);
+                var limits=mapper.createObjectNode();
+                for (String header : List.of("x-ratelimit-limit-tokens","x-ratelimit-remaining-tokens","x-ratelimit-reset-tokens"))
+                    if (entity.getHeaders().getFirst(header)!=null) limits.put(header,entity.getHeaders().getFirst(header));
+                trace.set("rateLimits",limits);
+                trace.set("toolChoice",mapper.valueToTree(request.get("tool_choice")));
+                trace.put("jsonOutput",Boolean.TRUE.equals(req.jsonOutput()));
+                trace.put("reasoningEffort",req.reasoningEffort()==null?"provider-default":req.reasoningEffort());
+                responses.add(trace);
                 List<LlmToolCall> calls=new ArrayList<>();for(JsonNode call:message.path("tool_calls"))calls.add(new LlmToolCall(call.path("id").asText(),call.path("function").path("name").asText(),call.path("function").path("arguments").asText()));
                 return new LlmToolResponse(calls,message.path("content").isTextual()?message.path("content").asText():null,
                     root.path("usage").path("prompt_tokens").asInt(),root.path("usage").path("completion_tokens").asInt(),false);
-            }catch(RestClientResponseException e){errors.add("HTTP_"+e.getStatusCode().value());return LlmToolResponse.unavailable();}
+            }catch(RestClientResponseException e){
+                String code="";
+                try {
+                    var error=mapper.readTree(e.getResponseBodyAsString()).path("error");
+                    String candidate=error.path("code").asText("");
+                    if (candidate.matches("[A-Za-z0-9_]{1,80}")) code=candidate;
+                    var trace=mapper.createObjectNode().put("providerError",code).put("httpStatus",e.getStatusCode().value());
+                    String failed=error.path("failed_generation").asText("");
+                    if (!failed.isBlank()) trace.put("failedGeneration",failed.substring(0,Math.min(4096,failed.length())));
+                    responses.add(trace);
+                }catch(Exception ignored){}
+                errors.add("HTTP_"+e.getStatusCode().value()+(code.isBlank()?"":":"+code));
+                return LlmToolResponse.unavailable();
+            }
             catch(Exception e){errors.add(e.getClass().getSimpleName());return LlmToolResponse.unavailable();}
         }
         @Override public NlpParseResult parseText(String text,String zone,List<String> groups){throw new UnsupportedOperationException();}

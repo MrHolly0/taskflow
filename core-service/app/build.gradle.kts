@@ -61,6 +61,7 @@ tasks.test {
 // не часть обычной сборки, запускается вручную: ./gradlew :core-service:app:liveTest
 tasks.register<Test>("liveTest") {
     description = "Регрессия на живой модели (тег live)"
+    outputs.upToDateWhen { false }
     group = "verification"
     useJUnitPlatform {
         includeTags("live")
