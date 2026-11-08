@@ -138,7 +138,7 @@ def main():
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)
         with args.csv.open("w", newline="") as file:
-            writer = csv.DictWriter(file, fieldnames=["mode", *next(iter(summaries.values())).keys()])
+            writer = csv.DictWriter(file, fieldnames=["mode", *next(iter(summaries.values())).keys()], lineterminator="\n")
             writer.writeheader()
             for mode, summary in summaries.items():
                 writer.writerow(dict(mode=mode, **summary))

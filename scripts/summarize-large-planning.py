@@ -148,7 +148,7 @@ def main():
         args.csv.parent.mkdir(parents=True, exist_ok=True)
         fields = [field for field in data["measurements"][0] if field != "actions"]
         with args.csv.open("w", newline="") as file:
-            writer = csv.DictWriter(file, fieldnames=fields)
+            writer = csv.DictWriter(file, fieldnames=fields, lineterminator="\n")
             writer.writeheader()
             for row in data["measurements"]:
                 writer.writerow({field: json.dumps(row[field], ensure_ascii=False, sort_keys=True)
