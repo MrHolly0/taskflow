@@ -82,6 +82,7 @@ def render(data, raw_sha):
         ]
         for label, formatter in metrics:
             lines.append("| " + label + " | " + " | ".join(formatter(totals[m]) for m in modes) + " |")
+        lines.append("")
     lines += ["", "## По сценариям", "", f"| Задач / сценарий | {columns} |", divider]
     for size in sorted(data["taskCounts"]):
         for request in data["requests"]:
