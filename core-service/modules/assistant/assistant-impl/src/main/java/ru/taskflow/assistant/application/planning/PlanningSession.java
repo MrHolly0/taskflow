@@ -355,17 +355,7 @@ public class PlanningSession {
     }
 
     private LocalTime floatingReminderTime() {
-        String text = sourceWithoutQuotes();
-        if (!requestsReminder() || text.matches("(?s).*(сегодня|завтр|вчера|через|назад|послезавтр|позавчера|срок|дедлайн|начала|понедель|вторник|среду|четверг|пятниц|суббот|воскресен|январ|феврал|март|апрел|мая|июн|июл|август|сентябр|октябр|ноябр|декабр).*" )
-                || text.matches("(?sU).*\\b(?:за|до)\\b.*") || text.matches("(?s).*\\d[./-]\\d.*")) return null;
-        var matcher = java.util.regex.Pattern.compile("(?U)\\b(?:в\\s+|на\\s+(?=\\d{1,2}:))([01]?[0-9]|2[0-3])(?::([0-5][0-9]))?\\s*(утра|дня|вечера|ночи)?\\b").matcher(text);
-        if (!matcher.find()) return null;
-        int hour = Integer.parseInt(matcher.group(1)), minute = matcher.group(2) == null ? 0 : Integer.parseInt(matcher.group(2));
-        String part = matcher.group(3);
-        if (Set.of("дня","вечера").contains(part == null ? "" : part) && hour < 12) hour += 12;
-        if ("ночи".equals(part) && hour == 12) hour = 0;
-        if (matcher.find()) return null;
-        return LocalTime.of(hour,minute);
+        return requestsReminder() ? FloatingReminderTimePolicy.from(sourceWithoutQuotes()) : null;
     }
 
     private void normalizeFloatingReminder(com.fasterxml.jackson.databind.node.ObjectNode action) {

@@ -698,4 +698,12 @@ class PlanningModesIntegrationTest {
                 .isEqualTo(deadline.minusHours(18).toInstant());
     }
 
+    @Test void explicitDayOfMonthMustNotBecomeTheNearestClockOccurrence() throws Exception {
+        UUID owner=user();var date=OffsetDateTime.now().plusDays(6).withHour(18).withMinute(0).withSecond(0).withNano(0);
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Забрать посылку\",\"reminder_at\":\""+date+"\"}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Напомни "+date.getDayOfMonth()+" числа в 18:00 забрать посылку",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(1);
+        assertThat(OffsetDateTime.parse(result.actions().getFirst().payload().get("reminder_at").toString()).toInstant()).isEqualTo(date.toInstant());
+    }
+
 }
