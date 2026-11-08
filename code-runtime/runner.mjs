@@ -53,7 +53,7 @@ try {
   call.dispose();
   const setup = vm.unwrapResult(vm.evalCode(`
     Object.defineProperty(globalThis, 'api', { value: Object.freeze({
-      findTasks: __findTasks, now: ${JSON.stringify(input.now)}
+      findTasks: __findTasks, now: ${JSON.stringify(input.now)}, tasks: ${JSON.stringify(input.tasks ?? [])}
     }), writable: false, configurable: false });
     delete globalThis.__findTasks;
   `));

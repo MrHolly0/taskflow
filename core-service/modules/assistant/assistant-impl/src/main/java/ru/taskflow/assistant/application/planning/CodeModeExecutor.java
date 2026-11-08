@@ -50,7 +50,7 @@ public class CodeModeExecutor {
                 if (cancelled.get()) throw new PlanningException("EXECUTION_INTERRUPTED");
                 try (var input = new BufferedReader(new InputStreamReader(child.getInputStream(), StandardCharsets.UTF_8));
                      var output = new BufferedWriter(new OutputStreamWriter(child.getOutputStream(), StandardCharsets.UTF_8))) {
-                    send(output, json.writeValueAsString(Map.of("code", code, "now", now.toString())));
+                    send(output, json.writeValueAsString(Map.of("code", code, "now", now.toString(), "tasks", session.preview())));
                     for (int frames = 0; frames < 10; frames++) {
                         JsonNode frame = json.readTree(readFrame(input));
                         if ("result".equals(frame.path("type").asText())) return frame.get("value");

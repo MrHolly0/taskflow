@@ -68,6 +68,7 @@ server:
 
 app:
   assistant:
+    experimental-reasoning-effort: ${ASSISTANT_EXPERIMENTAL_REASONING_EFFORT:low}
     planning-mode: ${ASSISTANT_PLANNING_MODE:DIRECT}
     code-mode:
       node: ${CODE_MODE_NODE:node}

@@ -32,7 +32,8 @@ public class AssistantPromptBuilder {
             сроки — «завтра», «через неделю», «в пятницу» — считай от этого момента, а не от дат \
             в примерах, если они где-то встретятся дальше.
 
-            %s
+            Список задач пользователя (окно контекста). Ссылаться на задачу можно только ярлыком \
+            из этого списка — T1, T2 и так далее; ярлыков за пределами списка не существует.
             %s
 
             Группы пользователя — единственно допустимые значения параметра group у действий \
@@ -121,17 +122,6 @@ public class AssistantPromptBuilder {
 
     public PromptParts build(TaskContextWindow window, String userText, ZoneId zone, AssistantEntryPoint entryPoint,
                               List<String> groupNames) {
-        return build(window, userText, zone, entryPoint, groupNames, false);
-    }
-
-    public PromptParts buildForSelection(String userText, ZoneId zone, AssistantEntryPoint entryPoint,
-                                         List<String> groupNames) {
-        return build(new TaskContextWindow("", java.util.Map.of(), java.util.Map.of()), userText, zone,
-                entryPoint, groupNames, true);
-    }
-
-    private PromptParts build(TaskContextWindow window, String userText, ZoneId zone,
-                              AssistantEntryPoint entryPoint, List<String> groupNames, boolean selection) {
         OffsetDateTime now = OffsetDateTime.now(zone);
         String dateTime = now.format(DATE_FORMAT);
         String weekday = now.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.of("ru"));
@@ -139,12 +129,7 @@ public class AssistantPromptBuilder {
         String entryPointNote = entryPoint == AssistantEntryPoint.QUICK_ADD ? QUICK_ADD_NOTE : "";
 
         String systemPrompt = SYSTEM_TEMPLATE.formatted(
-                brandName, dateTime, weekday, offset,
-                selection ? "Список задач не передан. Это не означает, что задач нет: для существующих задач обязательна выборка."
-                        : "Список задач пользователя (окно контекста). Ссылаться на задачу можно только ярлыком "
-                        + "из этого списка — T1, T2 и так далее; ярлыков за пределами списка не существует.",
-                selection ? "Ярлыки появляются только в результатах выборки. Правила ниже о списке применяются к найденным задачам."
-                        : renderWindow(window), renderGroups(groupNames),
+                brandName, dateTime, weekday, offset, renderWindow(window), renderGroups(groupNames),
                 entryPointNote, USER_TEXT_START, USER_TEXT_END
         );
 

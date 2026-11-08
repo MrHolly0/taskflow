@@ -11,7 +11,7 @@ import ru.taskflow.task.api.dto.TaskResponse;
 import java.util.*;
 
 public class PlanningSession {
-    private static final Set<String> SELECTOR_FIELDS = Set.of("query", "group", "status", "priority", "overdue", "deadlineFrom", "deadlineBefore", "all");
+    private static final Set<String> SELECTOR_FIELDS = Set.of("ref", "query", "group", "status", "priority", "overdue", "deadlineFrom", "deadlineBefore", "all");
     private static final Set<String> ACTION_FIELDS = Set.of("type", "task_ref", "title", "description", "priority", "deadline", "new_deadline", "group", "tags", "note", "reason", "reminder_at", "ambiguous_reason");
     private final TaskService tasks;
     private final UUID userId;
@@ -20,6 +20,8 @@ public class PlanningSession {
     private final Map<String, UUID> refs;
     private final Map<String, String> titles;
     private final Set<String> issued = new HashSet<>();
+    private List<Map<String, Object>> preview;
+    private final Map<String, Map<String, Object>> snapshots = new LinkedHashMap<>();
     private int calls;
     private PlanningException failure;
 
@@ -28,10 +30,21 @@ public class PlanningSession {
         refs = new LinkedHashMap<>(initial.refs()); titles = new LinkedHashMap<>(initial.titles());
     }
 
+    public List<Map<String, Object>> preview() {
+        if (preview == null) preview = tasks.findAssistantContext(userId, 12).stream().map(this::expose).toList();
+        return preview;
+    }
+
     public List<Map<String, Object>> select(JsonNode selector) {
         try {
-            if (++calls > 8) throw new PlanningException("TOOL_LIMIT");
             fields(selector, SELECTOR_FIELDS);
+            if (selector.has("ref")) {
+                fields(selector, Set.of("ref"));
+                if (!selector.get("ref").isTextual() || !issued.contains(selector.get("ref").asText()))
+                    throw new PlanningException("UNISSUED_REFERENCE");
+                return List.of(snapshots.get(selector.get("ref").asText()));
+            }
+            if (++calls > 8) throw new PlanningException("TOOL_LIMIT");
             for (String name : List.of("all", "overdue"))
                 if (selector.has(name) && !selector.get(name).isBoolean()) throw new PlanningException("INVALID_SELECTOR");
             for (String name : List.of("query", "group", "status", "priority", "deadlineFrom", "deadlineBefore"))
@@ -56,6 +69,7 @@ public class PlanningSession {
         if (task.deadline() != null) result.put("deadline", task.deadline().toString());
         if (task.plannedDate() != null) result.put("plannedDate", task.plannedDate().toString());
         if (task.estimateMinutes() != null) result.put("estimateMinutes", task.estimateMinutes());
+        snapshots.put(ref, Map.copyOf(result));
         return result;
     }
 
@@ -69,7 +83,7 @@ public class PlanningSession {
             return control;
         }
         JsonNode steps = plan.get("steps");
-        if (steps == null || !steps.isArray() || steps.isEmpty() || steps.size() > 10) throw new PlanningException("STEP_LIMIT");
+        if (steps == null || !steps.isArray() || steps.isEmpty() || steps.size() > 20) throw new PlanningException("STEP_LIMIT");
         var actions = json.createArrayNode();
         for (JsonNode step : steps) {
             fields(step, Set.of("select", "action"));
@@ -117,8 +131,10 @@ public class PlanningSession {
         if (!actions.isArray() || actions.isEmpty() || actions.size() > 20) throw new PlanningException("ACTION_LIMIT");
         for (JsonNode action : actions) {
             fields(action, ACTION_FIELDS);
-            if (!"create".equals(action.path("type").asText()) && !issued.contains(action.path("task_ref").asText()))
-                throw new PlanningException("UNISSUED_REFERENCE");
+            if (!"create".equals(action.path("type").asText())) {
+                if (action.path("task_ref").asText().isBlank()) throw new PlanningException("TARGET_REQUIRED");
+                if (!issued.contains(action.path("task_ref").asText())) throw new PlanningException("UNISSUED_REFERENCE");
+            }
         }
         return List.of(new LlmToolCall("plan", "propose_actions", result.toString()));
     }

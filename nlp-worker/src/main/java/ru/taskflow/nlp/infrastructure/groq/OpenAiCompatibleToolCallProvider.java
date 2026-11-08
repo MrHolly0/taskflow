@@ -68,8 +68,16 @@ public class OpenAiCompatibleToolCallProvider implements ToolCallProvider {
         request.put("model", model);
         request.put("messages", req.messages().stream().map(this::toApiMessage).toList());
         request.put("tools", req.tools());
-        request.put("tool_choice", "auto");
+        request.put("tool_choice", req.requiredTool() == null ? "auto"
+                : Map.of("type", "function", "function", Map.of("name", req.requiredTool())));
+        if (Boolean.TRUE.equals(req.jsonOutput())) {
+            request.remove("tools");
+            request.remove("tool_choice");
+            request.put("response_format", Map.of("type", "json_object"));
+        }
         request.put("temperature", 0.1);
+        if (req.reasoningEffort() != null && model.startsWith("openai/gpt-oss-"))
+            request.put("reasoning_effort", req.reasoningEffort());
 
         String rawBody = restClient.post()
                 .uri("/chat/completions")

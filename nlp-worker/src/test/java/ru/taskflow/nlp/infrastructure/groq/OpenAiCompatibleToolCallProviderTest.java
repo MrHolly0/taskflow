@@ -270,4 +270,37 @@ class OpenAiCompatibleToolCallProviderTest {
                 })
                 .andRespond(withSuccess(OK_RESPONSE, MediaType.APPLICATION_JSON));
     }
+    @ParameterizedTest
+    @ValueSource(strings = {"openai/gpt-oss-120b", "llama-3.3-70b-versatile"})
+    void forwardsOptionalReasoningEffortOnlyToSupportedModels(String model) throws Exception {
+        RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+        server = MockRestServiceServer.bindTo(builder).build();
+        provider = new OpenAiCompatibleToolCallProvider("groq", "test-key", model, objectMapper, builder.build());
+        expectAndCapture();
+        var request = objectMapper.readValue(
+                "{\"messages\":[],\"tools\":[],\"reasoningEffort\":\"low\"}", ToolCallRequest.class);
+        provider.call(request);
+        server.verify();
+        if (model.startsWith("openai/gpt-oss-"))
+            assertThat(capturedBody.path("reasoning_effort").asText()).isEqualTo("low");
+        else assertThat(capturedBody.has("reasoning_effort")).isFalse();
+    }
+
+    @Test void jsonPlansDoNotSendFunctionCallingParameters() {
+        expectAndCapture();
+        provider.call(new ToolCallRequest(List.of(ToolCallMessage.user("Верни JSON")), List.of(), null, null, true));
+        server.verify();
+        assertThat(capturedBody.has("tools")).isFalse();
+        assertThat(capturedBody.has("tool_choice")).isFalse();
+        assertThat(capturedBody.path("response_format").path("type").asText()).isEqualTo("json_object");
+    }
+
+    @Test void forwardsDeclaredRequiredTool() {
+        expectAndCapture();
+        var tools = List.<Map<String,Object>>of(Map.of("type", "function", "function", Map.of("name", "execute_code")));
+        provider.call(new ToolCallRequest(List.of(ToolCallMessage.user("Купить блокнот")), tools, null, "execute_code"));
+        server.verify();
+        assertThat(capturedBody.path("tool_choice").path("function").path("name").asText()).isEqualTo("execute_code");
+    }
+
 }
