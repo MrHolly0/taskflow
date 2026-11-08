@@ -126,4 +126,41 @@ class JsonPlanningApplyIntegrationTest {
         assertThat(tasks.findById(owner,target.id()).status()).isEqualTo(TaskStatus.TODO);
     }
 
+    @Test void repeatedQuickTextRequestUsesOneProposalAndCreatesOneTask() {
+        UUID owner=user();String text="Добавь купить лампу";
+        reply("{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить лампу\"}}]}");
+        var first=assistant.handleText(owner,text,AssistantChannel.WEB,AssistantEntryPoint.QUICK_ADD,"quick-text-once");
+        var repeated=assistant.handleText(owner,text,AssistantChannel.WEB,AssistantEntryPoint.QUICK_ADD,"quick-text-once");
+        assertThat(repeated.id()).isEqualTo(first.id());
+        org.mockito.Mockito.verify(model,org.mockito.Mockito.times(1)).callWithTools(any());
+        var applied=assistant.apply(owner,first.id());assertThat(applied.appliedCount()).isEqualTo(1);
+        assertThat(assistant.apply(owner,repeated.id())).isEqualTo(applied);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,owner)).isEqualTo(1);
+    }
+
+    @Test void repeatedVoiceUploadTranscribesOnceAndKeepsTheSameProposal() {
+        UUID owner=user();byte[] audio={1,2,3,4};
+        when(model.transcribe(org.mockito.ArgumentMatchers.any(byte[].class))).thenReturn("Добавь купить лампу");
+        reply("{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить лампу\"}}]}");
+        var first=assistant.handleVoice(owner,audio,AssistantChannel.WEB,AssistantEntryPoint.QUICK_ADD,"voice-once");
+        var repeated=assistant.handleVoice(owner,audio,AssistantChannel.WEB,AssistantEntryPoint.QUICK_ADD,"voice-once");
+        assertThat(repeated.id()).isEqualTo(first.id());
+        org.mockito.Mockito.verify(model,org.mockito.Mockito.times(1)).transcribe(org.mockito.ArgumentMatchers.any(byte[].class));
+        org.mockito.Mockito.verify(model,org.mockito.Mockito.times(1)).callWithTools(any());
+        assertThat(assistant.apply(owner,first.id()).appliedCount()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,owner)).isEqualTo(1);
+    }
+
+    @Test void quickAddKeepsTheNewTaskFirstAndDoesNotApplyBothInterpretations() {
+        UUID owner=user();var existing=tasks.create(owner,new CreateTaskRequest("Проверить почту",null,TaskPriority.MEDIUM,null,null,null,List.of(),null,TaskSource.MANUAL));
+        reply("{\"steps\":[{\"select\":{\"query\":\"почту\"},\"action\":{\"type\":\"complete\"}}]}");
+        var proposal=assistant.handleText(owner,"почта",AssistantChannel.WEB,AssistantEntryPoint.QUICK_ADD);
+        assertThat(proposal.exclusive()).isTrue();
+        assertThat(proposal.actions()).extracting(a -> a.type()).containsExactly(AssistantActionType.CREATE,AssistantActionType.COMPLETE);
+        assertThat(proposal.actions().stream().filter(a -> a.accepted()).count()).isEqualTo(1);
+        assertThat(assistant.apply(owner,proposal.id()).appliedCount()).isEqualTo(1);
+        assertThat(tasks.findById(owner,existing.id()).status()).isEqualTo(TaskStatus.TODO);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,owner)).isEqualTo(2);
+    }
+
 }
