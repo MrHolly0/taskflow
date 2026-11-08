@@ -42,6 +42,7 @@ class PlanningLargeContextFixtureTest {
         LocalDate day = LocalDate.now(PlanningLargeContextCases.ZONE);
         var scenarios = new java.util.ArrayList<>(PlanningLargeContextCases.all(day));
         scenarios.addAll(PlanningLargeContextControlCases.all(day));
+        scenarios.addAll(PlanningLargeContextHoldoutCases.all(day));
         for (int count : new int[]{100, 200}) for (var scenario : scenarios) {
             var fixture = harness.fixture(count, day, scenario);
             assertThat(harness.snapshot(fixture.user(), fixture.other())).isEqualTo(fixture.snapshot());

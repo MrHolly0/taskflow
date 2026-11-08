@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-live", action="store_true", help="разрешить передачу синтетических реплик в Groq и расход квоты")
     parser.add_argument("--suite", choices=("dataset", "large-context"), default="dataset")
-    parser.add_argument("--large-set", choices=("regression", "control"), default="regression")
+    parser.add_argument("--large-set", choices=("regression", "control", "holdout"), default="regression")
     parser.add_argument("--task-counts", default="100,200", help="размеры аккаунтов для large-context")
     parser.add_argument("--dataset", default="docs/vkr/dataset/nlp-dataset.json")
     parser.add_argument("--repeats", type=int, choices=(1, 2, 3), default=1)

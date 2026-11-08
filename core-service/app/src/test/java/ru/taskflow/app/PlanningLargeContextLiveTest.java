@@ -73,6 +73,7 @@ class PlanningLargeContextLiveTest {
         var selected = switch (env("PLANNING_LARGE_SET", "regression")) {
             case "regression" -> PlanningLargeContextCases.all(day);
             case "control" -> PlanningLargeContextControlCases.all(day);
+            case "holdout" -> PlanningLargeContextHoldoutCases.all(day);
             default -> throw new IllegalArgumentException("Unknown scenario set");
         };
         String requested = env("PLANNING_CASE_IDS", "");
@@ -203,6 +204,7 @@ class PlanningLargeContextLiveTest {
         var digest = MessageDigest.getInstance("SHA-256");
         for (Class<?> type : List.of(AgentLoop.class, ExperimentalAgentLoop.class, PlanningPromptBuilder.class, PlanningSession.class,
                 Class.forName("ru.taskflow.assistant.application.planning.ContextualChoicePolicy"),
+                Class.forName("ru.taskflow.assistant.application.TitleChangeGuard"),
                 Class.forName("ru.taskflow.task.application.TaskServiceImpl"), Class.forName("ru.taskflow.task.infrastructure.persistence.TaskRepository"), PlanningGenerationSettings.class, CodeModeExecutor.class, ru.taskflow.nlp.api.LlmToolRequest.class))
             try (var bytes = type.getResourceAsStream(type.getSimpleName() + ".class")) { digest.update(bytes.readAllBytes()); }
         report.put("plannerBytecodeSha256", HexFormat.of().formatHex(digest.digest()));
