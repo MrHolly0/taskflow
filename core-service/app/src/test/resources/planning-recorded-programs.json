@@ -1,0 +1,12 @@
+[
+  {
+    "code": "async () => {\n  // Try to find a task that matches the description of sending documents to the dean's office\n  let found = await api.findTasks({query: 'документы в деканат'});\n  if (found.length === 1) {\n    return {actions: [{type: 'complete', task_ref: found[0].ref}]};\n  }\n  // fallback to a broader query\n  found = await api.findTasks({query: 'деканат'});\n  if (found.length === 1) {\n    return {actions: [{type: 'complete', task_ref: found[0].ref}]};\n  }\n  if (found.length > 1) {\n    // ambiguous which task to complete\n    return {clarification: 'У вас несколько задач, связанных с деканатом. Уточните, какую из них нужно отметить выполненной.'};\n  }\n  // no matching task found\n  return {decline: {reason: 'unclear', answer: 'Не нашёл задачу, связанную с отправкой документов в деканат. Пожалуйста, уточните название задачи.'}};\n}",
+    "type": "COMPLETE",
+    "count": 1
+  },
+  {
+    "code": "async () => {\n  const selector = { group: 'Учёба', overdue: true, all: true };\n  const found = await api.findTasks(selector);\n  const newDeadline = '2030-11-15T18:00:00+03:00';\n  const actions = found.map(t => ({\n    type: 'reschedule',\n    task_ref: t.ref,\n    new_deadline: newDeadline\n  }));\n  return { actions };\n}",
+    "type": "RESCHEDULE",
+    "count": 2
+  }
+]
