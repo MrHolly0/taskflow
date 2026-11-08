@@ -344,4 +344,158 @@ class PlanningModesIntegrationTest {
                 new AssistantTaskSelector("договор", null, null, null, false, null, null, false)).tasks().getFirst().id()).status())
                 .isEqualTo(TaskStatus.TODO);
     }
+    @Test void relativeReminderUsesTheStoredDeadlineOutsideTheContext() throws Exception {
+        UUID user = user();OffsetDateTime deadline = OffsetDateTime.now().plusDays(20).withNano(0);
+        var target = task(user, "Проверить договор аренды", null, deadline);
+        var beforeReminders = tasks.getReminders(user, target.id());
+        for (int i = 0; i < 85; i++) task(user, "Просроченное дело " + i, null, OffsetDateTime.now().minusDays(2));
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":35}}]}", 10, 20, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Напомни о договоре аренды за 35 минут до срока",
+                ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.rejections()).isEmpty();assertThat(outcome.actions()).hasSize(1);
+        assertThat(outcome.actions().getFirst().targetTaskId()).isEqualTo(target.id());
+        assertThat(OffsetDateTime.parse(outcome.actions().getFirst().payload().get("reminder_at").toString()).toInstant())
+                .isEqualTo(deadline.minusMinutes(35).toInstant());
+        assertThat(outcome.actions().getFirst().payload()).doesNotContainKey("reminder_before_deadline_minutes");
+        assertThat(tasks.getReminders(user, target.id())).isEqualTo(beforeReminders);
+        assertThat(tasks.findById(user, target.id()).deadline().toInstant()).isEqualTo(deadline.toInstant());
+    }
+
+    @Test void relativeReminderWithoutDeadlineCannotBeReplacedWithAnInventedTime() {
+        UUID user = user();task(user, "Проверить договор", null, null);
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":60}}]}", 10, 20, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Напомни о договоре за час до срока", ZoneId.of("UTC"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.actions()).isEmpty();assertThat(outcome.rejections()).contains("DEADLINE_REQUIRED");
+        assertThat(outcome.clarification()).contains("нет срока");verify(model, times(1)).callWithTools(any());
+    }
+
+    @Test void relativeReminderOffsetsMustBeIntegersWithinBoundsAndExclusive() {
+        UUID user = user();task(user, "Проверить договор", null, OffsetDateTime.now().plusDays(2));
+        for (String value : List.of("-1", "1.5", "525601", "2147483648", "\"35\"", "null")) {
+            when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                    "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":" + value + "}}]}", 10, 20, false));
+            var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Напомни о договоре", ZoneId.of("UTC"), AssistantEntryPoint.CHAT);
+            assertThat(outcome.actions()).isEmpty();assertThat(outcome.rejections()).contains("INVALID_ACTION");
+        }
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":35,\"reminder_at\":\"2030-11-15T12:00:00+03:00\"}}]}", 10, 20, false));
+        assertThat(planner.run(PlanningMode.BATCH_PLAN,user,"Напомни о договоре",ZoneId.of("UTC"),AssistantEntryPoint.CHAT).rejections())
+                .contains("INVALID_ACTION");
+    }
+
+    @Test void updateWithDeadlineIsRepairedAsRescheduleWithoutDroppingAnotherAction() {
+        UUID user = user();var target = task(user, "Проверить договор", null, null);
+        String at = OffsetDateTime.now().plusDays(2).withNano(0).toString();
+        String first = "{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить карандаш\"}},{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"update\",\"new_deadline\":\"" + at + "\"}}]}";
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),first,10,20,false),
+                new LlmToolResponse(List.of(),first.replace("\"update\"", "\"reschedule\""),30,40,false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN,user,"Купить карандаш и перенести договор",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(outcome.actions()).extracting(a -> a.type()).containsExactly(ru.taskflow.assistant.api.AssistantActionType.CREATE,ru.taskflow.assistant.api.AssistantActionType.RESCHEDULE);
+        assertThat(outcome.actions().getLast().targetTaskId()).isEqualTo(target.id());
+        assertThat(outcome.passes()).isEqualTo(2);
+        var requests = org.mockito.ArgumentCaptor.forClass(LlmToolRequest.class);verify(model,times(2)).callWithTools(requests.capture());
+        assertThat(requests.getAllValues().getLast().messages().toString()).contains("Для переноса срока используй reschedule");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,user)).isEqualTo(1);
+    }
+
+    @Test void aSingleActionCannotBecomeAnExclusiveChoice() {
+        UUID user = user();var target = task(user,"Проверить договор",null,null);
+        String invalid = "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"cancel\",\"ambiguous_reason\":\"Не видно кандидата\"}}]}";
+        String fixed = "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"cancel\"}}]}";
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),invalid,10,20,false),new LlmToolResponse(List.of(),fixed,30,40,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"Отмени задачу проверить договор",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.ambiguous()).isFalse();assertThat(result.rejections()).isEmpty();
+        assertThat(result.actions()).extracting(a -> a.targetTaskId()).containsExactly(target.id());
+        assertThat(result.passes()).isEqualTo(2);
+    }
+
+    @Test void reschedulingOnlyTimeKeepsTheTaskDayInTheUsersZone() {
+        UUID user = user();var zone = ZoneId.of("Europe/Moscow");
+        var deadline = OffsetDateTime.now(ZoneOffset.UTC).plusDays(4).withHour(23).withMinute(50).withSecond(0).withNano(0);
+        var target = task(user,"Проверить договор",null,deadline);
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"reschedule\",\"new_deadline_time\":\"18:00\",\"reminder_before_deadline_minutes\":90}}]}",10,20,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"Перенеси договор на 18, напомни за полтора часа",zone,AssistantEntryPoint.CHAT);
+        var expected = deadline.atZoneSameInstant(zone).toLocalDate().atTime(18,0).atZone(zone).toInstant();
+        assertThat(result.rejections()).isEmpty();assertThat(result.actions()).hasSize(2);
+        assertThat(OffsetDateTime.parse(result.actions().getFirst().payload().get("new_deadline").toString()).toInstant()).isEqualTo(expected);
+        assertThat(OffsetDateTime.parse(result.actions().getLast().payload().get("reminder_at").toString()).toInstant()).isEqualTo(expected.minusSeconds(90*60));
+        assertThat(result.actions().getFirst().payload()).doesNotContainKeys("new_deadline_time","reminder_before_deadline_minutes","reminder_at");
+        assertThat(tasks.findById(user,target.id()).deadline().toInstant()).isEqualTo(deadline.toInstant());
+    }
+
+    @Test void incompleteVerbCannotBecomeAnInventedTaskButLiteralNamesRemainAllowed() {
+        UUID user = user();String create = "{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"купить\"}}]}";
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),create,10,20,false),
+                new LlmToolResponse(List.of(),"{\"decline\":{\"reason\":\"unclear\",\"answer\":\"Что купить?\"}}",30,40,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"купить",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).isEmpty();assertThat(result.isDeclined()).isTrue();assertThat(result.rejections()).isEmpty();
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),create,10,20,false));
+        result = planner.run(PlanningMode.BATCH_PLAN,user,"Создай задачу с названием купить",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(1);
+    }
+
+    @Test void modelOutageIsReportedAsAnOutageWithoutFallbackCreation() {
+        when(model.callWithTools(any())).thenReturn(LlmToolResponse.unavailable());
+        var result = planner.run(PlanningMode.BATCH_PLAN,user(),"Купить молоко",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).isEmpty();assertThat(result.llmFailed()).isTrue();
+    }
+
+    @Test void alternativesBecomeAChoiceWithExactlyOneAcceptedAction() {
+        UUID user = user();var target = task(user,"Позвонить врачу насчёт записи",null,null);
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"alternatives\":[{\"select\":{\"query\":\"врачу\"},\"action\":{\"type\":\"complete\"}},{\"action\":{\"type\":\"create\",\"title\":\"позвони врачу\"}}]}",10,20,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"позвони врачу",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.rejections()).isEmpty();assertThat(result.ambiguous()).isTrue();
+        assertThat(result.actions()).hasSize(2);assertThat(result.actions().stream().filter(a -> a.accepted()).count()).isEqualTo(1);
+        assertThat(result.actions().getFirst().targetTaskId()).isEqualTo(target.id());
+        assertThat(tasks.findById(user,target.id()).status()).isEqualTo(TaskStatus.TODO);
+    }
+
+    @Test void explicitUrgentPriorityCannotBeDowngradedToHigh() {
+        UUID user = user();task(user,"Сдать отчёт",null,null);
+        String first = "{\"steps\":[{\"select\":{\"query\":\"отчёт\"},\"action\":{\"type\":\"update\",\"priority\":\"HIGH\"}}]}";
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),first,10,20,false),
+                new LlmToolResponse(List.of(),first.replace("HIGH","URGENT"),30,40,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"Отчёт сделай срочным",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.rejections()).isEmpty();assertThat(result.actions().getFirst().payload()).containsEntry("priority","URGENT");
+        assertThat(result.passes()).isEqualTo(2);
+    }
+
+    @Test void priorityWordsInsideTitlesDoNotOverrideAnExplicitPriorityOrDefault() {
+        UUID user = user();task(user,"Срочный отчёт",null,null);
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"отчёт\"},\"action\":{\"type\":\"update\",\"priority\":\"HIGH\"}}]}",10,20,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"Задаче «Срочный отчёт» выставь высокий приоритет",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.rejections()).isEmpty();assertThat(result.actions().getFirst().payload()).containsEntry("priority","HIGH");
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить высокий шкаф\",\"priority\":\"MEDIUM\"}}]}",10,20,false));
+        result = planner.run(PlanningMode.BATCH_PLAN,user,"Купить высокий шкаф",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.rejections()).isEmpty();assertThat(result.actions().getFirst().payload()).containsEntry("priority","MEDIUM");
+    }
+
+    @Test void timeFromAnotherClauseDoesNotOverrideTheRescheduledTask() {
+        UUID user = user();task(user,"Проверить договор",null,OffsetDateTime.now().plusDays(3));
+        var deadline = OffsetDateTime.now().plusDays(1).withHour(17).withNano(0);
+        var createdAt = deadline.withHour(18);
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"reschedule\",\"new_deadline\":\"" + deadline + "\"}},{\"action\":{\"type\":\"create\",\"title\":\"Позвонить маме\",\"deadline\":\"" + createdAt + "\"}}]}",10,20,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"Перенеси договор на завтра в 17, а на 18 добавь звонок маме",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.rejections()).isEmpty();assertThat(result.actions()).hasSize(2);
+    }
+
+    @Test void aDayOfMonthCannotReplaceAnExplicitHourInATimeOnlyMove() {
+        UUID user = user();var deadline = OffsetDateTime.now().plusDays(3).withNano(0);
+        task(user,"Проверить договор",null,deadline);
+        var wrong = deadline.withHour(9).toString();
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),
+                "{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"reschedule\",\"new_deadline\":\"" + wrong + "\"}}]}",10,20,false),
+                new LlmToolResponse(List.of(),"{\"steps\":[{\"select\":{\"query\":\"договор\"},\"action\":{\"type\":\"reschedule\",\"new_deadline_time\":\"18:00\"}}]}",30,40,false));
+        var result = planner.run(PlanningMode.BATCH_PLAN,user,"Перенеси договор на 18",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.rejections()).isEmpty();assertThat(result.passes()).isEqualTo(2);
+        assertThat(OffsetDateTime.parse(result.actions().getFirst().payload().get("new_deadline").toString()).getHour()).isEqualTo(18);
+    }
+
 }

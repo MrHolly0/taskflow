@@ -28,7 +28,7 @@ public class ExperimentalAgentLoop {
     public AgentOutcome run(PlanningMode mode, UUID user, String text, ZoneId zone, AssistantEntryPoint entry) {
         Instant start = clock.instant();
         TaskContextWindow window = contexts.build(user);
-        PlanningSession session = new PlanningSession(tasks, user, json, window);
+        PlanningSession session = new PlanningSession(tasks, user, json, window, zone, text);
         String name = mode == PlanningMode.BATCH_PLAN ? "submit_plan" : "execute_code";
         var history = new ArrayList<LlmMessage>();
         history.add(LlmMessage.system(prompts.build(mode, session.preview(), tasks.findGroupNames(user), zone, entry)));
@@ -72,7 +72,7 @@ public class ExperimentalAgentLoop {
                 PlanningException issue = e instanceof PlanningException p ? p : new PlanningException("INVALID_PLAN");
                 boolean repairable = Set.of("EXPECTED_SINGLE_TOOL", "INVALID_PLAN", "PROGRAM_ERROR", "TARGET_REQUIRED",
                         "SELECT_REQUIRED", "EXPECTED_OBJECT", "UNKNOWN_FIELD", "NOT_FOUND").contains(issue.getMessage())
-                        || mode == PlanningMode.BATCH_PLAN && Set.of("ACTION_VALIDATION", "UNISSUED_REFERENCE").contains(issue.getMessage());
+                        || mode == PlanningMode.BATCH_PLAN && Set.of("ACTION_VALIDATION", "UNISSUED_REFERENCE", "INVALID_ACTION").contains(issue.getMessage());
                 if (attempt == 0 && repairable) {
                     if (mode == PlanningMode.BATCH_PLAN) session.beginRepair();
                     if (response.toolCalls() != null && response.toolCalls().size() == 1) {
@@ -89,7 +89,7 @@ public class ExperimentalAgentLoop {
                         if (mode == PlanningMode.BATCH_PLAN && response.text() != null)
                             history.add(new LlmMessage("assistant", response.text(), null, null));
                         history.add(LlmMessage.user(mode == PlanningMode.BATCH_PLAN
-                                ? "План целиком отклонён, ничего не выполнено. Верни один исправленный JSON-объект steps или clarification или decline. "
+                                ? "План целиком отклонён, ничего не выполнено. Верни один исправленный JSON-объект steps или alternatives или clarification или decline. "
                                         + "Не удаляй правильные части исходной команды. Ошибка: " + issue.getMessage() + ". "
                                         + issue.question().substring(0, Math.min(1000, issue.question().length()))
                                 : "Верни ровно один вызов " + name + " с корректными аргументами."));
@@ -106,7 +106,7 @@ public class ExperimentalAgentLoop {
 
     private AgentOutcome failure(String reason, String question, TaskContextWindow window, int passes,
             int input, int output, Instant start, long modelMs) {
-        return new AgentOutcome(List.of(), List.of(reason), question, List.of(), null, window, passes, false,
+        return new AgentOutcome(List.of(), List.of(reason), question, List.of(), null, window, passes, "MODEL_UNAVAILABLE".equals(reason),
                 false, null, input, output, Duration.between(start, clock.instant()).toMillis(), modelMs, 0);
     }
 
@@ -120,8 +120,9 @@ public class ExperimentalAgentLoop {
         } else {
             Map<String, Object> actionProperties = new LinkedHashMap<>();
             actionProperties.put("type", Map.of("type", "string", "enum", List.of("create","complete","cancel","reschedule","update","remind")));
-            for (String field : List.of("title","description","deadline","new_deadline","group","note","reason","reminder_at","ambiguous_reason"))
+            for (String field : List.of("title","description","deadline","new_deadline","new_deadline_time","group","note","reason","reminder_at","ambiguous_reason"))
                 actionProperties.put(field, Map.of("type", "string"));
+            actionProperties.put("reminder_before_deadline_minutes", Map.of("type", "integer", "minimum", 0, "maximum", 525600));
             actionProperties.put("priority", Map.of("type", "string", "enum", List.of("LOW","MEDIUM","HIGH","URGENT")));
             actionProperties.put("tags", Map.of("type", "array", "items", Map.of("type", "string")));
             Map<String, Object> selectorProperties = new LinkedHashMap<>();
@@ -131,6 +132,10 @@ public class ExperimentalAgentLoop {
             var action = Map.of("type", "object", "additionalProperties", false, "properties", actionProperties, "required", List.of("type"));
             var selector = Map.of("type", "object", "additionalProperties", false, "properties", selectorProperties);
             params.put("properties", Map.of(
+                    "alternatives", Map.of("type", "array", "minItems", 2, "maxItems", 2, "items",
+                            Map.of("type", "object", "additionalProperties", false,
+                                    "properties", Map.of("select", selector, "action", action), "required", List.of("action"))),
+                    "reason", Map.of("type", "string"),
                     "steps", Map.of("type", "array", "minItems", 1, "maxItems", 20, "items",
                             Map.of("type", "object", "additionalProperties", false,
                                     "properties", Map.of("select", selector, "action", action), "required", List.of("action"))),
