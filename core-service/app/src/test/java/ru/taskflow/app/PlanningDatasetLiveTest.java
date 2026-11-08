@@ -66,11 +66,12 @@ class PlanningDatasetLiveTest {
     @Autowired TaskService tasks;
     @Autowired UserService users;
     @Autowired ObjectMapper json;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @Autowired ru.taskflow.assistant.application.planning.PlanningGenerationSettings generation;
     @Autowired PlanningComparisonLiveTest.LiveGateway gateway;
 
     record Result(String datasetId, String category, int repeat, PlanningMode mode, boolean correct, boolean legacyCorrect,
-                  boolean apiFailure, int expected, int actual, int matched, int missing, int extra,
+                  boolean apiFailure, boolean noWrites, int expected, int actual, int matched, int missing, int extra,
                   int attributeMismatches, boolean expectedAmbiguous, boolean choiceOffered,
                   int inputTokens, int outputTokens, int httpCalls, int passes, long elapsedMs, long modelMs,
                   List<String> missingDescriptions, List<String> extraDescriptions,
@@ -134,22 +135,24 @@ class PlanningDatasetLiveTest {
                         if (task.deadline() != null) deadlines.put(spec.ref(), task.deadline());
                     }
                     int beforeCalls = gateway.attempts.get(), beforeErrors = gateway.errors.size(), beforeTraces = gateway.responses.size();
+                    var beforeState = snapshot(user);
                     long start = System.nanoTime();
                     AgentOutcome out = mode == PlanningMode.DIRECT
                             ? direct.run(user, row.text(), ZONE, AssistantEntryPoint.CHAT)
                             : experimental.run(mode, user, row.text(), ZONE, AssistantEntryPoint.CHAT);
                     long elapsed = (System.nanoTime() - start) / 1000000;
+                    boolean noWrites = beforeState.equals(snapshot(user));
                     var legacy = matcher.match(out.actions(), row.expected(), targets, deadlines, anchor.toLocalDate(), ZONE);
                     var match = matcher.match(PlanningResultScorer.normalizeTimes(out.actions(), ZONE),
                             row.expected(), targets, deadlines, anchor.toLocalDate(), ZONE);
                     boolean apiFailure = out.llmFailed() || gateway.errors.size() > beforeErrors;
                     boolean technicalFailure = out.rejections().stream().anyMatch(code -> code.matches("[A-Z_]+"));
-                    boolean correct = !apiFailure && !technicalFailure && out.inputTokens() > 0 && match.fullyCorrect()
+                    boolean correct = noWrites && !apiFailure && !technicalFailure && out.inputTokens() > 0 && match.fullyCorrect()
                             && (!row.expected().ambiguous() || out.ambiguous());
                     var attributes = match.matched().stream().flatMap(pair -> pair.attributeMismatches().stream()).toList();
                     Result result = new Result(row.id(), row.category(), repeat, mode, correct,
-                            !apiFailure && !technicalFailure && out.inputTokens() > 0 && legacy.fullyCorrect()
-                                    && (!row.expected().ambiguous() || out.ambiguous()), apiFailure,
+                            noWrites && !apiFailure && !technicalFailure && out.inputTokens() > 0 && legacy.fullyCorrect()
+                                    && (!row.expected().ambiguous() || out.ambiguous()), apiFailure, noWrites,
                             match.expectedCount(), match.actualCount(), match.matchedCount(), match.missingCount(), match.extraCount(),
                             attributes.size(), row.expected().ambiguous(), out.ambiguous(), out.inputTokens(), out.outputTokens(),
                             gateway.attempts.get() - beforeCalls, out.passes(), elapsed,
@@ -163,6 +166,7 @@ class PlanningDatasetLiveTest {
                         writeReport(output, datasetHash, dataset.size(), repeats, configuredModes.size(), stopped, results, traces);
                     System.out.printf(Locale.ROOT, "CASE %s %s correct=%s tokens=%d+%d calls=%d%n",
                             row.id(), mode, correct, out.inputTokens(), out.outputTokens(), result.httpCalls());
+                    assertThat(noWrites).as("planning must not write tasks, reminders or notification schedules").isTrue();
                     if (gateway.errors.stream().skip(beforeErrors).anyMatch("BUDGET_OR_APPROVAL"::equals)) {
                         stopped = true;
                         break outer;
@@ -176,6 +180,13 @@ class PlanningDatasetLiveTest {
         writeReport(output, datasetHash, dataset.size(), repeats, configuredModes.size(), stopped, results, traces);
         assertThat(Files.readAllBytes(datasetFile)).isEqualTo(datasetBytes);
         assertThat(results).isNotEmpty();
+    }
+
+    private List<Map<String,Object>> snapshot(UUID user) {
+        var rows = new ArrayList<>(jdbc.queryForList("SELECT * FROM tasks WHERE user_id=? ORDER BY id",user));
+        rows.addAll(jdbc.queryForList("SELECT r.* FROM reminders r JOIN tasks t ON t.id=r.task_id WHERE t.user_id=? ORDER BY r.id",user));
+        rows.addAll(jdbc.queryForList("SELECT * FROM scheduled_notifications WHERE user_id=? ORDER BY id",user));
+        return rows;
     }
 
     private void writeReport(Path path, String hash, int size, int repeats, int modeCount, boolean stopped,

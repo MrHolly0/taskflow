@@ -40,7 +40,9 @@ class PlanningLargeContextFixtureTest {
         var harness = new PlanningLargeContextLiveTest();
         harness.tasks = tasks;harness.users = users;harness.contexts = contexts;harness.jdbc = jdbc;
         LocalDate day = LocalDate.now(PlanningLargeContextCases.ZONE);
-        for (int count : new int[]{100, 200}) for (var scenario : PlanningLargeContextCases.all(day)) {
+        var scenarios = new java.util.ArrayList<>(PlanningLargeContextCases.all(day));
+        scenarios.addAll(PlanningLargeContextControlCases.all(day));
+        for (int count : new int[]{100, 200}) for (var scenario : scenarios) {
             var fixture = harness.fixture(count, day, scenario);
             assertThat(harness.snapshot(fixture.user(), fixture.other())).isEqualTo(fixture.snapshot());
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?", Integer.class, fixture.other())).isEqualTo(1);

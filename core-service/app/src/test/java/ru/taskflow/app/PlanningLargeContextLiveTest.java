@@ -70,7 +70,11 @@ class PlanningLargeContextLiveTest {
         assumeTrue(System.getenv("PLANNING_LIVE_BUDGET_FILE") != null);
         when(limiter.allow(any())).thenReturn(true);
         LocalDate day = LocalDate.now(PlanningLargeContextCases.ZONE);
-        var selected = PlanningLargeContextCases.all(day);
+        var selected = switch (env("PLANNING_LARGE_SET", "regression")) {
+            case "regression" -> PlanningLargeContextCases.all(day);
+            case "control" -> PlanningLargeContextControlCases.all(day);
+            default -> throw new IllegalArgumentException("Unknown scenario set");
+        };
         String requested = env("PLANNING_CASE_IDS", "");
         if (!requested.isBlank()) {
             var ids = Set.of(requested.split(","));
@@ -181,12 +185,14 @@ class PlanningLargeContextLiveTest {
     }
     List<Map<String, Object>> snapshot(UUID user, UUID other) {
         var rows = new ArrayList<>(jdbc.queryForList("SELECT * FROM tasks WHERE user_id IN (?,?) ORDER BY id", user, other));
+        rows.addAll(jdbc.queryForList("SELECT r.* FROM reminders r JOIN tasks t ON t.id=r.task_id WHERE t.user_id IN (?,?) ORDER BY r.id", user, other));
         rows.addAll(jdbc.queryForList("SELECT * FROM scheduled_notifications WHERE user_id IN (?,?) ORDER BY id", user, other));
         return rows;
     }
     void write(Path path, String hash, LocalDate day, int planned, boolean stopped, List<Integer> sizes, int repeats,
                List<PlanningLargeContextCases.Scenario> selected, List<Measurement> results, List<Map<String, Object>> traces) throws Exception {
         Map<String, Object> report = new LinkedHashMap<>();
+        report.put("scenarioSet", env("PLANNING_LARGE_SET", "regression"));
         report.put("evaluationKind", "large-context");report.put("model", gateway.model);report.put("anchorDate", day);
         report.put("taskCounts", sizes);report.put("scenarios", selected.size());report.put("repeats", repeats);
         report.put("datasetSha256", hash);report.put("plannedMeasurements", planned);report.put("stoppedByBudget", stopped);

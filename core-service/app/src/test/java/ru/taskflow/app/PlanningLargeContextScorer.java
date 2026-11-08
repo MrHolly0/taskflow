@@ -27,7 +27,7 @@ final class PlanningLargeContextScorer {
                         || (out.declineReason() == DeclineReason.QUESTION || out.declineReason() == DeclineReason.UNCLEAR)
                             && text.toLowerCase(Locale.ROOT).matches("(?s).*(\\?|уточн|какой|какую|котор|выбер).*" );
             if (!control) errors.add("MISSING_CLARIFICATION");
-            if (out.rejections().stream().anyMatch(code -> !Set.of("AMBIGUOUS", "SELECTION_LIMIT").contains(code)))
+            if (out.rejections().stream().anyMatch(code -> !Set.of("AMBIGUOUS", "SELECTION_LIMIT", "DEADLINE_REQUIRED").contains(code)))
                 errors.add("TECHNICAL_FAILURE");
             return new Score(errors.isEmpty(), 0, out.actions().size(), 0, 0, 0, 0, 0, List.copyOf(errors));
         }
