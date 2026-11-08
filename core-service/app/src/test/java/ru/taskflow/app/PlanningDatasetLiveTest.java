@@ -222,6 +222,8 @@ class PlanningDatasetLiveTest {
         for (Class<?> type : List.of(AgentLoop.class, ExperimentalAgentLoop.class,
                 ru.taskflow.assistant.application.planning.PlanningPromptBuilder.class,
                 ru.taskflow.assistant.application.planning.PlanningSession.class,
+                Class.forName("ru.taskflow.assistant.application.planning.ContextualChoicePolicy"),
+                Class.forName("ru.taskflow.task.application.TaskServiceImpl"), Class.forName("ru.taskflow.task.infrastructure.persistence.TaskRepository"),
                 ru.taskflow.assistant.application.planning.PlanningGenerationSettings.class,
                 ru.taskflow.assistant.application.planning.CodeModeExecutor.class,
                 ru.taskflow.nlp.api.LlmToolRequest.class)) {

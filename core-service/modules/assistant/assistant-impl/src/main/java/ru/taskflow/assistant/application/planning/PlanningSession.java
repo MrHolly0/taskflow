@@ -28,7 +28,13 @@ public class PlanningSession {
     private final ObjectMapper json;
     private final TaskContextWindow initial;
     private final ZoneId zone;
+    private final OffsetDateTime now;
     private final String source;
+    private final boolean preferCreate;
+    private final boolean smartSearch;
+    private List<TaskResponse> pendingSuggestions = List.of();
+    private boolean choiceResolved;
+    private Map<String,Object> choiceCandidate;
     private final Map<String, UUID> refs;
     private final Map<String, String> titles;
     private final Set<String> issued = new HashSet<>();
@@ -37,13 +43,31 @@ public class PlanningSession {
     private int calls;
     private PlanningException failure;
 
-    public PlanningSession(TaskService tasks, UUID userId, ObjectMapper json, TaskContextWindow initial, ZoneId zone, String source) {
-        this.tasks = tasks; this.userId = userId; this.json = json; this.initial = initial;this.zone = zone;this.source = source;
+    public PlanningSession(TaskService tasks, UUID userId, ObjectMapper json, TaskContextWindow initial, ZoneId zone, String source, boolean preferCreate, boolean smartSearch, OffsetDateTime now) {
+        this.tasks = tasks; this.userId = userId; this.json = json; this.initial = initial;this.zone = zone;this.source = source;this.preferCreate = preferCreate;this.smartSearch = smartSearch;this.now = now;
         refs = new LinkedHashMap<>(initial.refs()); titles = new LinkedHashMap<>(initial.titles());
     }
 
     public List<Map<String, Object>> preview() {
-        if (preview == null) preview = tasks.findAssistantContext(userId, 12).stream().map(this::expose).toList();
+        if (preview == null) {
+            var initialTasks = tasks.findAssistantContext(userId,12);
+            var ordered = new LinkedHashMap<UUID,TaskResponse>();
+            if (smartSearch && initialTasks.size() == 12) {
+                var words = new StringBuilder();
+                for (String word : source.split("[^\\p{L}\\p{N}]+")) {
+                    if (word.length() < 3) continue;
+                    if (words.length()+word.length()+1 > 200) break;
+                    if (!words.isEmpty()) words.append(' ');words.append(word);
+                }
+                if (!words.isEmpty()) {
+                    var resolution = tasks.resolveForAssistant(userId,new AssistantTaskSelector(words.toString(),null,null,null,false,null,null,false));
+                    var relevant = resolution.selection().tasks().isEmpty() ? resolution.suggestions() : resolution.selection().tasks();
+                    relevant.stream().limit(6).forEach(t -> ordered.put(t.id(),t));
+                }
+            }
+            initialTasks.forEach(t -> ordered.putIfAbsent(t.id(),t));
+            preview = ordered.values().stream().limit(12).map(this::expose).toList();
+        }
         return preview;
     }
 
@@ -62,7 +86,11 @@ public class PlanningSession {
             for (String name : List.of("query", "group", "status", "priority", "deadlineFrom", "deadlineBefore"))
                 if (selector.has(name) && !selector.get(name).isTextual()) throw new PlanningException("INVALID_SELECTOR");
             var request = json.treeToValue(selector, AssistantTaskSelector.class);
-            var result = tasks.selectForAssistant(userId, request);
+            ru.taskflow.task.api.dto.AssistantTaskSelection result;
+            if (smartSearch) {
+                var resolution = tasks.resolveForAssistant(userId,request);
+                result = resolution.selection();pendingSuggestions = resolution.suggestions();
+            } else result = tasks.selectForAssistant(userId,request);
             if (result.truncated()) throw new PlanningException("SELECTION_LIMIT", "Найдено больше 20 задач. Уточни группу, период или название.");
             if (result.tasks().size() > 1 && !request.all()) throw new PlanningException("AMBIGUOUS", "Подходят несколько задач. Уточни название или явно укажи, что нужно изменить все найденные.");
             return result.tasks().stream().map(this::expose).toList();
@@ -86,7 +114,24 @@ public class PlanningSession {
     }
 
     public JsonNode expand(JsonNode plan) {
+        String instruction = sourceWithoutQuotes();
+        if (instruction.matches("(?s).*(создай|добавь|запиши).*с названием.*"))
+            instruction = instruction.substring(0, instruction.indexOf("с названием"));
+        if (instruction.matches("(?s).*(игнорируй(?:те)?|забудь(?:те)?|отмени(?:те)?)\\s+.{0,50}(инструкци\\p{L}*|системн\\p{L}* правила).*" )
+                || instruction.matches("(?s).*(ignore|disregard|forget|override)\\s+.{0,50}(instructions|system rules).*" )
+                || instruction.matches("(?s).*(?:^|\\n)\\s*(system|developer)\\s*:.*")) {
+            return json.createObjectNode().set("decline",json.createObjectNode().put("reason","unclear")
+                    .put("answer","Напиши, какую задачу нужно добавить или изменить."));
+        }
+        var userRefs = java.util.regex.Pattern.compile("(?U)\\b(?:перенеси|отмени|удали|заверши|закрой|отметь|передвинь|сдвинь)\\s+(?:задачу\\s+)?(t[0-9]+)\\b").matcher(instruction);
+        while (userRefs.find()) {
+            String ref = userRefs.group(1).toUpperCase(Locale.ROOT);
+            if (!issued.contains(ref)) return json.createObjectNode().put("clarification",
+                    "Метка " + ref + " не относится к текущим задачам. Назови задачу полностью.");
+        }
         fields(plan, Set.of("steps", "alternatives", "reason", "clarification", "decline"));
+        if ("past".equals(plan.path("decline").path("reason").asText()) && floatingReminderTime() != null)
+            throw new PlanningException("INVALID_ACTION", "Час без дня означает ближайшее будущее наступление этого часа. Это не просьба напомнить в прошлом; используй reminder_at в ближайший подходящий день.");
         if (plan.has("alternatives")) {
             if (plan.has("steps") || plan.hasNonNull("clarification") || plan.hasNonNull("decline"))
                 throw new PlanningException("MIXED_CONTROL");
@@ -97,14 +142,24 @@ public class PlanningSession {
                     == "create".equals(alternatives.get(1).path("action").path("type").asText()))
                 throw new PlanningException("INVALID_ACTION", "alternatives содержит ровно два шага: один create и одно действие над существующей задачей.");
             var steps = alternatives.deepCopy();
+            var candidate = contextualCandidate();
             for (JsonNode step : steps) {
                 fields(step, Set.of("select", "action"));
                 if (!step.path("action").isObject()) throw new PlanningException("EXPECTED_OBJECT");
+                if (candidate != null && Set.of("complete","cancel").contains(step.path("action").path("type").asText())) {
+                    if (step.path("select").has("ref") && !candidate.get("ref").equals(step.path("select").path("ref").asText()))
+                        throw new PlanningException("INVALID_ACTION", "Выбранная задача не соответствует короткому названию пользователя.");
+                    ((com.fasterxml.jackson.databind.node.ObjectNode)step).set("select",json.createObjectNode().put("ref",(String)candidate.get("ref")));
+                }
                 ((com.fasterxml.jackson.databind.node.ObjectNode) step.get("action")).put("ambiguous_reason", reason);
             }
             return expand(json.createObjectNode().set("steps", steps));
         }
         if (plan.has("reason")) throw new PlanningException("INVALID_ACTION", "reason верхнего уровня используется только с alternatives.");
+        if ("past".equals(plan.path("decline").path("reason").asText()) && !requestsReminder())
+            throw new PlanningException("INVALID_ACTION", "Прошедший deadline допустим; past предназначен для прошедших напоминаний. "
+                    + "Явное новое событие с датой создавай с deadline. Сообщение о выполнении сопоставь с существующей задачей. "
+                    + "Если это разговор без задачи, используй decline chitchat.");
         if (plan.hasNonNull("clarification") || plan.hasNonNull("decline")) {
             if (plan.path("steps").size() != 0) throw new PlanningException("MIXED_CONTROL");
             var control = json.createObjectNode();
@@ -127,19 +182,29 @@ public class PlanningSession {
                 if (!step.has("select")) throw new PlanningException("SELECT_REQUIRED");
                 var selected = select(step.get("select"));
                 if (selected.isEmpty()) throw new PlanningException("NOT_FOUND", "Подходящая задача не найдена. Уточни её название.");
+                if (selected.size() > 1 && !java.util.regex.Pattern.compile("(?U)\\b(вс[её]х?|все[мх]?|всю|весь|кажд\\p{L}*|об[ае]|обоих)\\b")
+                        .matcher(sourceWithoutQuotes()).find())
+                    throw new PlanningException("AMBIGUOUS","Найдено несколько задач. Уточни одну или явно попроси изменить все найденные.");
                 for (var task : selected) {
                     var expanded = resolveReminder(action, task);
                     ((com.fasterxml.jackson.databind.node.ObjectNode) expanded).put("task_ref", (String) task.get("ref"));
                     actions.add(expanded);
-                    if ("reschedule".equals(expanded.path("type").asText()) && expanded.has("reminder_at")) {
-                        var reminder = json.createObjectNode().put("type", "remind").put("task_ref", (String) task.get("ref"));
-                        reminder.set("reminder_at", expanded.remove("reminder_at"));
-                        actions.add(reminder);
-                    }
                 }
             }
             if (actions.size() > 20) throw new PlanningException("ACTION_LIMIT");
         }
+        actions = compileSchedule(actions);
+        if (!requestsReminder()) for (JsonNode action : actions)
+            if (action.hasNonNull("reminder_at")) throw new PlanningException("INVALID_ACTION",
+                    "Пользователь не просил уведомление. Время без просьбы напомнить относится к deadline, не reminder_at. Сохрани все действия.");
+        if (actions.size() == 1 && "create".equals(actions.get(0).path("type").asText())
+                && !actions.get(0).hasNonNull("deadline") && !requestsReminder()
+                && !sourceWithoutQuotes().contains("с названием")
+                && !sourceWithoutQuotes().matches("(?s).*(без\\s+(срок\\p{L}*|дедлайн\\p{L}*)|не\\s+(ставь|указывай|назначай)\\s+(срок|дедлайн)).*")
+                && java.util.regex.Pattern.compile("(?U)\\b(сегодня|завтр[ао]|послезавтра)\\b").matcher(sourceWithoutQuotes()).find())
+            throw new PlanningException("INVALID_ACTION", "В реплике явно назван день, но у create пропущен deadline. "
+                    + "Исправь дату из исходной реплики, включая ошибки диктовки. При отсутствии часа используй 09:00, даже если этот deadline уже прошёл.");
+        actions = contextualChoice(actions);
         validateRequestedValues(actions);
         boolean ambiguous = false;
         for (JsonNode action : actions) if (!action.path("ambiguous_reason").asText().isBlank()) ambiguous = true;
@@ -153,8 +218,55 @@ public class PlanningSession {
         return json.createObjectNode().set("actions", actions);
     }
 
+    private Map<String,Object> contextualCandidate() {
+        if (choiceResolved) return choiceCandidate;
+        choiceResolved = true;
+        if (requestsReminder()) return null;
+        String topic = ContextualChoicePolicy.topic(source);
+        if (topic == null) return null;
+        List<Map<String,Object>> found;
+        if (preview().size() < 12) {
+            found = preview().stream().filter(t -> ContextualChoicePolicy.matches(topic,(String)t.get("title"))).toList();
+        } else {
+            var matches = new LinkedHashMap<String,Map<String,Object>>();
+            for (var task : select(json.createObjectNode().put("query",topic).put("all",true)))
+                if (ContextualChoicePolicy.matches(topic,(String)task.get("title"))) matches.put((String)task.get("ref"),task);
+            if (matches.size() > 1) throw new PlanningException("AMBIGUOUS","Подходят несколько задач. Уточни полное название.");
+            String other = topic.contains("ё") ? topic.replace('ё','е') : topic.contains("е") ? topic.replace('е','ё') : topic;
+            if (!other.equals(topic)) for (var task : select(json.createObjectNode().put("query",other).put("all",true)))
+                if (ContextualChoicePolicy.matches(topic,(String)task.get("title"))) matches.put((String)task.get("ref"),task);
+            found = List.copyOf(matches.values());
+        }
+        if (found.size() > 1) throw new PlanningException("AMBIGUOUS","Подходят несколько задач. Уточни полное название.");
+        if (found.size() == 1 && !ContextualChoicePolicy.sameTitle(source,(String)found.getFirst().get("title"))) choiceCandidate = found.getFirst();
+        return choiceCandidate;
+    }
+
+    private com.fasterxml.jackson.databind.node.ArrayNode contextualChoice(com.fasterxml.jackson.databind.node.ArrayNode actions) {
+        if (actions.size() != 1 || !Set.of("create","complete","cancel").contains(actions.get(0).path("type").asText())) return actions;
+        var candidate = contextualCandidate();if (candidate == null) return actions;
+        var proposed = actions.get(0);
+        if (!"create".equals(proposed.path("type").asText()) && !candidate.get("ref").equals(proposed.path("task_ref").asText()))
+            throw new PlanningException("INVALID_ACTION","Выбранная задача не соответствует короткому названию пользователя.");
+        String type = "create".equals(proposed.path("type").asText()) ? ContextualChoicePolicy.cancel(source) ? "cancel" : "complete" : proposed.path("type").asText();
+        String reason = "Существующее или новое дело";
+        var existing = json.createObjectNode().put("type",type).put("task_ref",(String)candidate.get("ref")).put("ambiguous_reason",reason);
+        var created = json.createObjectNode().put("type","create").put("title",source.strip()).put("ambiguous_reason",reason);
+        var result = json.createArrayNode();
+        if (preferCreate) {result.add(created);result.add(existing);} else {result.add(existing);result.add(created);}
+        return result;
+    }
+
+    private String sourceWithoutQuotes() {
+        return source.toLowerCase(Locale.ROOT).replaceAll("«[^»]*»|“[^”]*”|\"[^\"]*\"", " ");
+    }
+
+    private boolean requestsReminder() {
+        return sourceWithoutQuotes().matches("(?s).*(нап[оа]мн|нап[оа]мин|уведом|оповест|оповещ|маякни|пинган|сигнализируй|не\\s+дай\\s+забыть).*" );
+    }
+
     private void validateRequestedValues(JsonNode actions) {
-        String text = source.toLowerCase(Locale.ROOT).replaceAll("«[^»]*»|“[^”]*”|\"[^\"]*\"", " ");
+        String text = sourceWithoutQuotes();
         var priorityActions = new ArrayList<JsonNode>();var reschedules = new ArrayList<JsonNode>();
         for (JsonNode action : actions) {
             if (action.hasNonNull("priority")) priorityActions.add(action);
@@ -215,8 +327,9 @@ public class PlanningSession {
         if (action.has(DEADLINE_TIME) && (!action.get(DEADLINE_TIME).isTextual()
                 || !action.get(DEADLINE_TIME).asText().matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]") || action.has("new_deadline")))
             throw new PlanningException("INVALID_ACTION", "Для переноса только времени укажи new_deadline_time в HH:mm БЕЗ new_deadline.");
-        if ("create".equals(type) && Set.of("купить", "сделать", "позвонить", "добавить", "создать", "перенести", "удалить", "отменить", "напомнить")
-                    .contains(source.strip().toLowerCase(Locale.ROOT)))
+        if ("create".equals(type) && (Set.of("купить", "сделать", "позвонить", "добавить", "создать", "перенести", "удалить", "отменить", "напомнить")
+                    .contains(source.strip().toLowerCase(Locale.ROOT))
+                    || source.strip().toLowerCase(Locale.ROOT).matches("(добавь|создай|запиши)\\s+(мне\\s+)?(задачу|дело)[.!?]?")))
             throw new PlanningException("INVALID_ACTION", "В исходной реплике только глагол без объекта. Нельзя создавать пустое дело или придумывать объект. Верни decline unclear или clarification.");
         if (action.has(BEFORE_DEADLINE)) {
             JsonNode offset = action.get(BEFORE_DEADLINE);
@@ -238,18 +351,83 @@ public class PlanningSession {
                 throw new PlanningException("TIMEZONE_TRANSITION", "Это время попадает на смену часового пояса. Уточни момент со смещением UTC.");
             expanded.remove(DEADLINE_TIME);expanded.put("new_deadline", local.atZone(zone).toOffsetDateTime().toString());
         }
-        if (!action.has(BEFORE_DEADLINE)) return expanded;
-        Object deadline = "create".equals(action.path("type").asText()) ? action.path("deadline").asText(null)
-                : "reschedule".equals(action.path("type").asText()) ? expanded.path("new_deadline").asText(null) : task.get("deadline");
-        if (deadline == null) throw new PlanningException("DEADLINE_REQUIRED", "У задачи нет срока. Когда напомнить или к какому сроку привязать напоминание?");
-        try {
-            var reminder = OffsetDateTime.parse(deadline.toString()).minusMinutes(action.get(BEFORE_DEADLINE).intValue());
-            expanded.remove(BEFORE_DEADLINE);expanded.put("reminder_at", reminder.toString());
-            return expanded;
-        } catch (RuntimeException e) {
-            throw new PlanningException("INVALID_ACTION", "Для вычисления напоминания нужен полный deadline/new_deadline в ISO8601 со смещением зоны.");
-        }
+        return expanded;
     }
+
+    private LocalTime floatingReminderTime() {
+        String text = sourceWithoutQuotes();
+        if (!requestsReminder() || text.matches("(?s).*(сегодня|завтр|вчера|через|назад|послезавтр|позавчера|срок|дедлайн|начала|понедель|вторник|среду|четверг|пятниц|суббот|воскресен|январ|феврал|март|апрел|мая|июн|июл|август|сентябр|октябр|ноябр|декабр).*" )
+                || text.matches("(?sU).*\\b(?:за|до)\\b.*") || text.matches("(?s).*\\d[./-]\\d.*")) return null;
+        var matcher = java.util.regex.Pattern.compile("(?U)\\b(?:в\\s+|на\\s+(?=\\d{1,2}:))([01]?[0-9]|2[0-3])(?::([0-5][0-9]))?\\s*(утра|дня|вечера|ночи)?\\b").matcher(text);
+        if (!matcher.find()) return null;
+        int hour = Integer.parseInt(matcher.group(1)), minute = matcher.group(2) == null ? 0 : Integer.parseInt(matcher.group(2));
+        String part = matcher.group(3);
+        if (Set.of("дня","вечера").contains(part == null ? "" : part) && hour < 12) hour += 12;
+        if ("ночи".equals(part) && hour == 12) hour = 0;
+        if (matcher.find()) return null;
+        return LocalTime.of(hour,minute);
+    }
+
+    private void normalizeFloatingReminder(com.fasterxml.jackson.databind.node.ObjectNode action) {
+        if (!action.hasNonNull("reminder_at")) return;
+        var time = floatingReminderTime();if (time == null) return;
+        var current = now.atZoneSameInstant(zone);
+        var local = current.toLocalDate().atTime(time);
+        if (!local.atZone(zone).toInstant().isAfter(now.toInstant())) local = local.plusDays(1);
+        if (zone.getRules().getValidOffsets(local).size() != 1)
+            throw new PlanningException("TIMEZONE_TRANSITION","Это время попадает на смену часового пояса. Уточни день и смещение UTC.");
+        action.put("reminder_at",local.atZone(zone).toOffsetDateTime().toString());
+    }
+
+    private com.fasterxml.jackson.databind.node.ArrayNode compileSchedule(com.fasterxml.jackson.databind.node.ArrayNode actions) {
+        var deadlines = new HashMap<String,String>();var terminal = new HashMap<String,String>();
+        for (JsonNode action : actions) {
+            String ref = action.path("task_ref").asText();
+            String type = action.path("type").asText();
+            if ("reschedule".equals(type) && action.hasNonNull("new_deadline")) {
+                String previous = deadlines.put(ref,action.get("new_deadline").asText());
+                if (previous != null && !previous.equals(action.get("new_deadline").asText()))
+                    throw new PlanningException("CONFLICTING_ACTIONS","Для одной задачи указаны разные сроки. Какой оставить?");
+            }
+            if (Set.of("complete","cancel").contains(type)) {
+                String previous = terminal.put(ref,type);
+                if (previous != null && !previous.equals(type)) throw new PlanningException("CONFLICTING_ACTIONS","Задачу завершить или отменить?");
+            }
+        }
+        long absoluteReminders = java.util.stream.StreamSupport.stream(actions.spliterator(),false)
+                .filter(a -> a.hasNonNull("reminder_at")).count();
+        var result = new ArrayList<com.fasterxml.jackson.databind.node.ObjectNode>();
+        for (JsonNode raw : actions) {
+            var action = (com.fasterxml.jackson.databind.node.ObjectNode)raw;
+            String type = action.path("type").asText(),ref = action.path("task_ref").asText();
+            if (("remind".equals(type) || "reschedule".equals(type)) && terminal.containsKey(ref))
+                throw new PlanningException("CONFLICTING_ACTIONS","Нельзя одновременно закрыть задачу и назначить ей новый срок или напоминание. Уточни команду.");
+            if (action.has(BEFORE_DEADLINE)) {
+                Object basis = "create".equals(type) ? action.path("deadline").asText(null)
+                        : "reschedule".equals(type) ? action.path("new_deadline").asText(null)
+                        : deadlines.containsKey(ref) ? deadlines.get(ref) : snapshots.get(ref).get("deadline");
+                if (basis == null) throw new PlanningException("DEADLINE_REQUIRED","У задачи нет срока. Когда напомнить или к какому сроку привязать напоминание?");
+                try {
+                    String at = OffsetDateTime.parse(basis.toString()).minusMinutes(action.get(BEFORE_DEADLINE).intValue()).toString();
+                    action.remove(BEFORE_DEADLINE);action.put("reminder_at",at);
+                } catch (java.time.format.DateTimeParseException e) {
+                    throw new PlanningException("INVALID_ACTION","Для вычисления напоминания нужен полный срок ISO8601 со смещением зоны.");
+                }
+            }
+            if (absoluteReminders == 1) normalizeFloatingReminder(action);
+            result.add(action);
+            if ("reschedule".equals(type) && action.has("reminder_at")) {
+                var reminder = json.createObjectNode().put("type","remind").put("task_ref",ref);
+                reminder.set("reminder_at",action.remove("reminder_at"));result.add(reminder);
+            }
+        }
+        if (result.size()>20) throw new PlanningException("ACTION_LIMIT");
+        if (result.stream().noneMatch(a -> !a.path("ambiguous_reason").asText().isBlank()))
+            result.sort(Comparator.comparing(a -> "remind".equals(a.path("type").asText())));
+        var compiled = json.createArrayNode();result.forEach(compiled::add);return compiled;
+    }
+
+    public List<Map<String,Object>> retrievalHints() { return pendingSuggestions.stream().limit(3).map(this::expose).toList(); }
 
     public List<LlmToolCall> finish(JsonNode result) {
         if (failure != null) throw failure;
