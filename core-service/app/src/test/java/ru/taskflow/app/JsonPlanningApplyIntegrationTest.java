@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {
-        "app.telegram.bot-token=", "app.public-base-url=", "app.assistant.planning-mode=BATCH_PLAN"})
+        "app.telegram.bot-token=", "app.public-base-url="})
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class JsonPlanningApplyIntegrationTest {
     @Container static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");

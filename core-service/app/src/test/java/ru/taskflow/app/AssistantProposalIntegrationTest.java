@@ -42,7 +42,7 @@ import static org.mockito.Mockito.when;
  * Контур ассистента (промпт, ToolRegistry, AgentLoop, AssistantServiceImpl) не
  * тронут — подменена только точка выхода к внешней модели.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "app.assistant.planning-mode=DIRECT")
 @Testcontainers
 class AssistantProposalIntegrationTest {
     @MockBean

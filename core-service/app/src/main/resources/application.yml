@@ -69,7 +69,7 @@ server:
 app:
   assistant:
     experimental-reasoning-effort: ${ASSISTANT_EXPERIMENTAL_REASONING_EFFORT:low}
-    planning-mode: ${ASSISTANT_PLANNING_MODE:DIRECT}
+    planning-mode: ${ASSISTANT_PLANNING_MODE:BATCH_PLAN}
     code-mode:
       node: ${CODE_MODE_NODE:node}
       runner: ${CODE_MODE_RUNNER:code-runtime/runner.mjs}

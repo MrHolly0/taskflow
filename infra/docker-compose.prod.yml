@@ -49,7 +49,7 @@ services:
       dockerfile: core-service/Dockerfile
     environment:
       ASSISTANT_EXPERIMENTAL_REASONING_EFFORT: ${ASSISTANT_EXPERIMENTAL_REASONING_EFFORT:-low}
-      ASSISTANT_PLANNING_MODE: ${ASSISTANT_PLANNING_MODE:-DIRECT}
+      ASSISTANT_PLANNING_MODE: ${ASSISTANT_PLANNING_MODE:-BATCH_PLAN}
       CODE_MODE_RUNNER: /app/code-runtime/runner.mjs
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:?DB_NAME is required}

@@ -16,7 +16,7 @@ public class PlanningRouter implements AssistantPlanner {
     private final ExperimentalAgentLoop experimental;
     private final PlanningMode mode;
     public PlanningRouter(AgentLoop direct, ExperimentalAgentLoop experimental,
-            @Value("${app.assistant.planning-mode:DIRECT}") String mode) {
+            @Value("${app.assistant.planning-mode:BATCH_PLAN}") String mode) {
         this.direct = direct; this.experimental = experimental;
         this.mode = PlanningMode.valueOf(mode.toUpperCase(Locale.ROOT));
     }

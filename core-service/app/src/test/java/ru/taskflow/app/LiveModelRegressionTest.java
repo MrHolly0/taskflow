@@ -50,7 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * может зависеть от чужого impl-модуля. Здесь, в composition root, полный
  * граф бинов уже собран, включая настоящий AgentLoop и настоящий шлюз.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = "app.assistant.planning-mode=DIRECT")
 @Testcontainers
 @Tag("live")
 class LiveModelRegressionTest {
