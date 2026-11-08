@@ -1,0 +1,13 @@
+databaseChangeLog:
+  - changeSet:
+      id: 044-task-word-search
+      author: taskflow
+      changes:
+        - sql:
+            sql: >-
+              CREATE INDEX idx_tasks_word_search ON tasks USING GIN
+              (to_tsvector('russian', COALESCE(title,'') || ' ' || COALESCE(description,'')))
+              WHERE is_deleted = false
+      rollback:
+        - sql:
+            sql: DROP INDEX IF EXISTS idx_tasks_word_search

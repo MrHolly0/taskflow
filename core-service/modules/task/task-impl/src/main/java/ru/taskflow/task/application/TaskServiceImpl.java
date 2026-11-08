@@ -21,6 +21,7 @@ import ru.taskflow.task.api.TaskStatus;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
 import ru.taskflow.task.api.dto.AssistantTaskSelector;
 import ru.taskflow.task.api.dto.AssistantTaskSelection;
+import ru.taskflow.task.api.dto.AssistantTaskResolution;
 import ru.taskflow.task.api.dto.DigestResponse;
 import ru.taskflow.task.api.dto.FocusResponse;
 import ru.taskflow.task.api.dto.FocusHintResponse;
@@ -158,6 +159,29 @@ public class TaskServiceImpl implements TaskService {
                 .collect(Collectors.toMap(TaskJpaEntity::getId, taskMapper::toResponse));
         return new AssistantTaskSelection(visible.stream().map(byId::get)
                 .filter(Objects::nonNull).toList(), ids.size() > 20);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AssistantTaskResolution resolveForAssistant(UUID userId, AssistantTaskSelector selector) {
+        if (selector.query() != null && selector.query().length() > 200 || selector.group() != null && selector.group().length() > 100)
+            throw new ValidationException("слишком длинное условие поиска");
+        String raw = selector.query() == null || selector.query().isBlank() ? null : selector.query().strip();
+        String literal = raw == null ? null : "%" + raw.replace("!","!!").replace("%","!%").replace("_","!_") + "%";
+        String words = raw != null && raw.matches("[\\p{L}\\p{N}\\s]+") ? raw : null;
+        var hits = taskRepository.resolveAssistantIds(userId,literal,words,selector.group(),
+                selector.status() == null ? null : selector.status().name(),selector.priority() == null ? null : selector.priority().name(),
+                selector.overdue(),OffsetDateTime.now(clock),selector.deadlineFrom(),selector.deadlineBefore());
+        if (hits.isEmpty()) return new AssistantTaskResolution(new AssistantTaskSelection(List.of(),false),List.of());
+        int tier = hits.getFirst().getMatchTier();
+        var ids = hits.stream().filter(h -> selector.all() && tier < 2 ? h.getMatchTier() < 2 : h.getMatchTier() == tier)
+                .map(TaskRepository.AssistantSearchHit::getId).toList();
+        var visible = ids.stream().limit(tier == 2 ? 6 : 20).toList();
+        var byId = taskRepository.findSelectedForAssistant(userId,visible).stream()
+                .collect(Collectors.toMap(TaskJpaEntity::getId,taskMapper::toResponse));
+        var result = visible.stream().map(byId::get).filter(Objects::nonNull).toList();
+        return tier == 2 ? new AssistantTaskResolution(new AssistantTaskSelection(List.of(),false),result)
+                : new AssistantTaskResolution(new AssistantTaskSelection(result,ids.size()>20),List.of());
     }
 
     /**

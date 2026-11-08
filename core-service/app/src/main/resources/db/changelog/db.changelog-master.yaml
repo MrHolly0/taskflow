@@ -85,3 +85,5 @@ databaseChangeLog:
       file: db/changelog/042-notification-delivery-lease.yaml
   - include:
       file: db/changelog/043-task-read-indexes.yaml
+  - include:
+      file: db/changelog/044-task-word-search.yaml

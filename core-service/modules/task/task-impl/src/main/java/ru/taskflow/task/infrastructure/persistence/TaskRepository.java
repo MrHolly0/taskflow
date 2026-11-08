@@ -39,6 +39,50 @@ public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
             @Param("overdue") boolean overdue, @Param("now") OffsetDateTime now,
             @Param("from") OffsetDateTime from, @Param("before") OffsetDateTime before);
 
+    interface AssistantSearchHit {
+        UUID getId();
+        int getMatchTier();
+    }
+
+    @Query(value = """
+            WITH terms AS (
+                SELECT CASE
+                    WHEN lexeme IN ('провер','проверк') THEN to_tsquery('simple','провер:*')
+                    WHEN lexeme IN ('подготов','подготовк') THEN to_tsquery('simple','подготов:*')
+                    WHEN lexeme IN ('переда','передач') THEN to_tsquery('simple','переда:*')
+                    WHEN lexeme IN ('заказ','заказа') THEN to_tsquery('simple','заказ:*')
+                    ELSE plainto_tsquery('simple',lexeme) END AS term
+                FROM unnest(tsvector_to_array(to_tsvector('russian',COALESCE(CAST(:wordQuery AS text),'')))) tokens(lexeme)
+            ), q AS (
+                SELECT string_agg('(' || term::text || ')',' & ')::tsquery AS all_terms,
+                       string_agg('(' || term::text || ')',' | ')::tsquery AS any_terms
+                FROM terms WHERE term::text <> ''
+            )
+            SELECT t.id AS id,
+                CASE WHEN CAST(:query AS varchar) IS NULL OR LOWER(t.title) LIKE LOWER(:query) ESCAPE '!'
+                        OR LOWER(COALESCE(t.description,'')) LIKE LOWER(:query) ESCAPE '!' THEN 0
+                     WHEN to_tsvector('russian',COALESCE(t.title,'') || ' ' || COALESCE(t.description,'')) @@ q.all_terms THEN 1
+                     ELSE 2 END AS "matchTier"
+            FROM tasks t LEFT JOIN groups g ON g.id = t.group_id CROSS JOIN q
+            WHERE t.user_id = :userId AND t.is_deleted = false
+              AND ((CAST(:status AS varchar) IS NULL AND t.status IN ('TODO','IN_PROGRESS')) OR t.status = :status)
+              AND (CAST(:query AS varchar) IS NULL OR LOWER(t.title) LIKE LOWER(:query) ESCAPE '!'
+                   OR LOWER(COALESCE(t.description,'')) LIKE LOWER(:query) ESCAPE '!'
+                   OR to_tsvector('russian',COALESCE(t.title,'') || ' ' || COALESCE(t.description,'')) @@ q.all_terms
+                   OR to_tsvector('russian',COALESCE(t.title,'') || ' ' || COALESCE(t.description,'')) @@ q.any_terms)
+              AND (CAST(:groupName AS varchar) IS NULL OR LOWER(g.name) = LOWER(:groupName))
+              AND (CAST(:priority AS varchar) IS NULL OR t.priority = :priority)
+              AND (:overdue = false OR t.deadline < :now)
+              AND (CAST(:from AS timestamptz) IS NULL OR t.deadline >= :from)
+              AND (CAST(:before AS timestamptz) IS NULL OR t.deadline < :before)
+            ORDER BY "matchTier", ts_rank(to_tsvector('russian',COALESCE(t.title,'') || ' ' || COALESCE(t.description,'')),q.any_terms) DESC,
+                     t.created_at,t.id LIMIT 21
+            """,nativeQuery = true)
+    List<AssistantSearchHit> resolveAssistantIds(@Param("userId") UUID userId,@Param("query") String query,
+            @Param("wordQuery") String wordQuery,@Param("groupName") String groupName,@Param("status") String status,
+            @Param("priority") String priority,@Param("overdue") boolean overdue,@Param("now") OffsetDateTime now,
+            @Param("from") OffsetDateTime from,@Param("before") OffsetDateTime before);
+
     @Query("""
             SELECT t FROM TaskJpaEntity t
             LEFT JOIN FETCH t.group

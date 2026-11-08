@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
 import ru.taskflow.task.api.dto.AssistantTaskSelector;
 import ru.taskflow.task.api.dto.AssistantTaskSelection;
+import ru.taskflow.task.api.dto.AssistantTaskResolution;
 import ru.taskflow.task.api.dto.DigestResponse;
 import ru.taskflow.task.api.dto.FocusResponse;
 import ru.taskflow.task.api.dto.FocusHintResponse;
@@ -25,6 +26,8 @@ public interface TaskService {
 
     AssistantTaskSelection selectForAssistant(UUID userId,
             AssistantTaskSelector selector);
+
+    AssistantTaskResolution resolveForAssistant(UUID userId, AssistantTaskSelector selector);
 
     TaskResponse create(UUID userId, CreateTaskRequest request);
 
