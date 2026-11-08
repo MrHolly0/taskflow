@@ -680,4 +680,22 @@ class PlanningModesIntegrationTest {
         assertThat(result.actions()).isEmpty();assertThat(result.rejections()).contains("AMBIGUOUS");
     }
 
+    @Test void blockedRenameKeepsOtherValidCommandsAndAVisibleRejection() throws Exception {
+        UUID owner=user();var target=task(owner,"Проверить договор аренды",null,null);task(owner,"Сдать отчёт",null,null);
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"complete\"}},{\"select\":{\"query\":\"отчёт\"},\"action\":{\"type\":\"update\",\"title\":\"Квартальный отчёт\"}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Договор аренды проверил, а отчёт назови квартальным",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).extracting(a -> a.targetTaskId()).containsExactly(target.id());
+        assertThat(result.rejections()).singleElement().asString().startsWith("смена названия отклонена:");
+        assertThat(result.passes()).isEqualTo(1);
+    }
+
+    @Test void signalIsAnExplicitReminderRequestWithoutChangingTheDeadline() throws Exception {
+        UUID owner=user();var deadline=OffsetDateTime.now().plusDays(8).withNano(0);var target=task(owner,"Оплатить аренду склада",null,deadline);
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":1080}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Поставь сигнал об оплате аренды склада за 18 часов до дедлайна",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(1);assertThat(result.actions().getFirst().targetTaskId()).isEqualTo(target.id());
+        assertThat(OffsetDateTime.parse(result.actions().getFirst().payload().get("reminder_at").toString()).toInstant())
+                .isEqualTo(deadline.minusHours(18).toInstant());
+    }
+
 }

@@ -62,7 +62,8 @@ public class ExperimentalAgentLoop {
                 var calls = session.finish(result);
                 AgentOutcome validated = validator.validatePlan(user, text,
                         new LlmToolResponse(calls, null, inputTokens, outputTokens, false), session.window(), start, modelMs);
-                if (mode == PlanningMode.BATCH_PLAN && !validated.rejections().isEmpty())
+                if (mode == PlanningMode.BATCH_PLAN && !validated.rejections().isEmpty()
+                        && (validated.actions().isEmpty() || !validated.rejections().stream().allMatch(TitleChangeGuard::isPolicyRejection)))
                     throw new PlanningException("ACTION_VALIDATION", String.join("; ", validated.rejections()));
                 return new AgentOutcome(validated.actions(), validated.rejections(), validated.clarification(),
                         validated.clarificationOptions(), validated.assistantText(), validated.window(), attempt + 1,

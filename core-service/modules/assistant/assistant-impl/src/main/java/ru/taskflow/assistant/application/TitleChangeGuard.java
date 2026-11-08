@@ -21,6 +21,7 @@ import java.util.regex.Pattern;
 @Component
 public class TitleChangeGuard {
 
+    private static final String REJECTION_PREFIX = "смена названия отклонена: ";
     private static final Pattern NON_WORD = Pattern.compile("[^\\p{L}\\p{N}\\s]");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
@@ -43,11 +44,15 @@ public class TitleChangeGuard {
                 continue;
             }
 
-            rejections.add("смена названия отклонена: текущее название задачи не упомянуто в реплике ("
+            rejections.add(REJECTION_PREFIX + "текущее название задачи не упомянуто в реплике ("
                     + currentTitle + ")");
         }
 
         return new GuardResult(renumber(kept), rejections);
+    }
+
+    public static boolean isPolicyRejection(String reason) {
+        return reason != null && reason.startsWith(REJECTION_PREFIX);
     }
 
     private boolean isTitleChange(ProposedAction action) {

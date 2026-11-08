@@ -262,7 +262,7 @@ public class PlanningSession {
     }
 
     private boolean requestsReminder() {
-        return sourceWithoutQuotes().matches("(?s).*(нап[оа]мн|нап[оа]мин|уведом|оповест|оповещ|маякни|пинган|сигнализируй|не\\s+дай\\s+забыть).*" );
+        return sourceWithoutQuotes().matches("(?sU).*(нап[оа]мн|нап[оа]мин|уведом|оповест|оповещ|маякни|пинган|сигнализируй|(?:поставь|сделай|дай|пришли)\\s+(?:мне\\s+)?сигнал\\b|не\\s+дай\\s+забыть).*" );
     }
 
     private void validateRequestedValues(JsonNode actions) {
