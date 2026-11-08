@@ -100,6 +100,9 @@ public class TaskReminderService {
         if (task.getStatus() == TaskStatus.DONE || task.getStatus() == TaskStatus.CANCELLED) {
             throw new ValidationException("Нельзя добавить напоминание для закрытой задачи");
         }
+        // TaskService удерживает блокировку задачи: повтор команды и совпадение
+        // с напоминанием по умолчанию не должны создавать второе уведомление.
+        if (reminderRepository.existsByTaskIdAndStatusAndFireAt(task.getId(), ReminderStatus.PENDING, fireAt)) return;
         createReminder(userId, task, fireAt, null, chainStartOrNull(task));
     }
 

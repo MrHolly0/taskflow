@@ -364,4 +364,14 @@ class TaskReminderServiceTest {
         when(reminderRepository.findForUpdate(reminder.getId(), task.getId())).thenReturn(Optional.of(reminder));
     }
 
+    @Test
+    void standaloneReminderAtAnAlreadyPendingInstantDoesNotScheduleADuplicate() {
+        var task = task(TaskPriority.MEDIUM,now.plusDays(1));
+        var at = now.plusHours(2);
+        when(reminderRepository.existsByTaskIdAndStatusAndFireAt(task.getId(),ReminderStatus.PENDING,at)).thenReturn(true);
+        service.createStandaloneReminder(userId,task,at);
+        verify(reminderRepository,never()).save(any());
+        org.mockito.Mockito.verifyNoInteractions(notificationService);
+    }
+
 }

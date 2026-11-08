@@ -47,6 +47,8 @@ public interface ReminderRepository extends JpaRepository<ReminderJpaEntity, UUI
     // закрыта — CANCELLED).
     List<ReminderJpaEntity> findByStatusAndChainStepIsNotNullAndFireAtBefore(ReminderStatus status, OffsetDateTime before);
 
+    boolean existsByTaskIdAndStatusAndFireAt(UUID taskId, ReminderStatus status, OffsetDateTime fireAt);
+
     // А1: для карточки одной задачи.
     List<ReminderJpaEntity> findByTaskIdAndStatusOrderByFireAtAsc(UUID taskId, ReminderStatus status);
 

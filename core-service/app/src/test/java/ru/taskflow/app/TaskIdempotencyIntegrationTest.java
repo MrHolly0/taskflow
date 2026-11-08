@@ -369,6 +369,15 @@ class TaskIdempotencyIntegrationTest {
         throw new AssertionError("Планировщик не дождался блокировки задачи");
     }
 
+    @Test
+    void concurrentIdenticalReminderRequestsCreateOneReminderAndNotification() throws Exception {
+        UUID user = newUser();var task = tasks.createQuick(user, request("Проверить договор"));
+        var at = java.time.OffsetDateTime.now().plusDays(2).withNano(0);
+        concurrently(() -> {tasks.scheduleReminder(user,task.id(),at);return true;});
+        assertThat(tasks.getReminders(user,task.id())).singleElement().satisfies(r -> assertThat(r.fireAt().toInstant()).isEqualTo(at.toInstant()));
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications WHERE task_id=? AND sent=false",Long.class,task.id())).isEqualTo(1);
+    }
+
     private UUID newUser() {
         long telegramId = ThreadLocalRandom.current().nextLong(1_000_000_000L, 9_999_999_999L);
         return users.findOrCreateByTelegram(telegramId, "retries_" + telegramId, "Test", "User").id();
