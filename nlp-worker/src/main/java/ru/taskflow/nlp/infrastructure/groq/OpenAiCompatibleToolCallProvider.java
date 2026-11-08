@@ -74,6 +74,7 @@ public class OpenAiCompatibleToolCallProvider implements ToolCallProvider {
             request.remove("tools");
             request.remove("tool_choice");
             request.put("response_format", Map.of("type", "json_object"));
+            request.put("max_completion_tokens", 3000);
         }
         request.put("temperature", 0.1);
         if (req.reasoningEffort() != null && model.startsWith("openai/gpt-oss-"))

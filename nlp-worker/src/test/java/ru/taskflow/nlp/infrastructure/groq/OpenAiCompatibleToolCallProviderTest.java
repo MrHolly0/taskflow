@@ -293,6 +293,7 @@ class OpenAiCompatibleToolCallProviderTest {
         assertThat(capturedBody.has("tools")).isFalse();
         assertThat(capturedBody.has("tool_choice")).isFalse();
         assertThat(capturedBody.path("response_format").path("type").asText()).isEqualTo("json_object");
+        assertThat(capturedBody.path("max_completion_tokens").asInt()).isEqualTo(3000);
     }
 
     @Test void forwardsDeclaredRequiredTool() {

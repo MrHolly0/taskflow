@@ -247,4 +247,17 @@ class NlpWorkerClientTest {
     private static String decodeField(String value) {
         return new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
     }
+    @Test void jsonPlanningOptionsAndRawTextSurviveTheWorkerTransport() {
+        server.expect(requestTo(TOOL_CALL_URL)).andExpect(method(HttpMethod.POST)).andExpect(request -> {
+            capturedBody = objectMapper.readTree(((MockClientHttpRequest)request).getBodyAsString());
+        }).andRespond(withSuccess("{\"toolCalls\":[],\"text\":\"{\\\"clarification\\\":\\\"Какую задачу?\\\"}\",\"inputTokens\":100,\"outputTokens\":20}",MediaType.APPLICATION_JSON));
+        var response = client.callWithTools(new LlmToolRequest(List.of(LlmMessage.user("Проверить договор")),List.of(),"low",null,true));
+        server.verify();
+        assertThat(capturedBody.path("jsonOutput").asBoolean()).isTrue();
+        assertThat(capturedBody.path("reasoningEffort").asText()).isEqualTo("low");
+        assertThat(response.failed()).isFalse();assertThat(response.toolCalls()).isEmpty();
+        assertThat(response.text()).isEqualTo("{\"clarification\":\"Какую задачу?\"}");
+        assertThat(response.inputTokens()).isEqualTo(100);assertThat(response.outputTokens()).isEqualTo(20);
+    }
+
 }
