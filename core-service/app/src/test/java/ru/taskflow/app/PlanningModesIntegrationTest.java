@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {"app.telegram.bot-token=", "app.public-base-url="})
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {"app.telegram.bot-token=", "app.public-base-url=", "app.assistant.experimental-reasoning-effort=low"})
 @Testcontainers
 @org.springframework.test.annotation.DirtiesContext(classMode=org.springframework.test.annotation.DirtiesContext.ClassMode.AFTER_CLASS)
 class PlanningModesIntegrationTest {
@@ -71,7 +71,7 @@ class PlanningModesIntegrationTest {
         assertThat(outcome.inputTokens()).isEqualTo(123);
         assertThat(outcome.passes()).isEqualTo(1);
         var request=org.mockito.ArgumentCaptor.forClass(LlmToolRequest.class);verify(model).callWithTools(request.capture());
-        assertThat(request.getValue().messages().toString()).doesNotContain("Обычная задача 84", "Сейчас активных задач нет").contains("Список задач не передан");
+        assertThat(request.getValue().messages().toString()).doesNotContain("Обычная задача 84", "Сейчас активных задач нет").contains("задачи-кандидаты (неполный список");
     }
     @ParameterizedTest @EnumSource(value=PlanningMode.class,names={"BATCH_PLAN","CODE_MODE"})
     void expandsGroupSelectionAndKeepsOtherUsersPrivate(PlanningMode mode) throws Exception {
@@ -100,7 +100,7 @@ class PlanningModesIntegrationTest {
     }
     @Test void inventedReferencesAndUnsafeCodeAreRejected() throws Exception {
         UUID user=user();task(user,"Своя задача",null,null);
-        reply(PlanningMode.CODE_MODE,"{}","return {actions:[{type:'complete',task_ref:'T1'}]};");
+        reply(PlanningMode.CODE_MODE,"{}","return {actions:[{type:'complete',task_ref:'T999'}]};");
         assertThat(planner.run(PlanningMode.CODE_MODE,user,"Завершить задачу",ZoneId.of("UTC"),AssistantEntryPoint.CHAT).rejections()).contains("UNISSUED_REFERENCE");
         reply(PlanningMode.CODE_MODE,"{}","return process.env;");
         assertThat(planner.run(PlanningMode.CODE_MODE,user,"Проверить задачу",ZoneId.of("UTC"),AssistantEntryPoint.CHAT).actions()).isEmpty();
@@ -191,6 +191,97 @@ class PlanningModesIntegrationTest {
         }
         assertThat(tasks.findById(user, document.id()).status()).isEqualTo(TaskStatus.TODO);
         assertThat(tasks.findById(user, report.id()).deadline()).isBefore(OffsetDateTime.now());
+    }
+
+    @ParameterizedTest @EnumSource(value=PlanningMode.class,names={"BATCH_PLAN","CODE_MODE"})
+    void usesIssuedCandidatesWithoutAnExtraSearch(PlanningMode mode) throws Exception {
+        UUID user = user();
+        var task = task(user, "Встреча с руководителем", "Учёба", null);
+        String ref = contexts.build(user).refs().entrySet().stream().filter(e -> e.getValue().equals(task.id()))
+                .findFirst().orElseThrow().getKey();
+        reply(mode, json.writeValueAsString(Map.of("steps", List.of(Map.of("select", Map.of("ref", ref),
+                        "action", Map.of("type", "complete"))))),
+                "return {actions:api.tasks.map(t=>({type:'complete',task_ref:t.ref}))};");
+        var outcome = planner.run(mode, user, "Встреча с руководителем завершена",
+                ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.rejections()).isEmpty();
+        assertThat(outcome.actions()).extracting(a -> a.targetTaskId()).containsExactly(task.id());
+    }
+
+    @Test
+    void repairsReminderWithoutTargetAsANewTaskWithReminder() throws Exception {
+        UUID user = user();
+        var at = OffsetDateTime.now().plusDays(1).withNano(0).toString();
+        when(model.callWithTools(any())).thenReturn(
+                new LlmToolResponse(List.of(new LlmToolCall("p1", "execute_code",
+                        json.writeValueAsString(Map.of("code", "return {actions:[{type:'remind',title:'Проверить почту',reminder_at:'" + at + "'}]};")))), null, 10, 20, false),
+                new LlmToolResponse(List.of(new LlmToolCall("p2", "execute_code",
+                        json.writeValueAsString(Map.of("code", "return {actions:[{type:'create',title:'Проверить почту',reminder_at:'" + at + "'}]};")))), null, 30, 40, false));
+        var outcome = planner.run(PlanningMode.CODE_MODE, user, "Напомни завтра проверить почту",
+                ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.rejections()).isEmpty();
+        assertThat(outcome.actions()).singleElement().satisfies(action -> {
+            assertThat(action.type()).isEqualTo(AssistantActionType.CREATE);
+            assertThat(action.payload()).containsEntry("reminder_at", at);
+        });
+        assertThat(outcome.passes()).isEqualTo(2);
+        assertThat(outcome.inputTokens()).isEqualTo(40);
+        var requests = org.mockito.ArgumentCaptor.forClass(LlmToolRequest.class);
+        verify(model, times(2)).callWithTools(requests.capture());
+        assertThat(requests.getAllValues()).extracting(LlmToolRequest::reasoningEffort).containsExactly("low", "medium");
+    }
+
+    @Test void acceptsJsonResponseWithoutToolCalls() throws Exception {
+        UUID user = user();
+        var target = task(user, "Проверить документы", "Учёба", null);
+        String ref = contexts.build(user).refs().entrySet().stream().filter(e -> e.getValue().equals(target.id()))
+                .findFirst().orElseThrow().getKey();
+        String plan = json.writeValueAsString(Map.of("steps", List.of(Map.of(
+                "select", Map.of("ref", ref), "action", Map.of("type", "complete")))));
+        when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(), plan, 10, 20, false));
+        var outcome = planner.run(PlanningMode.BATCH_PLAN, user, "Документы проверены",
+                ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.actions()).extracting(a -> a.targetTaskId()).containsExactly(target.id());
+        var request = org.mockito.ArgumentCaptor.forClass(LlmToolRequest.class);
+        verify(model).callWithTools(request.capture());
+        assertThat(request.getValue().jsonOutput()).isTrue();
+        assertThat(request.getValue().requiredTool()).isNull();
+    }
+
+    @ParameterizedTest @EnumSource(value=PlanningMode.class,names={"BATCH_PLAN","CODE_MODE"})
+    void explicitCancellationDoesNotCreateAnUnrequestedAlternative(PlanningMode mode) throws Exception {
+        UUID user = user();
+        var target = task(user, "Сходить в спортзал", null, null);
+        String ref = contexts.build(user).refs().entrySet().stream().filter(e -> e.getValue().equals(target.id()))
+                .findFirst().orElseThrow().getKey();
+        reply(mode, json.writeValueAsString(Map.of("steps", List.of(Map.of("select", Map.of("ref", ref),
+                        "action", Map.of("type", "cancel"))))),
+                "return {actions:[{type:'cancel',task_ref:'" + ref + "'}]};");
+        var outcome = planner.run(mode, user, "отмени поход в спортзал",
+                ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.actions()).singleElement().satisfies(action -> {
+            assertThat(action.type()).isEqualTo(AssistantActionType.CANCEL);
+            assertThat(action.targetTaskId()).isEqualTo(target.id());
+        });
+        assertThat(outcome.ambiguous()).isFalse();
+    }
+
+    @ParameterizedTest @EnumSource(value=PlanningMode.class,names={"BATCH_PLAN","CODE_MODE"})
+    void retainsAnExplicitChoiceWithoutAddingOtherActions(PlanningMode mode) throws Exception {
+        UUID user = user();
+        var target = task(user, "Кино с другом", null, null);
+        String ref = contexts.build(user).refs().entrySet().stream().filter(e -> e.getValue().equals(target.id()))
+                .findFirst().orElseThrow().getKey();
+        reply(mode, json.writeValueAsString(Map.of("steps", List.of(
+                        Map.of("select", Map.of("ref", ref), "action", Map.of("type", "complete", "ambiguous_reason", "Два прочтения")),
+                        Map.of("action", Map.of("type", "create", "title", "закрыть кино", "ambiguous_reason", "Два прочтения"))))),
+                "return {actions:[{type:'complete',task_ref:'" + ref + "',ambiguous_reason:'Два прочтения'},"
+                        + "{type:'create',title:'закрыть кино',ambiguous_reason:'Два прочтения'}]};");
+        var outcome = planner.run(mode, user, "закрыть кино", ZoneId.of("Europe/Moscow"), AssistantEntryPoint.CHAT);
+        assertThat(outcome.ambiguous()).isTrue();
+        assertThat(outcome.actions()).hasSize(2);
+        assertThat(outcome.actions().get(0).accepted()).isTrue();
+        assertThat(outcome.actions().get(1).accepted()).isFalse();
     }
 
 }

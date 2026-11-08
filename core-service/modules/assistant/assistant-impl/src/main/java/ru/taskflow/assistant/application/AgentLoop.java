@@ -82,8 +82,17 @@ public class AgentLoop implements AssistantPlanner {
             TaskContextWindow window, Instant start, long modelLatencyMs) {
         if (response.toolCalls().stream().anyMatch(call -> ToolRegistry.SEARCH_TASKS.equals(call.name())))
             throw new IllegalArgumentException("Поиск должен завершиться до проверки плана");
-        AgentOutcome result = runFirstPass(userId, text, List.of(), List.of(), response, window, start);
-        return withLatencies(result, Duration.between(start, clock.instant()).toMillis(), modelLatencyMs);
+        ParsedToolCalls parsed = toolCallParser.parse(toDomainCalls(response.toolCalls()), window);
+        DuplicateGuard.GuardResult guarded = duplicateGuard.filter(parsed.actions(), window);
+        TitleChangeGuard.GuardResult titled = titleChangeGuard.filter(guarded.actions(), window, text);
+        List<String> rejections = new ArrayList<>(parsed.rejections());
+        rejections.addAll(guarded.rejections());
+        rejections.addAll(titled.rejections());
+        String answer = parsed.isDeclined() ? parsed.declineAnswer() : response.text();
+        return new AgentOutcome(titled.actions(), rejections, parsed.clarification(), parsed.clarificationOptions(),
+                answer, window, 1, false, parsed.ambiguous(), parsed.ambiguityReason(),
+                response.inputTokens(), response.outputTokens(), Duration.between(start, clock.instant()).toMillis(),
+                modelLatencyMs, 0, parsed.declineReason());
     }
 
     private AgentOutcome runFirstPass(UUID userId, String userText, List<LlmMessage> historyPass1,
