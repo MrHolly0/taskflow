@@ -12,6 +12,8 @@ import subprocess
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--allow-live", action="store_true", help="разрешить передачу синтетических реплик в Groq и расход квоты")
+    parser.add_argument("--suite", choices=("dataset", "large-context"), default="dataset")
+    parser.add_argument("--task-counts", default="100,200", help="размеры аккаунтов для large-context")
     parser.add_argument("--dataset", default="docs/vkr/dataset/nlp-dataset.json")
     parser.add_argument("--repeats", type=int, choices=(1, 2, 3), default=1)
     parser.add_argument("--run-name", default="run-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S"))
@@ -37,7 +39,10 @@ def main():
         parser.error("неверный или повторяющийся режим")
     root = Path(__file__).resolve().parents[1]
     dataset = (root / args.dataset).resolve()
-    if not dataset.is_file():
+    if args.suite == "large-context" and (not re.fullmatch(r"(?:100|200)(?:,(?:100|200))*", args.task_counts)
+                                          or len(set(args.task_counts.split(","))) != len(args.task_counts.split(","))):
+        parser.error("task-counts допускает 100, 200 или 100,200 без повторов")
+    if args.suite == "dataset" and not dataset.is_file():
         parser.error("файл датасета не найден")
     env = os.environ.copy()
     if not env.get("GROQ_API_KEY"):
@@ -68,6 +73,7 @@ def main():
         PLANNING_LIVE_BUDGET_FILE=str(budget),
         PLANNING_LIVE_CALL_LIMIT=str(args.call_limit),
         PLANNING_DATASET=str(dataset),
+        PLANNING_TASK_COUNTS=args.task_counts,
         PLANNING_REPEATS=str(args.repeats),
         PLANNING_RUN_NAME=args.run_name,
         PLANNING_MODES=args.modes,
@@ -91,7 +97,8 @@ def main():
     print(f"Лог: {log}\nОтчёт: {report}", flush=True)
     with log.open("w") as output:
         status = subprocess.run(
-            ["./gradlew", ":core-service:app:liveTest", "--tests", "*PlanningDatasetLiveTest",
+            ["./gradlew", ":core-service:app:liveTest", "--tests",
+             "*PlanningLargeContextLiveTest" if args.suite == "large-context" else "*PlanningDatasetLiveTest",
              "--no-daemon", "--max-workers=1",
              "-Dorg.gradle.jvmargs=-Xmx512m -XX:ActiveProcessorCount=2"],
             cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT).returncode
