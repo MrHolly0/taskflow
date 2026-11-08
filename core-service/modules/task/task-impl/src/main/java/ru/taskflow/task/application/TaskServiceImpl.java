@@ -19,6 +19,8 @@ import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskSource;
 import ru.taskflow.task.api.TaskStatus;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
+import ru.taskflow.task.api.dto.AssistantTaskSelector;
+import ru.taskflow.task.api.dto.AssistantTaskSelection;
 import ru.taskflow.task.api.dto.DigestResponse;
 import ru.taskflow.task.api.dto.FocusResponse;
 import ru.taskflow.task.api.dto.FocusHintResponse;
@@ -136,6 +138,26 @@ public class TaskServiceImpl implements TaskService {
                 : null;
 
         return withRecurrence(taskMapper.toResponse(savedTask), recurrence);
+    }
+
+    @Override
+    public AssistantTaskSelection selectForAssistant(UUID userId,
+            AssistantTaskSelector selector) {
+        if (selector.query() != null && selector.query().length() > 200
+                || selector.group() != null && selector.group().length() > 100) {
+            throw new ValidationException("слишком длинное условие поиска");
+        }
+        String query = selector.query() == null || selector.query().isBlank() ? null
+                : "%" + selector.query().strip().replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+        List<UUID> ids = taskRepository.selectAssistantIds(userId, query, selector.group(),
+                selector.status() == null ? null : selector.status().name(),
+                selector.priority() == null ? null : selector.priority().name(), selector.overdue(),
+                OffsetDateTime.now(clock), selector.deadlineFrom(), selector.deadlineBefore());
+        List<UUID> visible = ids.stream().limit(20).toList();
+        var byId = taskRepository.findSelectedForAssistant(userId, visible).stream()
+                .collect(Collectors.toMap(TaskJpaEntity::getId, taskMapper::toResponse));
+        return new AssistantTaskSelection(visible.stream().map(byId::get)
+                .filter(Objects::nonNull).toList(), ids.size() > 20);
     }
 
     /**

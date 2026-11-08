@@ -21,6 +21,32 @@ import java.util.UUID;
 
 public interface TaskRepository extends JpaRepository<TaskJpaEntity, UUID> {
 
+    @Query(value = """
+            SELECT t.id FROM tasks t LEFT JOIN groups g ON g.id = t.group_id
+            WHERE t.user_id = :userId AND t.is_deleted = false
+              AND ((CAST(:status AS varchar) IS NULL AND t.status IN ('TODO','IN_PROGRESS')) OR t.status = :status)
+              AND (CAST(:query AS varchar) IS NULL OR LOWER(t.title) LIKE LOWER(:query) ESCAPE '!'
+                   OR LOWER(COALESCE(t.description,'')) LIKE LOWER(:query) ESCAPE '!')
+              AND (CAST(:groupName AS varchar) IS NULL OR LOWER(g.name) = LOWER(:groupName))
+              AND (CAST(:priority AS varchar) IS NULL OR t.priority = :priority)
+              AND (:overdue = false OR t.deadline < :now)
+              AND (CAST(:from AS timestamptz) IS NULL OR t.deadline >= :from)
+              AND (CAST(:before AS timestamptz) IS NULL OR t.deadline < :before)
+            ORDER BY t.created_at, t.id LIMIT 21
+            """, nativeQuery = true)
+    List<UUID> selectAssistantIds(@Param("userId") UUID userId, @Param("query") String query,
+            @Param("groupName") String groupName, @Param("status") String status, @Param("priority") String priority,
+            @Param("overdue") boolean overdue, @Param("now") OffsetDateTime now,
+            @Param("from") OffsetDateTime from, @Param("before") OffsetDateTime before);
+
+    @Query("""
+            SELECT t FROM TaskJpaEntity t
+            LEFT JOIN FETCH t.group
+            LEFT JOIN FETCH t.tags
+            WHERE t.userId = :userId AND t.isDeleted = false AND t.id IN :ids
+            """)
+    List<TaskJpaEntity> findSelectedForAssistant(@Param("userId") UUID userId, @Param("ids") List<UUID> ids);
+
     Optional<TaskJpaEntity> findByIdAndUserId(UUID id, UUID userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

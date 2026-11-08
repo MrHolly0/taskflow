@@ -3,6 +3,8 @@ package ru.taskflow.task.api;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
+import ru.taskflow.task.api.dto.AssistantTaskSelector;
+import ru.taskflow.task.api.dto.AssistantTaskSelection;
 import ru.taskflow.task.api.dto.DigestResponse;
 import ru.taskflow.task.api.dto.FocusResponse;
 import ru.taskflow.task.api.dto.FocusHintResponse;
@@ -20,6 +22,9 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TaskService {
+
+    AssistantTaskSelection selectForAssistant(UUID userId,
+            AssistantTaskSelector selector);
 
     TaskResponse create(UUID userId, CreateTaskRequest request);
 
