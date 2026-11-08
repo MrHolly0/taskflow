@@ -36,7 +36,7 @@ import java.util.regex.Pattern;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class AgentLoop {
+public class AgentLoop implements AssistantPlanner {
 
     private static final Duration BUDGET = Duration.ofSeconds(35);
     private static final String SEARCH_REF_PREFIX = "T";
@@ -76,6 +76,14 @@ public class AgentLoop {
 
         AgentOutcome outcome = runFirstPass(userId, userText, historyPass1, tools, response1, window, start);
         return withLatencies(outcome, Duration.between(start, clock.instant()).toMillis(), firstPassLatencyMs);
+    }
+
+    public AgentOutcome validatePlan(UUID userId, String text, LlmToolResponse response,
+            TaskContextWindow window, Instant start, long modelLatencyMs) {
+        if (response.toolCalls().stream().anyMatch(call -> ToolRegistry.SEARCH_TASKS.equals(call.name())))
+            throw new IllegalArgumentException("Поиск должен завершиться до проверки плана");
+        AgentOutcome result = runFirstPass(userId, text, List.of(), List.of(), response, window, start);
+        return withLatencies(result, Duration.between(start, clock.instant()).toMillis(), modelLatencyMs);
     }
 
     private AgentOutcome runFirstPass(UUID userId, String userText, List<LlmMessage> historyPass1,

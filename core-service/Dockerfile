@@ -1,3 +1,9 @@
+FROM node:22-alpine AS code-runtime
+WORKDIR /runner
+COPY code-runtime/package.json code-runtime/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY code-runtime/runner.mjs ./
+
 # Build stage
 FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /app
@@ -21,11 +27,12 @@ WORKDIR /app
 
 # gzip — для распаковки базы geoip, которую сам entrypoint скачивает при
 # старте, если её ещё нет (wget уже есть в busybox самого образа).
-RUN apk add --no-cache gzip
+RUN apk add --no-cache gzip nodejs
 
 # Copy JAR from builder
 COPY --from=builder /app/core-service/app/build/libs/*.jar app.jar
 COPY core-service/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --from=code-runtime /runner /app/code-runtime
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Expose port

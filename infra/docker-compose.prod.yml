@@ -48,6 +48,8 @@ services:
       context: ..
       dockerfile: core-service/Dockerfile
     environment:
+      ASSISTANT_PLANNING_MODE: ${ASSISTANT_PLANNING_MODE:-DIRECT}
+      CODE_MODE_RUNNER: /app/code-runtime/runner.mjs
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:?DB_NAME is required}
       SPRING_DATASOURCE_USERNAME: ${DB_USER:?DB_USER is required}

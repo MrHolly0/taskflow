@@ -67,6 +67,11 @@ server:
   forward-headers-strategy: native
 
 app:
+  assistant:
+    planning-mode: ${ASSISTANT_PLANNING_MODE:DIRECT}
+    code-mode:
+      node: ${CODE_MODE_NODE:node}
+      runner: ${CODE_MODE_RUNNER:code-runtime/runner.mjs}
   branding:
     name: ${APP_NAME:Мунин}
   public-base-url: ${PUBLIC_BASE_URL:}

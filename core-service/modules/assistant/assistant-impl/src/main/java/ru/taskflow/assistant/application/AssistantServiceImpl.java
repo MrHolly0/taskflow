@@ -69,7 +69,7 @@ public class AssistantServiceImpl implements AssistantService {
     private static final String VOICE_TRANSCRIPTION_FAILED_TEXT =
             "Голосовое сообщение (не удалось распознать речь)";
 
-    private final AgentLoop agentLoop;
+    private final AssistantPlanner agentLoop;
     private final NlpGatewayService nlpGatewayService;
     private final ProposalFactory proposalFactory;
     private final ProposalMapper proposalMapper;
