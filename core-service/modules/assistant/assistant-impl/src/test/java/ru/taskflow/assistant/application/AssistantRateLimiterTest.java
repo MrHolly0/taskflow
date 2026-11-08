@@ -22,7 +22,8 @@ class AssistantRateLimiterTest {
     private final StringRedisTemplate redis = mock(StringRedisTemplate.class);
     private final Instant now = Instant.parse("2026-08-12T10:00:00Z");
     private final AssistantRateLimiter limiter = new AssistantRateLimiter(redis,
-            Clock.fixed(now, ZoneOffset.UTC));
+            Clock.fixed(now, ZoneOffset.UTC), mock(ru.taskflow.shared.resources.RedisResourceGate.class),
+            new ru.taskflow.shared.resources.ResourcePolicy());
 
     @Test
     void countsAllChannelsInOneUserWindow() {

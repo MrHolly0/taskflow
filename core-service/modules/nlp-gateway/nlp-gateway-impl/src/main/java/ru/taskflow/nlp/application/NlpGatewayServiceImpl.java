@@ -26,6 +26,7 @@ public class NlpGatewayServiceImpl implements NlpGatewayService {
     public NlpParseResult parseText(String text, String userTimezone, java.util.List<String> existingGroups) {
         try {
             return nlpWorkerClient.parseText(text, userTimezone, "ru", existingGroups);
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("NLP parseText failed", e);
             return new NlpParseResult(java.util.List.of());
@@ -36,6 +37,7 @@ public class NlpGatewayServiceImpl implements NlpGatewayService {
     public NlpParseResult parseVoice(byte[] audioBytes, String userTimezone, java.util.List<String> existingGroups) {
         try {
             return nlpWorkerClient.parseVoice(audioBytes, userTimezone, "ru", existingGroups);
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("NLP parseVoice failed", e);
             return new NlpParseResult(java.util.List.of());
@@ -46,6 +48,7 @@ public class NlpGatewayServiceImpl implements NlpGatewayService {
     public LlmToolResponse callWithTools(LlmToolRequest request) {
         try {
             return nlpWorkerClient.callWithTools(request);
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("NLP callWithTools failed", e);
             return LlmToolResponse.unavailable();
@@ -56,6 +59,7 @@ public class NlpGatewayServiceImpl implements NlpGatewayService {
     public String transcribe(byte[] audioBytes) {
         try {
             return nlpWorkerClient.transcribe(audioBytes);
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("NLP transcribe failed", e);
             return null;

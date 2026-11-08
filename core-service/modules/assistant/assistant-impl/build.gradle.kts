@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":core-service:shared:resource-control"))
     implementation(project(":core-service:modules:assistant:assistant-api"))
     implementation(project(":core-service:modules:task:task-api"))
     implementation(project(":core-service:modules:user:user-api"))

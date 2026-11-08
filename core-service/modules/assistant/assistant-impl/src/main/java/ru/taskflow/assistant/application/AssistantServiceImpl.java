@@ -90,34 +90,46 @@ public class AssistantServiceImpl implements AssistantService {
             return handleText(userId, text, channel, entryPoint);
         }
         String fingerprint = fingerprint("TEXT:" + channel + ":" + entryPoint, text.getBytes(StandardCharsets.UTF_8));
-        Optional<Proposal> existing = requestStore.find(userId, requestKey, fingerprint);
-        if (existing.isPresent()) {
-            return existing.get();
+        var claim = requestStore.claim(userId, requestKey, fingerprint);
+        if (claim.cached() != null) return claim.cached();
+        try {
+            AgentOutcome outcome = agentLoop.run(userId, text, userService.getTimezone(userId), entryPoint);
+            return requestStore.complete(userId, requestKey, fingerprint, claim.owner(),
+                    () -> toProposal(userId, text, channel, "TEXT", outcome, degradedSourceFor(channel)));
+        } catch (RuntimeException exception) {
+            requestStore.abandon(userId, requestKey, claim.owner());
+            throw exception;
         }
-        AgentOutcome outcome = agentLoop.run(userId, text, userService.getTimezone(userId), entryPoint);
-        return requestStore.complete(userId, requestKey, fingerprint,
-                () -> toProposal(userId, text, channel, "TEXT", outcome, degradedSourceFor(channel)));
     }
 
     @Override
     public Proposal handleVoice(UUID userId, byte[] audio, AssistantChannel channel, AssistantEntryPoint entryPoint,
                                 String requestKey) {
-        if (requestKey == null) {
-            return handleVoice(userId, audio, channel, entryPoint);
-        }
+        if (requestKey == null) return handleVoice(userId, audio, channel, entryPoint);
         String fingerprint = fingerprint("VOICE:" + channel + ":" + entryPoint, audio);
-        Optional<Proposal> existing = requestStore.find(userId, requestKey, fingerprint);
-        if (existing.isPresent()) {
-            return existing.get();
+        var claim = requestStore.claim(userId, requestKey, fingerprint);
+        if (claim.cached() != null) return claim.cached();
+        try {
+            String text = nlpGatewayService.transcribe(audio);
+            if (isBlank(text)) {
+                return requestStore.complete(userId, requestKey, fingerprint, claim.owner(),
+                        () -> degrade(userId, VOICE_TRANSCRIPTION_FAILED_TEXT, TaskSource.ASSISTANT_BOT_VOICE_DEGRADED, null));
+            }
+            AgentOutcome outcome = agentLoop.run(userId, text, userService.getTimezone(userId), entryPoint);
+            return requestStore.complete(userId, requestKey, fingerprint, claim.owner(),
+                    () -> toProposal(userId, text, channel, "VOICE", outcome, TaskSource.ASSISTANT_BOT_VOICE_DEGRADED));
+        } catch (RuntimeException exception) {
+            requestStore.abandon(userId, requestKey, claim.owner());
+            throw exception;
         }
-        String text = nlpGatewayService.transcribe(audio);
-        if (isBlank(text)) {
-            return requestStore.complete(userId, requestKey, fingerprint,
-                    () -> degrade(userId, VOICE_TRANSCRIPTION_FAILED_TEXT, TaskSource.ASSISTANT_BOT_VOICE_DEGRADED, null));
-        }
-        AgentOutcome outcome = agentLoop.run(userId, text, userService.getTimezone(userId), entryPoint);
-        return requestStore.complete(userId, requestKey, fingerprint,
-                () -> toProposal(userId, text, channel, "VOICE", outcome, TaskSource.ASSISTANT_BOT_VOICE_DEGRADED));
+    }
+
+    @Override
+    public Proposal handleVoiceUpload(UUID userId, java.util.function.Supplier<byte[]> audio,
+                                     AssistantChannel channel, AssistantEntryPoint entryPoint, String requestKey) {
+        byte[] bytes=audio.get();
+        if(bytes.length>16_000_000) throw new ValidationException("Слишком большое аудио");
+        return handleVoice(userId,bytes,channel,entryPoint,requestKey);
     }
 
     private String fingerprint(String kind, byte[] input) {

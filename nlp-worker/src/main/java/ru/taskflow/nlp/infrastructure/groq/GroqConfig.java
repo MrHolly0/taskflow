@@ -13,8 +13,6 @@ public class GroqConfig {
     private String baseUrl;
     private String llmModel;
     private String whisperModel = "whisper-large-v3";
-    private int connectTimeoutSeconds = 5;
-    private int readTimeoutSeconds = 30;
 
     @PostConstruct
     void validate() {

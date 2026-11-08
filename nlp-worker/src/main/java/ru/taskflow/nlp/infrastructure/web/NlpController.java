@@ -52,12 +52,8 @@ public class NlpController {
         @RequestParam(value = "userLanguage", defaultValue = "ru") String userLanguage,
         @RequestParam(value = "existingGroups", required = false) List<String> existingGroups
     ) throws IOException {
-        ParsedTasks result = nlpService.parseVoice(
-            file.getBytes(),
-            userTimezone,
-            userLanguage,
-            existingGroups
-        );
+        String text=transcriptionService.transcribe(file.getBytes());
+        ParsedTasks result=nlpService.parseText(text,userTimezone,userLanguage,existingGroups);
         return new ParseTextResponse(result.tasks());
     }
 

@@ -35,32 +35,69 @@ public class AssistantRequestStore {
         return rows.isEmpty() ? Optional.empty() : response((Object[]) rows.getFirst(), fingerprint);
     }
 
+    public record Claim(UUID owner, Proposal cached) { }
+
     @Transactional
-    public Proposal complete(UUID userId, String requestKey, String fingerprint, Supplier<Proposal> operation) {
+    public Claim claim(UUID userId, String requestKey, String fingerprint) {
         validateKey(requestKey);
+        UUID owner = UUID.randomUUID();
         entityManager.createNativeQuery("""
-                INSERT INTO assistant_request_results (user_id, request_key, fingerprint)
-                VALUES (:userId, :requestKey, :fingerprint)
+                INSERT INTO assistant_request_results (user_id, request_key, fingerprint, owner_token, lease_until)
+                VALUES (:userId, :requestKey, :fingerprint, :owner, CURRENT_TIMESTAMP + INTERVAL '120 seconds')
                 ON CONFLICT (user_id, request_key) DO NOTHING
                 """)
                 .setParameter("userId", userId).setParameter("requestKey", requestKey)
-                .setParameter("fingerprint", fingerprint).executeUpdate();
+                .setParameter("fingerprint", fingerprint).setParameter("owner", owner).executeUpdate();
         Object[] row = (Object[]) entityManager.createNativeQuery("""
-                SELECT fingerprint, response_json FROM assistant_request_results
-                WHERE user_id = :userId AND request_key = :requestKey FOR UPDATE
+                SELECT fingerprint, response_json, owner_token,
+                    COALESCE(lease_until > CURRENT_TIMESTAMP, false)
+                FROM assistant_request_results WHERE user_id = :userId AND request_key = :requestKey FOR UPDATE
                 """)
                 .setParameter("userId", userId).setParameter("requestKey", requestKey).getSingleResult();
         Optional<Proposal> existing = response(row, fingerprint);
-        if (existing.isPresent()) {
-            return existing.get();
+        if (existing.isPresent()) return new Claim(null, existing.get());
+        if (!owner.equals(row[2]) && Boolean.TRUE.equals(row[3])) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Этот запрос ещё обрабатывается. Повтори его с тем же ключом через несколько секунд");
+        }
+        entityManager.createNativeQuery("""
+                UPDATE assistant_request_results SET owner_token = :owner,
+                    lease_until = CURRENT_TIMESTAMP + INTERVAL '120 seconds'
+                WHERE user_id = :userId AND request_key = :requestKey
+                """).setParameter("owner", owner).setParameter("userId", userId)
+                .setParameter("requestKey", requestKey).executeUpdate();
+        return new Claim(owner, null);
+    }
+
+    @Transactional
+    public void abandon(UUID userId, String requestKey, UUID owner) {
+        entityManager.createNativeQuery("""
+                UPDATE assistant_request_results SET lease_until = NULL, owner_token = NULL
+                WHERE user_id = :userId AND request_key = :requestKey AND owner_token = :owner
+                    AND response_json IS NULL
+                """).setParameter("userId", userId).setParameter("requestKey", requestKey)
+                .setParameter("owner", owner).executeUpdate();
+    }
+
+    @Transactional
+    public Proposal complete(UUID userId, String requestKey, String fingerprint, UUID owner,
+                             Supplier<Proposal> operation) {
+        Object[] row = (Object[]) entityManager.createNativeQuery("""
+                SELECT fingerprint, response_json, owner_token,
+                    COALESCE(lease_until > CURRENT_TIMESTAMP, false)
+                FROM assistant_request_results WHERE user_id = :userId AND request_key = :requestKey FOR UPDATE
+                """).setParameter("userId", userId).setParameter("requestKey", requestKey).getSingleResult();
+        Optional<Proposal> existing = response(row, fingerprint);
+        if (existing.isPresent()) return existing.get();
+        if (!owner.equals(row[2]) || !Boolean.TRUE.equals(row[3])) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Срок обработки запроса истёк. Повтори запрос");
         }
         Proposal proposal = operation.get();
         try {
             entityManager.createNativeQuery("""
-                    UPDATE assistant_request_results SET response_json = :response
+                    UPDATE assistant_request_results SET response_json = :response, owner_token = NULL, lease_until = NULL
                     WHERE user_id = :userId AND request_key = :requestKey
-                    """)
-                    .setParameter("response", objectMapper.writeValueAsString(proposal))
+                    """).setParameter("response", objectMapper.writeValueAsString(proposal))
                     .setParameter("userId", userId).setParameter("requestKey", requestKey).executeUpdate();
             return proposal;
         } catch (JsonProcessingException exception) {

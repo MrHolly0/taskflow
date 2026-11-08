@@ -163,4 +163,49 @@ class JsonPlanningApplyIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,owner)).isEqualTo(2);
     }
 
+
+    @Autowired ru.taskflow.assistant.application.AssistantRequestStore requestStore;
+
+    @Test void concurrentVoiceRetryAndDifferentPayloadDoNotRepeatTranscription() throws Exception {
+        UUID user=user();String key="voice-race-"+UUID.randomUUID();byte[] audio={1,2,3};
+        var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+        org.mockito.Mockito.when(model.transcribe(org.mockito.ArgumentMatchers.any())).thenAnswer(invocation->{
+            entered.countDown();if(!release.await(5,java.util.concurrent.TimeUnit.SECONDS))throw new IllegalStateException("test timeout");
+            return "Купить чай";
+        });
+        reply("{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Купить чай\"}}]}");
+        try(var executor=java.util.concurrent.Executors.newSingleThreadExecutor()) {
+            var first=executor.submit(()->assistant.handleVoice(user,audio,AssistantChannel.WEB,AssistantEntryPoint.CHAT,key));
+            try {
+                assertThat(entered.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                org.assertj.core.api.Assertions.assertThatThrownBy(()->assistant.handleVoice(user,audio,AssistantChannel.WEB,AssistantEntryPoint.CHAT,key))
+                        .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                                e->assertThat(e.getStatusCode().value()).isEqualTo(409));
+                org.assertj.core.api.Assertions.assertThatThrownBy(()->assistant.handleVoice(user,new byte[]{4},AssistantChannel.WEB,AssistantEntryPoint.CHAT,key))
+                        .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                                e->assertThat(e.getStatusCode().value()).isEqualTo(409));
+            } finally {release.countDown();}
+            var result=first.get(5,java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(assistant.handleVoice(user,audio,AssistantChannel.WEB,AssistantEntryPoint.CHAT,key).id()).isEqualTo(result.id());
+        }
+        org.mockito.Mockito.verify(model,org.mockito.Mockito.times(1)).transcribe(audio);
+        org.mockito.Mockito.verify(model,org.mockito.Mockito.times(1)).callWithTools(org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test void expiredClaimCanBeRecoveredButOldOwnerCannotPersist() {
+        UUID user=user();String key="claim-"+UUID.randomUUID();String hash="f".repeat(64);
+        var first=requestStore.claim(user,key,hash);
+        jdbc.update("UPDATE assistant_request_results SET lease_until=NOW()-INTERVAL '1 second' WHERE user_id=? AND request_key=?",user,key);
+        var second=requestStore.claim(user,key,hash);assertThat(second.owner()).isNotEqualTo(first.owner());
+        var called=new java.util.concurrent.atomic.AtomicBoolean();
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->requestStore.complete(user,key,hash,first.owner(),()->{called.set(true);return null;}))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                                e->assertThat(e.getStatusCode().value()).isEqualTo(409));
+        assertThat(called).isFalse();
+        requestStore.abandon(user,key,first.owner());
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->requestStore.claim(user,key,hash))
+                .isInstanceOfSatisfying(org.springframework.web.server.ResponseStatusException.class,
+                                e->assertThat(e.getStatusCode().value()).isEqualTo(409));
+        requestStore.abandon(user,key,second.owner());assertThat(requestStore.claim(user,key,hash).owner()).isNotNull();
+    }
 }

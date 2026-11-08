@@ -9,6 +9,8 @@ spring:
       pageable:
         max-page-size: 100
     redis:
+      connect-timeout: 500ms
+      timeout: 500ms
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   datasource:
@@ -67,6 +69,15 @@ server:
   forward-headers-strategy: native
 
 app:
+  resources:
+    internal-secret: ${NLP_INTERNAL_SECRET:}
+    global-concurrent: ${MODEL_GLOBAL_CONCURRENT:4}
+    user-concurrent: ${MODEL_USER_CONCURRENT:1}
+    worker-concurrent: ${MODEL_WORKER_CONCURRENT:4}
+    user-daily-tokens: ${MODEL_USER_DAILY_TOKENS:250000}
+    global-daily-tokens: ${MODEL_GLOBAL_DAILY_TOKENS:5000000}
+    user-daily-audio-seconds: ${MODEL_USER_DAILY_AUDIO_SECONDS:600}
+    global-daily-audio-seconds: ${MODEL_GLOBAL_DAILY_AUDIO_SECONDS:7200}
   assistant:
     experimental-reasoning-effort: ${ASSISTANT_EXPERIMENTAL_REASONING_EFFORT:low}
     planning-mode: ${ASSISTANT_PLANNING_MODE:BATCH_PLAN}
@@ -96,9 +107,6 @@ app:
     miniapp-url: ${PUBLIC_BASE_URL:}
   nlp:
     worker-url: ${NLP_WORKER_URL:http://localhost:8081}
-    connect-timeout-seconds: 5
-    read-timeout-seconds: 30
-    tool-call-read-timeout-seconds: 20
   focus:
     hint:
       min-title-words: 4
@@ -131,17 +139,21 @@ resilience4j:
   circuitbreaker:
     instances:
       nlp-worker:
+        ignore-exceptions:
+          - ru.taskflow.shared.resources.ResourceRejectedException
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
       nlp-worker-tools:
+        ignore-exceptions:
+          - ru.taskflow.shared.resources.ResourceRejectedException
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
   retry:
     instances:
       nlp-worker:
-        max-attempts: 3
+        max-attempts: 1
         wait-duration: 500ms
         enable-exponential-backoff: true
         exponential-backoff-multiplier: 2

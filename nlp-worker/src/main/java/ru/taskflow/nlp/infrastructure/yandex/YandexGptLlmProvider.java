@@ -37,6 +37,7 @@ public class YandexGptLlmProvider implements LlmProvider {
                 return new ParsedTasks(List.of());
             }
             return callYandexGptApi(text, userTimezone, userLanguage, existingGroups != null ? existingGroups : List.of());
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.warn("Failed to parse tasks from YandexGPT", e);
             return new ParsedTasks(List.of());
@@ -110,7 +111,8 @@ public class YandexGptLlmProvider implements LlmProvider {
                 Instant parsedDeadline = deadline != null ? ZonedDateTime.parse(deadline).toInstant() : null;
 
                 tasks.add(new ParsedTask(title, description, priority, parsedDeadline, group, tags, recurrence));
-            } catch (Exception e) {
+            } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
+        } catch (Exception e) {
                 log.warn("Failed to parse task from YandexGPT response", e);
             }
         }

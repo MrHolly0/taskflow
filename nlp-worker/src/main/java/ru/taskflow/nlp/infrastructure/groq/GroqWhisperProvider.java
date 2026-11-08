@@ -27,7 +27,7 @@ public class GroqWhisperProvider implements SpeechToTextProvider {
             body.add("file", new ByteArrayResource(audioBytes) {
                 @Override
                 public String getFilename() {
-                    return "audio.ogg";
+                    return "audio.wav";
                 }
             });
             body.add("model", config.getWhisperModel());
@@ -42,6 +42,7 @@ public class GroqWhisperProvider implements SpeechToTextProvider {
                 .body(String.class);
 
             return response != null ? response.trim() : "";
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("Failed to transcribe audio via Groq Whisper", e);
             return "";

@@ -30,11 +30,14 @@ public class FallbackToolCallProvider implements ToolCallProvider {
         for (int i = 0; i < providers.size(); i++) {
             ToolCallProvider provider = providers.get(i);
             try {
+                if(ru.taskflow.shared.resources.ModelRequestContext.current()!=null)
+                    ru.taskflow.shared.resources.ModelRequestContext.required();
                 ToolCallResult result = provider.call(req);
                 if (i > 0) {
                     log.info("{} succeeded as fallback after primary failed", provider.name());
                 }
                 return result;
+            } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
             } catch (Exception e) {
                 log.warn("{} failed: {}", provider.name(), e.getMessage());
             }

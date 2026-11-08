@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.ClientHttpRequestFactory;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import ru.taskflow.nlp.domain.ToolCallProvider;
 import ru.taskflow.nlp.infrastructure.groq.OpenAiCompatibleToolCallProvider;
@@ -22,11 +20,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ToolCallProviderConfiguration {
 
-    private static final int CONNECT_TIMEOUT_SECONDS = 5;
-    private static final int READ_TIMEOUT_SECONDS = 30;
-
     private final ToolCallProvidersConfig providersConfig;
     private final ObjectMapper objectMapper;
+    private final ru.taskflow.shared.resources.GuardedProviderInterceptor guard;
+    private final ru.taskflow.shared.resources.ResourcePolicy policy;
 
     @Bean
     public ToolCallProvider toolCallProvider() {
@@ -62,16 +59,11 @@ public class ToolCallProviderConfiguration {
     private ToolCallProvider buildProvider(ToolCallProvidersConfig.Entry entry) {
         RestClient restClient = RestClient.builder()
                 .baseUrl(entry.getBaseUrl())
-                .requestFactory(requestFactory())
+                .requestFactory(new ru.taskflow.shared.resources.DeadlineRequestFactory(policy.getExternalTimeoutMs()))
+                .requestInterceptor(guard)
                 .build();
         return new OpenAiCompatibleToolCallProvider(entry.getName(), entry.getApiKey(), entry.getModel(),
                 objectMapper, restClient);
     }
 
-    private ClientHttpRequestFactory requestFactory() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(CONNECT_TIMEOUT_SECONDS * 1000);
-        factory.setReadTimeout(READ_TIMEOUT_SECONDS * 1000);
-        return factory;
-    }
 }

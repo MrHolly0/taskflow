@@ -23,6 +23,12 @@ public class AssistantRateLimiter {
 
     private final StringRedisTemplate redis;
     private final Clock clock;
+    private final ru.taskflow.shared.resources.RedisResourceGate gate;
+    private final ru.taskflow.shared.resources.ResourcePolicy policy;
+
+    public ru.taskflow.shared.resources.RedisResourceGate.Lease enter(UUID user) {
+        return gate.acquire("assistant",user,policy.getGlobalConcurrent(),policy.getUserConcurrent());
+    }
 
     public boolean allow(UUID userId) {
         long bucket = Instant.now(clock).getEpochSecond() / 60;

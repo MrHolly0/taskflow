@@ -10,6 +10,7 @@ RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     ./gradlew :nlp-worker:bootJar -x test --no-daemon --max-workers=2
 
 FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 

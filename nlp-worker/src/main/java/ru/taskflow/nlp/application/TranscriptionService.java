@@ -25,19 +25,30 @@ public class TranscriptionService {
 
     private final SpeechToTextProvider speechToTextProvider;
     private final StringRedisTemplate redis;
+    private final AudioNormalizer normalizer;
+    private final ru.taskflow.shared.resources.ResourcePolicy policy;
 
     public String transcribe(byte[] audioBytes) {
         String cacheKey = cacheKey(audioBytes);
 
         String cached = redis.opsForValue().get(cacheKey);
-        if (cached != null) {
+        if (cached != null && cached.length()<=policy.getMaxTextChars()) {
             return cached;
         }
 
-        String transcript = speechToTextProvider.transcribeAudio(audioBytes);
+        var audio=normalizer.normalize(audioBytes);
+        var context=ru.taskflow.shared.resources.ModelRequestContext.required();
+        String transcript;
+        try(var scope=ru.taskflow.shared.resources.ModelRequestContext.open(
+                new ru.taskflow.shared.resources.ModelRequestContext(context.userId(),context.deadlineMillis(),audio.seconds()))) {
+            transcript=speechToTextProvider.transcribeAudio(audio.wav());
+        }
+        if(transcript.length()>policy.getMaxTextChars())
+            throw new ru.taskflow.shared.resources.ResourceRejectedException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Расшифровка слишком длинная");
 
         try {
-            redis.opsForValue().set(cacheKey, transcript, CACHE_TTL);
+            if(!transcript.isBlank()) redis.opsForValue().set(cacheKey, transcript, CACHE_TTL);
         } catch (Exception e) {
             log.warn("Не удалось закэшировать расшифровку", e);
         }

@@ -36,3 +36,21 @@ groups:
         for: 2m
         annotations:
           summary: "Обработка сообщений Telegram отстаёт"
+      - alert: MuninModelResourceStorageFailure
+        expr: sum(rate(model_resource_rejected_total{reason="storage"}[5m])) > 0
+        for: 1m
+        annotations:
+          summary: "Хранилище ограничений модели недоступно"
+      - alert: MuninModelUsageUnknown
+        expr: sum(increase(model_resource_unknown_usage_total[15m])) > 3
+        annotations:
+          summary: "Есть обращения без подтверждённого расхода; полный резерв удержан"
+      - alert: MuninModelReservationOverrun
+        expr: sum(increase(model_resource_reservation_overrun_total[15m])) > 0
+        annotations:
+          summary: "Фактический расход превысил резерв"
+      - alert: MuninAssistantExpiredClaims
+        expr: assistant_request_expired_claims > 0
+        for: 3m
+        annotations:
+          summary: "Остались незавершённые обращения с истёкшим сроком владения"

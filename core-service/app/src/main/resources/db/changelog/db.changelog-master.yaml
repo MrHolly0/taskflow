@@ -87,3 +87,5 @@ databaseChangeLog:
       file: db/changelog/043-task-read-indexes.yaml
   - include:
       file: db/changelog/044-task-word-search.yaml
+  - include:
+      file: db/changelog/045-assistant-request-lease.yaml

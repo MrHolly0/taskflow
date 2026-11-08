@@ -7,22 +7,35 @@ server:
   port: ${NLP_PORT:8081}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 16MB
+      max-request-size: 18MB
   application:
     name: taskflow-nlp-worker
   data:
     redis:
+      connect-timeout: 500ms
+      timeout: 500ms
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
 app:
+  resources:
+    internal-secret: ${NLP_INTERNAL_SECRET:}
+    global-concurrent: ${MODEL_GLOBAL_CONCURRENT:4}
+    user-concurrent: ${MODEL_USER_CONCURRENT:1}
+    worker-concurrent: ${MODEL_WORKER_CONCURRENT:4}
+    user-daily-tokens: ${MODEL_USER_DAILY_TOKENS:250000}
+    global-daily-tokens: ${MODEL_GLOBAL_DAILY_TOKENS:5000000}
+    user-daily-audio-seconds: ${MODEL_USER_DAILY_AUDIO_SECONDS:600}
+    global-daily-audio-seconds: ${MODEL_GLOBAL_DAILY_AUDIO_SECONDS:7200}
   groq:
     api-key: ${GROQ_API_KEY:}
     base-url: https://api.groq.com/openai/v1
     llm-model: openai/gpt-oss-120b
     whisper-model: whisper-large-v3
-    connect-timeout-seconds: 5
-    read-timeout-seconds: 30
   llm:
     providers:
       - name: groq

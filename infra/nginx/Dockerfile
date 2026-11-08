@@ -12,6 +12,7 @@ RUN pnpm build
 
 FROM nginx:1.30.6-alpine
 COPY infra/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY infra/nginx/trusted-proxies.conf /etc/nginx/trusted-proxies.conf
 COPY --from=frontend /app/dist /usr/share/nginx/html
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 CMD wget -q --spider http://127.0.0.1/healthz || exit 1
 EXPOSE 80

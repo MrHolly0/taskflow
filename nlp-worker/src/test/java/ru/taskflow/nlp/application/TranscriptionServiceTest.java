@@ -32,11 +32,17 @@ class TranscriptionServiceTest {
     private ValueOperations<String, String> valueOps;
 
     private TranscriptionService service;
+    private ru.taskflow.shared.resources.ModelRequestContext.Scope scope;
+    @org.junit.jupiter.api.AfterEach void closeContext(){scope.close();}
 
     @BeforeEach
     void setUp() {
         when(redis.opsForValue()).thenReturn(valueOps);
-        service = new TranscriptionService(speechToTextProvider, redis);
+        var normalizer=org.mockito.Mockito.mock(AudioNormalizer.class);
+        org.mockito.Mockito.lenient().when(normalizer.normalize(any())).thenAnswer(i->new AudioNormalizer.Audio(i.getArgument(0),1));
+        service = new TranscriptionService(speechToTextProvider, redis,normalizer,new ru.taskflow.shared.resources.ResourcePolicy());
+        scope=ru.taskflow.shared.resources.ModelRequestContext.open(new ru.taskflow.shared.resources.ModelRequestContext(
+                java.util.UUID.randomUUID(),System.currentTimeMillis()+35000,0));
     }
 
     @Test
@@ -85,5 +91,11 @@ class TranscriptionServiceTest {
         org.mockito.ArgumentCaptor<String> keys = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(valueOps, org.mockito.Mockito.times(2)).get(keys.capture());
         assertThat(keys.getAllValues().get(0)).isNotEqualTo(keys.getAllValues().get(1));
+    }
+
+    @Test void failedTranscriptionIsNotCached() {
+        when(speechToTextProvider.transcribeAudio(any())).thenReturn("");
+        assertThat(service.transcribe(new byte[]{1,2,3})).isEmpty();
+        org.mockito.Mockito.verify(valueOps,org.mockito.Mockito.never()).set(anyString(),anyString(),any(Duration.class));
     }
 }

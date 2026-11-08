@@ -3,8 +3,6 @@ package ru.taskflow.nlp.infrastructure.groq;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.ClientHttpRequestFactory;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
@@ -12,16 +10,15 @@ import org.springframework.web.client.RestClient;
 public class RestClientConfig {
 
     private final GroqConfig groqConfig;
+    private final ru.taskflow.shared.resources.GuardedProviderInterceptor guard;
+    private final ru.taskflow.shared.resources.ResourcePolicy policy;
 
     @Bean
     public RestClient restClient() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(groqConfig.getConnectTimeoutSeconds() * 1000);
-        factory.setReadTimeout(groqConfig.getReadTimeoutSeconds() * 1000);
-
         return RestClient.builder()
             .baseUrl(groqConfig.getBaseUrl())
-            .requestFactory(factory)
+            .requestFactory(new ru.taskflow.shared.resources.DeadlineRequestFactory(policy.getExternalTimeoutMs()))
+            .requestInterceptor(guard)
             .build();
     }
 }

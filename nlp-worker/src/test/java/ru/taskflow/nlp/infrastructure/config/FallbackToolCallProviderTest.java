@@ -86,4 +86,15 @@ class FallbackToolCallProviderTest {
         assertThatThrownBy(() -> new FallbackToolCallProvider(List.of()).call(request))
                 .isInstanceOf(ToolCallProvidersUnavailableException.class);
     }
+
+    @org.junit.jupiter.api.Test void expiredOperationDoesNotStartProviderFallback() {
+        var first=org.mockito.Mockito.mock(ru.taskflow.nlp.domain.ToolCallProvider.class);
+        try(var scope=ru.taskflow.shared.resources.ModelRequestContext.open(new ru.taskflow.shared.resources.ModelRequestContext(
+                java.util.UUID.randomUUID(),System.currentTimeMillis()-1,0))) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(()->new FallbackToolCallProvider(java.util.List.of(first))
+                    .call(new ru.taskflow.nlp.domain.ToolCallRequest(java.util.List.of(),java.util.List.of())))
+                    .isInstanceOf(ru.taskflow.shared.resources.ResourceRejectedException.class);
+            org.mockito.Mockito.verifyNoInteractions(first);
+        }
+    }
 }

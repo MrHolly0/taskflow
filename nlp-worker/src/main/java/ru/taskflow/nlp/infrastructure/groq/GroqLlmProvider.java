@@ -36,6 +36,7 @@ public class GroqLlmProvider implements LlmProvider {
     public ParsedTasks parseTasksFromText(String text, String userTimezone, String userLanguage, List<String> existingGroups) {
         try {
             return callGroqApi(text, userTimezone, userLanguage, existingGroups);
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("Failed to parse tasks from Groq", e);
             return new ParsedTasks(List.of());
@@ -113,7 +114,8 @@ public class GroqLlmProvider implements LlmProvider {
                         tags,
                         recurrence
                 ));
-            } catch (Exception e) {
+            } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
+        } catch (Exception e) {
                 log.warn("Failed to parse task from JSON node: {}", taskNode, e);
             }
         }
@@ -125,6 +127,7 @@ public class GroqLlmProvider implements LlmProvider {
         try {
             ZonedDateTime zdt = ZonedDateTime.parse(deadline, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
             return zdt.toInstant();
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             try {
                 ZonedDateTime zdt = ZonedDateTime.parse(deadline + "T12:00:00+03:00", DateTimeFormatter.ISO_OFFSET_DATE_TIME);

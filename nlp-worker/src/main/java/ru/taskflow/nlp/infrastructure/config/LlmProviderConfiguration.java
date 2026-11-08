@@ -57,7 +57,8 @@ public class LlmProviderConfiguration {
                         }
                         return result;
                     }
-                } catch (Exception e) {
+                } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
+        } catch (Exception e) {
                     log.warn("{} failed: {}", provider.getClass().getSimpleName(), e.getMessage());
                     if (i == providers.size() - 1) {
                         log.error("All LLM providers exhausted, returning empty result");

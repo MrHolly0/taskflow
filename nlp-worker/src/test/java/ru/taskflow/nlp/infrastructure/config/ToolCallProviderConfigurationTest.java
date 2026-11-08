@@ -14,7 +14,9 @@ class ToolCallProviderConfigurationTest {
     private ToolCallProviderConfiguration configuration(ToolCallProvidersConfig.Entry... entries) {
         ToolCallProvidersConfig config = new ToolCallProvidersConfig();
         config.setProviders(List.of(entries));
-        return new ToolCallProviderConfiguration(config, new ObjectMapper());
+        return new ToolCallProviderConfiguration(config, new ObjectMapper(),
+                org.mockito.Mockito.mock(ru.taskflow.shared.resources.GuardedProviderInterceptor.class),
+                new ru.taskflow.shared.resources.ResourcePolicy());
     }
 
     private ToolCallProvidersConfig.Entry entry(String name, String baseUrl, String apiKey, String model, boolean enabled) {

@@ -78,4 +78,15 @@ class AssistantAdmissionAspectTest {
         when(invocation.getArgs()).thenReturn(new Object[] {UUID.randomUUID()});
         return invocation;
     }
+
+    @Test void lazyVoiceUploadGoesThroughAdmission() {
+        AssistantService target=mock(AssistantService.class);
+        var factory=new AspectJProxyFactory(target);factory.addAspect(new AssistantAdmissionAspect(limiter,1));
+        AssistantService proxy=factory.getProxy();UUID user=UUID.randomUUID();
+        when(limiter.allow(user)).thenReturn(false);
+        var loaded=new java.util.concurrent.atomic.AtomicBoolean();
+        assertThatThrownBy(()->proxy.handleVoiceUpload(user,()->{loaded.set(true);return new byte[]{1};},
+                AssistantChannel.WEB,AssistantEntryPoint.CHAT,null)).isInstanceOf(ResponseStatusException.class);
+        assertThat(loaded).isFalse();verify(limiter).allow(user);org.mockito.Mockito.verifyNoInteractions(target);
+    }
 }

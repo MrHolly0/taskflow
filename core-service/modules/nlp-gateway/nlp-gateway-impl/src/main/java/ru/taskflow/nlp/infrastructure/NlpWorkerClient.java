@@ -49,6 +49,7 @@ public class NlpWorkerClient {
             if (response != null && response.tasks != null) {
                 return new NlpParseResult(response.tasks);
             }
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("Failed to call nlp-worker parseText", e);
             throw e;
@@ -83,6 +84,7 @@ public class NlpWorkerClient {
             if (response != null && response.tasks != null) {
                 return new NlpParseResult(response.tasks);
             }
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("Failed to call nlp-worker parseVoice", e);
             throw e;
@@ -92,11 +94,13 @@ public class NlpWorkerClient {
     }
 
     public NlpParseResult parseTextFallback(String text, String userTimezone, String userLanguage, List<String> existingGroups, Exception e) {
+        if (e instanceof ru.taskflow.shared.resources.ResourceRejectedException rejected) throw rejected;
         log.warn("NLP parseText circuit breaker fallback, returning empty result", e);
         return new NlpParseResult(List.of());
     }
 
     public NlpParseResult parseVoiceFallback(byte[] audioBytes, String userTimezone, String userLanguage, List<String> existingGroups, Exception e) {
+        if (e instanceof ru.taskflow.shared.resources.ResourceRejectedException rejected) throw rejected;
         log.warn("NLP parseVoice circuit breaker fallback, returning empty result", e);
         return new NlpParseResult(List.of());
     }
@@ -120,6 +124,7 @@ public class NlpWorkerClient {
                     false
                 );
             }
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("Failed to call nlp-worker callWithTools", e);
             throw e;
@@ -129,6 +134,7 @@ public class NlpWorkerClient {
     }
 
     public LlmToolResponse callWithToolsFallback(LlmToolRequest request, Exception e) {
+        if (e instanceof ru.taskflow.shared.resources.ResourceRejectedException rejected) throw rejected;
         log.warn("NLP callWithTools circuit breaker fallback, marking failed", e);
         return LlmToolResponse.unavailable();
     }
@@ -152,6 +158,7 @@ public class NlpWorkerClient {
                 .body(TranscribeWireResponse.class);
 
             return response != null ? response.text() : null;
+        } catch (ru.taskflow.shared.resources.ResourceRejectedException e) { throw e;
         } catch (Exception e) {
             log.error("Failed to call nlp-worker transcribe", e);
             throw e;
@@ -159,6 +166,7 @@ public class NlpWorkerClient {
     }
 
     public String transcribeFallback(byte[] audioBytes, Exception e) {
+        if (e instanceof ru.taskflow.shared.resources.ResourceRejectedException rejected) throw rejected;
         log.warn("NLP transcribe circuit breaker fallback, returning null", e);
         return null;
     }

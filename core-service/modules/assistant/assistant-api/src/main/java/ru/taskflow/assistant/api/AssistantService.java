@@ -27,6 +27,9 @@ public interface AssistantService {
 
     Proposal handleVoice(UUID userId, byte[] audio, AssistantChannel channel, AssistantEntryPoint entryPoint, String requestKey);
 
+    Proposal handleVoiceUpload(UUID userId, java.util.function.Supplier<byte[]> audio,
+                               AssistantChannel channel, AssistantEntryPoint entryPoint, String requestKey);
+
     Proposal findById(UUID userId, UUID proposalId);
 
     Proposal findByShortCode(UUID userId, String shortCode);

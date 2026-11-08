@@ -89,8 +89,11 @@ public class AssistantController {
     private Proposal resolveProposal(UUID userId, String text, MultipartFile file, AssistantEntryPoint entryPoint, String requestKey)
             throws IOException {
         if (file != null && !file.isEmpty()) {
-            return requestKey == null ? assistantService.handleVoice(userId, file.getBytes(), AssistantChannel.WEB, entryPoint)
-                    : assistantService.handleVoice(userId, file.getBytes(), AssistantChannel.WEB, entryPoint, requestKey);
+            if(file.getSize()>16_000_000) throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE);
+            return assistantService.handleVoiceUpload(userId, () -> {
+                try { return file.getBytes(); }
+                catch (IOException exception) { throw new java.io.UncheckedIOException(exception); }
+            }, AssistantChannel.WEB, entryPoint, requestKey);
         }
         if (text == null || text.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "нужен текст или аудио");
