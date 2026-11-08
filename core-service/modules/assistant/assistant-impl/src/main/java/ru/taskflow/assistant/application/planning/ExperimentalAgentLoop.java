@@ -43,6 +43,10 @@ public class ExperimentalAgentLoop {
             inputTokens += response.inputTokens(); outputTokens += response.outputTokens();
             if (response.failed()) return failure("MODEL_UNAVAILABLE", "Ассистент сейчас недоступен. Попробуй позже или добавь задачу вручную.",
                     window, attempt + 1, inputTokens, outputTokens, start, modelMs);
+            if ((response.toolCalls() == null || response.toolCalls().isEmpty())
+                    && (response.text() == null || response.text().isBlank()))
+                return new AgentOutcome(List.of(),List.of("EMPTY_RESPONSE"),null,List.of(),null,session.window(),attempt+1,false,
+                        false,null,inputTokens,outputTokens,Duration.between(start,clock.instant()).toMillis(),modelMs,0);
             try {
                 JsonNode args;
                 if (mode == PlanningMode.BATCH_PLAN && response.text() != null && !response.text().isBlank())

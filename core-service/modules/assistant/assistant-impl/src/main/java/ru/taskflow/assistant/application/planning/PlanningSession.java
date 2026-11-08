@@ -169,11 +169,20 @@ public class PlanningSession {
         }
         JsonNode steps = plan.get("steps");
         if (steps == null || !steps.isArray() || steps.isEmpty() || steps.size() > 20) throw new PlanningException("STEP_LIMIT");
+        var calendarFields = new ArrayList<String>();
+        for (JsonNode step : steps) {
+            var action=step.path("action");
+            if (!action.path("ambiguous_reason").asText().isBlank()) { calendarFields.add("ambiguous");calendarFields.add("ambiguous"); }
+            for (String field : List.of("deadline","new_deadline","reminder_at",DEADLINE_TIME))
+                if(action.hasNonNull(field))calendarFields.add(field);
+        }
+        var day = calendarFields.size() == 1 ? RelativeDayPolicy.uniqueOffset(sourceWithoutQuotes()) : OptionalInt.empty();
         var actions = json.createArrayNode();
         for (JsonNode step : steps) {
             fields(step, Set.of("select", "action"));
             JsonNode action = step.get("action");
             validateJsonAction(action);
+            if (day.isPresent()) action = resolveCalendarDay(action,calendarFields.getFirst(),day.getAsInt());
             if (action.has("task_ref")) throw new PlanningException("SELECT_REQUIRED");
             if ("create".equals(action.path("type").asText())) {
                 if (step.has("select")) throw new PlanningException("CREATE_WITH_SELECTOR");
@@ -352,6 +361,23 @@ public class PlanningSession {
             expanded.remove(DEADLINE_TIME);expanded.put("new_deadline", local.atZone(zone).toOffsetDateTime().toString());
         }
         return expanded;
+    }
+
+    private JsonNode resolveCalendarDay(JsonNode raw,String field,int days) {
+        if (!raw.hasNonNull(field)) return raw;
+        if ("reminder_at".equals(field) && java.util.regex.Pattern.compile("(?U)\\bза\\b").matcher(sourceWithoutQuotes()).find()) return raw;
+        try {
+            var time=DEADLINE_TIME.equals(field) ? LocalTime.parse(raw.path(field).asText())
+                    : OffsetDateTime.parse(raw.path(field).asText()).atZoneSameInstant(zone).toLocalTime();
+            var expectedDay=now.atZoneSameInstant(zone).toLocalDate().plusDays(days);
+            if (!DEADLINE_TIME.equals(field) && OffsetDateTime.parse(raw.path(field).asText()).atZoneSameInstant(zone).toLocalDate().equals(expectedDay)) return raw;
+            var local=expectedDay.atTime(time);
+            if(zone.getRules().getValidOffsets(local).size()!=1)
+                throw new PlanningException("TIMEZONE_TRANSITION","Это время попадает на смену часового пояса. Уточни день и смещение UTC.");
+            var action=(com.fasterxml.jackson.databind.node.ObjectNode)raw.deepCopy();
+            if (DEADLINE_TIME.equals(field)) action.remove(DEADLINE_TIME);
+            action.put(DEADLINE_TIME.equals(field) ? "new_deadline" : field,local.atZone(zone).toOffsetDateTime().toString());return action;
+        } catch(java.time.format.DateTimeParseException e) { return raw; }
     }
 
     private LocalTime floatingReminderTime() {

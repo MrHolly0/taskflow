@@ -206,6 +206,7 @@ class PlanningLargeContextLiveTest {
                 Class.forName("ru.taskflow.assistant.application.planning.ContextualChoicePolicy"),
                 Class.forName("ru.taskflow.assistant.application.TitleChangeGuard"),
                 Class.forName("ru.taskflow.assistant.application.planning.FloatingReminderTimePolicy"),
+                Class.forName("ru.taskflow.assistant.application.planning.RelativeDayPolicy"),
                 Class.forName("ru.taskflow.task.application.TaskServiceImpl"), Class.forName("ru.taskflow.task.infrastructure.persistence.TaskRepository"), PlanningGenerationSettings.class, CodeModeExecutor.class, ru.taskflow.nlp.api.LlmToolRequest.class))
             try (var bytes = type.getResourceAsStream(type.getSimpleName() + ".class")) { digest.update(bytes.readAllBytes()); }
         report.put("plannerBytecodeSha256", HexFormat.of().formatHex(digest.digest()));

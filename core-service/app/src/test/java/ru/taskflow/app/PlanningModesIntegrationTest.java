@@ -706,4 +706,44 @@ class PlanningModesIntegrationTest {
         assertThat(OffsetDateTime.parse(result.actions().getFirst().payload().get("reminder_at").toString()).toInstant()).isEqualTo(date.toInstant());
     }
 
+    @Test void explicitRelativeDayUsesTodayInsteadOfTheOldTaskDeadline() throws Exception {
+        UUID owner=user();var zone=ZoneId.of("Europe/Moscow");var target=task(owner,"Передать акт по проекту Факел",null,OffsetDateTime.now().plusDays(30));
+        var wrong=OffsetDateTime.now(zone).plusDays(33).withHour(10).withMinute(5).withSecond(0).withNano(0);
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"select\":{\"query\":\"Факел\"},\"action\":{\"type\":\"reschedule\",\"new_deadline\":\""+wrong+"\"}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Сдвинь срок передачи акта по Факелу на через три дня в 10:05",zone,AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(1);
+        var actual=OffsetDateTime.parse(result.actions().getFirst().payload().get("new_deadline").toString()).atZoneSameInstant(zone);
+        assertThat(actual.toLocalDate()).isEqualTo(LocalDate.now(zone).plusDays(3));assertThat(actual.toLocalTime()).isEqualTo(LocalTime.of(10,5));
+        assertThat(tasks.findById(owner,target.id()).deadline()).isEqualTo(target.deadline());
+    }
+
+    @Test void singleAbsoluteReminderKeepsTheDayAfterTomorrowAndDoesNotChangeTheTaskDeadline() throws Exception {
+        UUID owner=user();task(owner,"Заказать фильтр для очистителя Риф",null,null);var zone=ZoneId.of("Europe/Moscow");
+        var wrong=OffsetDateTime.now(zone).plusDays(1).withHour(7).withMinute(55).withSecond(0).withNano(0);
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"select\":{\"query\":\"Риф\"},\"action\":{\"type\":\"remind\",\"reminder_at\":\""+wrong+"\"}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Напомни о фильтре Риф послезавтра в 07:55. Дату задачи не меняй",zone,AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(1);
+        var actual=OffsetDateTime.parse(result.actions().getFirst().payload().get("reminder_at").toString()).atZoneSameInstant(zone);
+        assertThat(actual.toLocalDate()).isEqualTo(LocalDate.now(zone).plusDays(2));assertThat(actual.toLocalTime()).isEqualTo(LocalTime.of(7,55));
+    }
+
+    @Test void relativeNewDayAndClockDoNotRequireAnExistingTaskDeadline() throws Exception {
+        UUID owner=user();task(owner,"Проверить договор аренды",null,null);var zone=ZoneId.of("Europe/Moscow");
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"reschedule\",\"new_deadline_time\":\"18:00\"}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Перенеси проверку договора аренды на завтра в 18:00",zone,AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(1);
+        var actual=OffsetDateTime.parse(result.actions().getFirst().payload().get("new_deadline").toString()).atZoneSameInstant(zone);
+        assertThat(actual.toLocalDate()).isEqualTo(LocalDate.now(zone).plusDays(1));assertThat(actual.toLocalTime()).isEqualTo(LocalTime.of(18,0));
+    }
+
+    @Test void aDayNamedForAnotherActionDoesNotMoveTheTimeOnlyReschedule() throws Exception {
+        UUID owner=user();var zone=ZoneId.of("Europe/Moscow");var old=OffsetDateTime.now(zone).plusDays(8).withNano(0);
+        task(owner,"Проверить договор аренды",null,old);var tomorrow=OffsetDateTime.now(zone).plusDays(1).withHour(9).withMinute(0).withSecond(0).withNano(0);
+        reply(PlanningMode.BATCH_PLAN,"{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"reschedule\",\"new_deadline_time\":\"18:00\"}},{\"action\":{\"type\":\"create\",\"title\":\"Отнести справку\",\"deadline\":\""+tomorrow+"\"}}]}","");
+        var result=planner.run(PlanningMode.BATCH_PLAN,owner,"Договор аренды перенеси на 18, а завтра отнеси справку",zone,AssistantEntryPoint.CHAT);
+        assertThat(result.actions()).hasSize(2);
+        var actual=OffsetDateTime.parse(result.actions().getFirst().payload().get("new_deadline").toString()).atZoneSameInstant(zone);
+        assertThat(actual.toLocalDate()).isEqualTo(old.toLocalDate());assertThat(actual.toLocalTime()).isEqualTo(LocalTime.of(18,0));
+    }
+
 }

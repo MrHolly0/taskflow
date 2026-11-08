@@ -17,6 +17,7 @@ class FloatingReminderTimePolicyTest {
         assertThat(FloatingReminderTimePolicy.from(source)).isEqualTo(LocalTime.parse(time));
     }
     @ParameterizedTest @ValueSource(strings={
+        "напомни послезавтра в 07:55",
         "напомни 25 числа в 18:00 забрать посылку",
         "напомни двадцать пятого в 18:00 забрать посылку",
         "напомни на следующей неделе к среде в 18:00",

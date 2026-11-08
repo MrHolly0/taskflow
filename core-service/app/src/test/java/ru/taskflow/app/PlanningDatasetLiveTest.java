@@ -225,6 +225,7 @@ class PlanningDatasetLiveTest {
                 Class.forName("ru.taskflow.assistant.application.planning.ContextualChoicePolicy"),
                 Class.forName("ru.taskflow.assistant.application.TitleChangeGuard"),
                 Class.forName("ru.taskflow.assistant.application.planning.FloatingReminderTimePolicy"),
+                Class.forName("ru.taskflow.assistant.application.planning.RelativeDayPolicy"),
                 Class.forName("ru.taskflow.task.application.TaskServiceImpl"), Class.forName("ru.taskflow.task.infrastructure.persistence.TaskRepository"),
                 ru.taskflow.assistant.application.planning.PlanningGenerationSettings.class,
                 ru.taskflow.assistant.application.planning.CodeModeExecutor.class,
