@@ -1,0 +1,2 @@
+mode,rows,correct,fullAccuracy,legacyAccuracy,precision,recall,inputTokens,outputTokens,tokensPerRequest,medianMs,p95Ms,avgMs,apiFailures,httpCalls,estimatedCostUsd,estimatedCostPer1000Usd,estimatedCostPerCorrectUsd
+BATCH_PLAN,150,138,0.92,0.92,0.9893048128342246,0.9113300492610837,377379,20291,2651.133333333333,560,1271,627.62,0,158,0.06878145,0.4585429999999999,0.000498416304347826

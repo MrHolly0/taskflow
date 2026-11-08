@@ -1,0 +1,41 @@
+scenario,category,taskCount,repeat,mode,correct,expected,actual,matched,dateChecks,datesCorrect,reminderChecks,remindersCorrect,inputTokens,outputTokens,httpCalls,passes,elapsedMs,apiFailure,noWrites,targetRanks,errors
+new-complete,NEW_WORDING,100,1,DIRECT,False,1,0,0,0,0,0,0,5157,907,1,1,7850,False,True,"{""complete"": 100}","[""UNEXPECTED_CONTROL"", ""MISSING_COMPLETE:complete""]"
+new-complete,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,0,0,0,0,2971,54,1,1,431,False,True,"{""complete"": 100}",[]
+new-cancel,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,0,0,0,0,2967,38,1,1,436,False,True,"{""cancel"": 99}",[]
+new-cancel,NEW_WORDING,100,1,DIRECT,False,1,0,0,0,0,0,0,5155,510,1,1,1534,False,True,"{""cancel"": 99}","[""UNEXPECTED_CONTROL"", ""MISSING_CANCEL:cancel""]"
+new-deadline,NEW_WORDING,100,1,DIRECT,False,1,1,0,1,0,0,0,5164,474,1,1,1372,False,True,"{""reschedule"": 86}","[""MISSING_RESCHEDULE:reschedule"", ""FIELD_new_deadline:reschedule:null"", ""EXTRA_CREATE:null""]"
+new-deadline,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,1,1,0,0,2985,138,1,1,624,False,True,"{""reschedule"": 86}",[]
+new-offset-minutes,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,0,0,1,1,2985,103,1,1,518,False,True,"{""relative"": 85}",[]
+new-offset-minutes,NEW_WORDING,100,1,DIRECT,False,1,1,0,0,0,1,0,5154,678,1,1,2432,False,True,"{""relative"": 85}","[""MISSING_REMIND:relative"", ""FIELD_reminder_at:relative:null"", ""EXTRA_CREATE:null""]"
+new-offset-hours,NEW_WORDING,100,1,DIRECT,False,1,0,0,0,0,1,0,5159,658,1,1,1587,False,True,"{""relative"": 85}","[""UNEXPECTED_CONTROL"", ""MISSING_REMIND:relative"", ""FIELD_reminder_at:relative:null""]"
+new-offset-hours,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,0,0,1,1,2984,116,1,1,606,False,True,"{""relative"": 85}",[]
+new-reschedule-offset,NEW_WORDING,100,1,BATCH_PLAN,True,2,2,2,1,1,1,1,2986,259,1,1,838,False,True,"{""reschedule"": 86}",[]
+new-reschedule-offset,NEW_WORDING,100,1,DIRECT,False,2,1,0,1,0,1,0,5165,428,1,1,1103,False,True,"{""reschedule"": 86}","[""MISSING_RESCHEDULE:reschedule"", ""FIELD_new_deadline:reschedule:null"", ""MISSING_REMIND:reschedule"", ""FIELD_reminder_at:reschedule:null"", ""EXTRA_CREATE:null""]"
+new-priority,NEW_WORDING,100,1,DIRECT,False,1,1,0,0,0,0,0,5414,534,1,1,1262,False,True,"{""update"": 97}","[""MISSING_UPDATE:update"", ""FIELD_priority:update:null"", ""EXTRA_CREATE:null""]"
+new-priority,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,0,0,0,0,2966,75,1,1,476,False,True,"{""update"": 97}",[]
+new-create-two,NEW_WORDING,100,1,BATCH_PLAN,True,2,2,2,2,2,0,0,2995,129,1,1,579,False,True,{},[]
+new-create-two,NEW_WORDING,100,1,DIRECT,False,2,2,2,2,2,0,0,5165,465,1,1,1115,False,True,{},"[""UNREQUESTED_FIELD_group:null"", ""UNREQUESTED_FIELD_group:null""]"
+new-remind-absolute,NEW_WORDING,100,1,DIRECT,False,1,1,0,0,0,1,0,5166,470,1,1,1349,False,True,"{""remind"": 98}","[""MISSING_REMIND:remind"", ""FIELD_reminder_at:remind:null"", ""EXTRA_CREATE:null""]"
+new-remind-absolute,NEW_WORDING,100,1,BATCH_PLAN,True,1,1,1,0,0,1,1,2977,162,1,1,621,False,True,"{""remind"": 98}",[]
+new-mixed,NEW_WORDING,100,1,BATCH_PLAN,True,2,2,2,0,0,0,0,2956,150,1,1,610,False,True,"{""complete"": 100, ""update"": 97}",[]
+new-mixed,NEW_WORDING,100,1,DIRECT,False,2,2,0,0,0,0,0,5164,1414,1,1,3343,False,True,"{""complete"": 100, ""update"": 97}","[""MISSING_COMPLETE:complete"", ""MISSING_UPDATE:update"", ""FIELD_group:update:null"", ""EXTRA_CREATE:null"", ""EXTRA_CREATE:null""]"
+new-complete,NEW_WORDING,200,1,DIRECT,False,1,1,0,0,0,0,0,5150,692,1,1,1804,False,True,"{""complete"": 200}","[""MISSING_COMPLETE:complete"", ""EXTRA_CREATE:null""]"
+new-complete,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,0,0,0,0,2967,77,1,1,467,False,True,"{""complete"": 200}",[]
+new-cancel,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,0,0,0,0,2951,60,1,1,404,False,True,"{""cancel"": 199}",[]
+new-cancel,NEW_WORDING,200,1,DIRECT,False,1,0,0,0,0,0,0,6172,527,1,1,1246,False,True,"{""cancel"": 199}","[""UNEXPECTED_CONTROL"", ""MISSING_CANCEL:cancel""]"
+new-deadline,NEW_WORDING,200,1,DIRECT,False,1,1,0,1,0,0,0,5413,459,1,1,1105,False,True,"{""reschedule"": 176}","[""MISSING_RESCHEDULE:reschedule"", ""FIELD_new_deadline:reschedule:null"", ""EXTRA_CREATE:null""]"
+new-deadline,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,1,1,0,0,2975,138,1,1,551,False,True,"{""reschedule"": 176}",[]
+new-offset-minutes,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,0,0,1,1,2981,108,1,1,508,False,True,"{""relative"": 175}",[]
+new-offset-minutes,NEW_WORDING,200,1,DIRECT,False,1,1,0,0,0,1,0,6171,446,1,1,1074,False,True,"{""relative"": 175}","[""MISSING_REMIND:relative"", ""FIELD_reminder_at:relative:null"", ""EXTRA_CREATE:null""]"
+new-offset-hours,NEW_WORDING,200,1,DIRECT,False,1,1,0,0,0,1,0,5920,665,1,1,1541,False,True,"{""relative"": 175}","[""MISSING_REMIND:relative"", ""FIELD_reminder_at:relative:null"", ""EXTRA_CREATE:null""]"
+new-offset-hours,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,0,0,1,1,2980,101,1,1,482,False,True,"{""relative"": 175}",[]
+new-reschedule-offset,NEW_WORDING,200,1,BATCH_PLAN,True,2,2,2,1,1,1,1,2976,223,1,1,862,False,True,"{""reschedule"": 176}",[]
+new-reschedule-offset,NEW_WORDING,200,1,DIRECT,False,2,1,0,1,0,1,0,5414,534,1,1,1265,False,True,"{""reschedule"": 176}","[""MISSING_RESCHEDULE:reschedule"", ""FIELD_new_deadline:reschedule:null"", ""MISSING_REMIND:reschedule"", ""FIELD_reminder_at:reschedule:null"", ""EXTRA_CREATE:null""]"
+new-priority,NEW_WORDING,200,1,DIRECT,False,1,1,0,0,0,0,0,5919,313,1,1,1011,False,True,"{""update"": 197}","[""MISSING_UPDATE:update"", ""FIELD_priority:update:null"", ""EXTRA_CREATE:null""]"
+new-priority,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,0,0,0,0,2962,86,1,1,725,False,True,"{""update"": 197}",[]
+new-create-two,NEW_WORDING,200,1,BATCH_PLAN,True,2,2,2,2,2,0,0,2979,176,1,1,669,False,True,{},[]
+new-create-two,NEW_WORDING,200,1,DIRECT,False,2,2,2,2,2,0,0,5158,489,1,1,1168,False,True,{},"[""UNREQUESTED_FIELD_group:null"", ""UNREQUESTED_FIELD_group:null""]"
+new-remind-absolute,NEW_WORDING,200,1,DIRECT,False,1,1,0,0,0,1,0,5159,501,1,1,1533,False,True,"{""remind"": 198}","[""MISSING_REMIND:remind"", ""FIELD_reminder_at:remind:null"", ""EXTRA_CREATE:null""]"
+new-remind-absolute,NEW_WORDING,200,1,BATCH_PLAN,True,1,1,1,0,0,1,1,2973,138,1,1,597,False,True,"{""remind"": 198}",[]
+new-mixed,NEW_WORDING,200,1,BATCH_PLAN,True,2,2,2,0,0,0,0,2952,114,1,1,726,False,True,"{""complete"": 200, ""update"": 197}",[]
+new-mixed,NEW_WORDING,200,1,DIRECT,False,2,2,0,0,0,0,0,5157,1269,1,1,3092,False,True,"{""complete"": 200, ""update"": 197}","[""MISSING_COMPLETE:complete"", ""MISSING_UPDATE:update"", ""FIELD_group:update:null"", ""EXTRA_CREATE:null"", ""EXTRA_CREATE:null""]"
