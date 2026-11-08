@@ -38,6 +38,7 @@ class JsonPlanningApplyIntegrationTest {
     @Autowired AssistantService assistant;
     @Autowired TaskService tasks;
     @Autowired UserService users;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
     @MockBean NlpGatewayService model;
     @MockBean AssistantRateLimiter limiter;
     @BeforeEach void allow() { when(limiter.allow(any())).thenReturn(true); }
@@ -80,4 +81,49 @@ class JsonPlanningApplyIntegrationTest {
         assertThat(tasks.findById(user,target.id()).deadline().toInstant()).isEqualTo(deadline.toInstant());
         assertThat(tasks.getReminders(user,target.id())).filteredOn(r -> r.fireAt().isEqual(deadline.minusMinutes(45))).hasSize(1);
     }
+    @Test void acceptingAnotherAlternativeDisablesTheFirstEvenThroughTheCheckboxEndpoint() {
+        UUID user = user();var target = task(user,null);
+        reply("{\"alternatives\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"complete\"}},{\"action\":{\"type\":\"create\",\"title\":\"Закрыть договор\"}}]}");
+        var proposal = assistant.handleText(user,"закрыть договор",AssistantChannel.WEB);
+        assertThat(proposal.exclusive()).isTrue();
+        var changed = assistant.setActionAccepted(user,proposal.id(),2,true);
+        assertThat(changed.actions().stream().filter(a -> a.accepted()).count()).isEqualTo(1);
+        assertThat(changed.actions().getLast().accepted()).isTrue();
+        assertThat(assistant.apply(user,proposal.id()).appliedCount()).isEqualTo(1);
+        assertThat(tasks.findById(user,target.id()).status()).isEqualTo(TaskStatus.TODO);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,user)).isEqualTo(2);
+    }
+
+    @Test void anInvalidExclusiveProposalCannotApplyBothActions() {
+        UUID user = user();var target = task(user,null);
+        reply("{\"alternatives\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"complete\"}},{\"action\":{\"type\":\"create\",\"title\":\"Закрыть договор\"}}]}");
+        var proposal = assistant.handleText(user,"закрыть договор",AssistantChannel.WEB);
+        jdbc.update("UPDATE assistant_proposal_actions SET accepted=true WHERE proposal_id=?",proposal.id());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> assistant.apply(user,proposal.id()))
+                .isInstanceOf(ru.taskflow.shared.exception.ValidationException.class);
+        assertThat(tasks.findById(user,target.id()).status()).isEqualTo(TaskStatus.TODO);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,user)).isEqualTo(1);
+    }
+
+    @Test void reminderBeforeRescheduleUsesFinalDeadlineAndSurvivesApplyingTheMove() {
+        UUID owner=user();var target=task(owner,OffsetDateTime.now().plusDays(30));
+        var deadline=OffsetDateTime.now().plusDays(4).withNano(0);
+        reply("{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":75}},{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"reschedule\",\"new_deadline\":\""+deadline+"\"}}]}");
+        var proposal=assistant.handleText(owner,"Напомни за 75 минут до срока договора аренды и перенеси его срок",AssistantChannel.WEB);
+        assertThat(proposal.actions()).extracting(a -> a.type()).containsExactly(AssistantActionType.RESCHEDULE,AssistantActionType.REMIND);
+        assertThat(assistant.apply(owner,proposal.id()).appliedCount()).isEqualTo(2);
+        assertThat(tasks.findById(owner,target.id()).deadline().toInstant()).isEqualTo(deadline.toInstant());
+        assertThat(tasks.getReminders(owner,target.id())).filteredOn(r -> r.fireAt().toInstant().equals(deadline.minusMinutes(75).toInstant())).hasSize(1);
+    }
+
+    @Test void conflictingTerminalAndScheduleOperationsAskWithoutWriting() {
+        UUID owner=user();var target=task(owner,OffsetDateTime.now().plusDays(30));
+        var before=tasks.getReminders(owner,target.id());
+        reply("{\"steps\":[{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"complete\"}},{\"select\":{\"query\":\"аренды\"},\"action\":{\"type\":\"remind\",\"reminder_before_deadline_minutes\":75}}]}");
+        var proposal=assistant.handleText(owner,"Заверши договор аренды и напомни за 75 минут",AssistantChannel.WEB);
+        assertThat(proposal.actions()).isEmpty();assertThat(proposal.clarification()).isNotBlank();
+        assertThat(tasks.getReminders(owner,target.id())).isEqualTo(before);
+        assertThat(tasks.findById(owner,target.id()).status()).isEqualTo(TaskStatus.TODO);
+    }
+
 }

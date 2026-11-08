@@ -216,7 +216,12 @@ public class AssistantServiceImpl implements AssistantService {
         boolean matched = entity.getActions().stream()
                 .filter(action -> action.getOrdinal() == ordinal)
                 .findFirst()
-                .map(action -> { action.setAccepted(accepted); return true; })
+                .map(action -> {
+                    if (accepted && entity.isExclusive())
+                        entity.getActions().forEach(candidate -> candidate.setAccepted(candidate.getOrdinal() == ordinal));
+                    else action.setAccepted(accepted);
+                    return true;
+                })
                 .orElse(false);
         if (!matched) {
             log.debug("Предложение {}: действие с ordinal={} не найдено, ничего не изменено", proposalId, ordinal);

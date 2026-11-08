@@ -14,6 +14,7 @@ import ru.taskflow.audit.api.AuditEventType;
 import ru.taskflow.audit.api.AuditService;
 import ru.taskflow.shared.exception.AccessDeniedException;
 import ru.taskflow.shared.exception.NotFoundException;
+import ru.taskflow.shared.exception.ValidationException;
 import ru.taskflow.task.api.TaskPriority;
 import ru.taskflow.task.api.TaskService;
 import ru.taskflow.task.api.TaskSource;
@@ -48,6 +49,9 @@ public class ProposalApplier {
                 .filter(ProposalActionJpaEntity::isAccepted)
                 .sorted(Comparator.comparingInt(ProposalActionJpaEntity::getOrdinal))
                 .toList();
+
+        if (proposal.isExclusive() && accepted.size() > 1)
+            throw new ValidationException("Выбери один вариант перед применением предложения");
 
         List<ActionOutcome> outcomes = new ArrayList<>();
         int appliedCount = 0;
