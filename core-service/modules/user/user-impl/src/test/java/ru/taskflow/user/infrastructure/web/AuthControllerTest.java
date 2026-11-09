@@ -26,6 +26,7 @@ import ru.taskflow.user.application.PhoneInboundConfirmationService;
 import ru.taskflow.user.application.PhoneVerificationProvider;
 import ru.taskflow.user.application.RefreshTokenService;
 import ru.taskflow.user.infrastructure.geo.CountryResolver;
+import ru.taskflow.user.infrastructure.geo.TelegramLoginVisibility;
 import ru.taskflow.user.infrastructure.web.dto.RequestCodeRequest;
 import ru.taskflow.user.infrastructure.web.dto.RequestPhoneConfirmationRequest;
 import ru.taskflow.user.infrastructure.web.dto.VerifyCodeRequest;
@@ -89,7 +90,7 @@ class AuthControllerTest {
         lenient().when(rateLimiter.allowForEmailConfirm(any(), any())).thenReturn(true);
         lenient().when(phoneVerificationProvider.isAvailable()).thenReturn(false);
         controller = new AuthController(initDataValidator, loginWidgetValidator, jwtService,
-                userService, refreshTokenService, loginCodeService, emailSender, rateLimiter, countryResolver,
+                userService, refreshTokenService, loginCodeService, emailSender, rateLimiter, new TelegramLoginVisibility(countryResolver, false),
                 phoneVerificationProvider, phoneInboundConfirmationService);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
@@ -275,6 +276,21 @@ class AuthControllerTest {
                 .andExpect(status().isOk());
 
         verify(phoneInboundConfirmationService).cancelPending(PHONE);
+    }
+
+    @Test
+    void methods_standOverride_telegramVisibleWithoutCountryLookup() throws Exception {
+        controller = new AuthController(initDataValidator, loginWidgetValidator, jwtService,
+                userService, refreshTokenService, loginCodeService, emailSender, rateLimiter,
+                new TelegramLoginVisibility(countryResolver, true),
+                phoneVerificationProvider, phoneInboundConfirmationService);
+        mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
+
+        mockMvc.perform(get("/api/v1/auth/methods"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.telegram").value(true));
+
+        verifyNoInteractions(countryResolver);
     }
 
     @Test

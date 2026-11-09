@@ -10,6 +10,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       QA_LOGIN_SECRET: ""
+      TELEGRAM_LOGIN_ALWAYS_VISIBLE: "true"
       JAVA_TOOL_OPTIONS: -XX:ActiveProcessorCount=2
     restart: unless-stopped
   nlp-worker:

@@ -22,7 +22,7 @@ import ru.taskflow.user.application.PhoneInboundConfirmationService;
 import ru.taskflow.user.application.PhoneNumberNormalizer;
 import ru.taskflow.user.application.PhoneVerificationProvider;
 import ru.taskflow.user.application.RefreshTokenService;
-import ru.taskflow.user.infrastructure.geo.CountryResolver;
+import ru.taskflow.user.infrastructure.geo.TelegramLoginVisibility;
 import ru.taskflow.user.infrastructure.web.dto.*;
 
 import java.net.URLDecoder;
@@ -47,14 +47,14 @@ public class AuthController {
     private final LoginCodeService loginCodeService;
     private final EmailSender emailSender;
     private final AuthRateLimiter rateLimiter;
-    private final CountryResolver countryResolver;
+    private final TelegramLoginVisibility telegramLoginVisibility;
     private final PhoneVerificationProvider phoneVerificationProvider;
     private final PhoneInboundConfirmationService phoneInboundConfirmationService;
 
     @GetMapping("/methods")
     @ResponseStatus(HttpStatus.OK)
     @Operation(summary = "Доступные способы входа",
-            description = "Почта разрешена всегда; Telegram скрывается для российских адресов и при "
+            description = "Почта разрешена всегда; вне демонстрационного стенда Telegram скрывается для российских адресов и при "
                     + "невозможности определить страну — цена ошибки несимметрична; телефон — только "
                     + "если у провайдера звонков заданы ключи")
     public AuthMethodsResponse methods(HttpServletRequest httpRequest) {
@@ -208,9 +208,7 @@ public class AuthController {
     // пришло из доверенной сети (internal-proxies). Читать заголовок здесь самим —
     // значит доверять ему от кого угодно, включая прямое обращение в обход nginx.
     private boolean telegramAllowed(HttpServletRequest httpRequest) {
-        return countryResolver.resolveCountryIso(httpRequest.getRemoteAddr())
-                .map(iso -> !"RU".equalsIgnoreCase(iso))
-                .orElse(false);
+        return telegramLoginVisibility.isVisible(httpRequest.getRemoteAddr());
     }
 
     private AuthResponse issueTokens(UUID userId, String username) {
