@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   IconMicrophone,
   IconArrowRight,
-  IconPlayerPause,
+  IconPlayerPauseFilled,
   IconPlayerPlay,
 } from '@tabler/icons-react';
 import { useTaskUi } from '@/lib/task-ui';
@@ -64,7 +64,7 @@ export function CaptureCard() {
         onClick={() => setPlaying(!playing)}
       >
         <SoundWave playing={playing} />
-        {playing ? <IconPlayerPause /> : <IconPlayerPlay />}
+        {playing ? <IconPlayerPauseFilled aria-hidden="true" /> : <IconPlayerPlay aria-hidden="true" />}
       </button>
       <button className="capture-card-action" onClick={open}>
         Текст или голос

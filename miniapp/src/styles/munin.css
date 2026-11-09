@@ -90,7 +90,7 @@ button:disabled { cursor:default; }
 .capture-example { font-size:16px; line-height:1.65; margin:18px 0 8px; }
 .capture-example > span { color:var(--muted-foreground); }
 .wave-player { display:flex; align-items:center; gap:10px; width:100%; height:44px; padding:0; border:0; color:var(--munin-wave); }
-.wave-player > svg { width:18px; height:18px; stroke-width:3; }
+.wave-player > svg { width:24px; height:24px; flex:0 0 24px; }
 .sound-wave { display:flex; align-items:center; gap:3px; flex:1; min-width:0; height:44px; overflow:hidden; }
 .sound-wave i { height:34px; width:3px; flex:1 1 3px; max-width:4px; border-radius:3px; transform-origin:center; background:linear-gradient(120deg,oklch(.58 .17 254),oklch(.59 .18 273),oklch(.55 .20 264)); background-size:200% 200%; animation:wave-shimmer 5s linear infinite; }
 .sound-wave i:nth-child(3n) { animation-delay:-1.8s; }
