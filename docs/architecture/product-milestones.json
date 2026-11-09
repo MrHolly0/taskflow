@@ -1,0 +1,52 @@
+{
+  "recorded_on": "2026-11-09",
+  "states": [
+    {
+      "id": "thesis-reference",
+      "status": "awaiting_user_selection",
+      "git_commit": null,
+      "document_sha256": null,
+      "screenshots": [],
+      "candidate_inventory_local": "docs/vkr/milestones-2026-11-09/inventory.json",
+      "note": "Точный файл ВКР, срез кода и набор экранов выбирает владелец; названия В4/В5/В6 не определяют выбор."
+    },
+    {
+      "id": "defense-demo",
+      "status": "awaiting_user_selection",
+      "git_commit": null,
+      "screenshots": [],
+      "note": "После выбора экранов указать, что показывается как версия ВКР, а что как последующее развитие."
+    },
+    {
+      "id": "stable-2026-11-09",
+      "status": "fixed_code_snapshot",
+      "git_ref": "milestone/stable-2026-11-09",
+      "git_commit": "7588ca5e7d7bc7d3d14a1f6a014a648e5644b69b",
+      "git_tree": "02806f9aa26acc9570a75847bfa074de6d5490f4",
+      "planning_default": "BATCH_PLAN",
+      "validation": {
+        "junit_tests": 1093,
+        "junit_failures": 0,
+        "junit_errors": 0,
+        "junit_skipped": 0,
+        "worker_smoke_groups": 7
+      },
+      "evidence_local": "docs/vkr/experiments/2026-11-09-resource-guards/manifest.json",
+      "deployment_status": "not_recorded",
+      "screenshots": [],
+      "note": "Git фиксирует исходный код и документацию; состав данных и состояние запущенного стенда фиксируются отдельно."
+    }
+  ],
+  "historical_code_candidates": [
+    {
+      "id": "react-ui-2026-10-07",
+      "git_commit": "fa663c1d819639524b6d7168e57a9639668d41a6",
+      "status": "candidate_not_thesis_selection"
+    },
+    {
+      "id": "json-release-2026-11-08",
+      "git_commit": "7698a6b867fcba35aed5110349e1858e2a4eab33",
+      "status": "verified_planning_milestone"
+    }
+  ]
+}
