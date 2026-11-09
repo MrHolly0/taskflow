@@ -4,6 +4,7 @@
 !infra/
 !infra/nginx/
 !infra/nginx/nginx.conf
+!infra/nginx/trusted-proxies.conf
 **/node_modules
 **/dist
 **/.env*
