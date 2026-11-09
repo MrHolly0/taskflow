@@ -6,6 +6,7 @@ import { isoToZonedDate } from '@/lib/reminderPresets';
 import { DayPicker } from 'react-day-picker';
 import { IconCalendar } from '@tabler/icons-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/app/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { Button } from '@/app/components/ui/button';
 import 'react-day-picker/dist/style.css';
 
@@ -18,6 +19,13 @@ export function DateField({ value, onChange, label, id, section, disabled = fals
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const update = () => setMobile(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const { timezone } = useUserTimezone();
   const today = parse(isoToZonedDate(new Date().toISOString(), timezone), 'yyyy-MM-dd', new Date());
   const [padding, setPadding] = useState({ top: 12, bottom: 12, left: 12, right: 12 });
@@ -47,24 +55,39 @@ export function DateField({ value, onChange, label, id, section, disabled = fals
     onChange(date ? format(date, 'yyyy-MM-dd') : '');
     setOpen(false);
   };
+  const trigger = (
+    <Button type="button" variant="outline" id={id} data-task-section={section}
+      className="date-field" aria-label={`${label}: ${selected ? format(selected, 'd MMMM yyyy', { locale: ru }) : 'не выбрана'}`}
+      disabled={disabled}>
+      <IconCalendar size={18} aria-hidden />
+      <span>{selected ? format(selected, 'd MMMM yyyy', { locale: ru }) : 'Выбрать дату'}</span>
+    </Button>
+  );
+  const calendar = <>
+    <div className="date-presets">
+      <Button type="button" variant="secondary" onClick={() => choose(today)}>Сегодня</Button>
+      <Button type="button" variant="secondary" onClick={() => choose(addDays(today, 1))}>Завтра</Button>
+      <Button type="button" variant="ghost" onClick={() => choose()}>Без даты</Button>
+    </div>
+    <div className="date-calendar-scroll">
+      <DayPicker mode="single" locale={ru} weekStartsOn={1} selected={selected}
+        defaultMonth={selected ?? today} today={today} onSelect={choose} initialFocus />
+    </div>
+  </>;
+  if (mobile) return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="date-popover date-dialog" aria-describedby={undefined}>
+        <DialogHeader className="text-left pr-10"><DialogTitle>{label}</DialogTitle></DialogHeader>
+        {calendar}
+      </DialogContent>
+    </Dialog>
+  );
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="outline" id={id} data-task-section={section}
-          className="date-field" aria-label={`${label}: ${selected ? format(selected, 'd MMMM yyyy', { locale: ru }) : 'не выбрана'}`}
-          disabled={disabled}>
-          <IconCalendar size={18} aria-hidden />
-          <span>{selected ? format(selected, 'd MMMM yyyy', { locale: ru }) : 'Выбрать дату'}</span>
-        </Button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent className="date-popover" align="start" collisionPadding={padding} aria-label={label}>
-        <div className="date-presets">
-          <Button type="button" variant="secondary" onClick={() => choose(today)}>Сегодня</Button>
-          <Button type="button" variant="secondary" onClick={() => choose(addDays(today, 1))}>Завтра</Button>
-          <Button type="button" variant="ghost" onClick={() => choose()}>Без даты</Button>
-        </div>
-        <DayPicker mode="single" locale={ru} weekStartsOn={1} selected={selected}
-          defaultMonth={selected ?? today} today={today} onSelect={choose} initialFocus />
+        {calendar}
       </PopoverContent>
     </Popover>
   );

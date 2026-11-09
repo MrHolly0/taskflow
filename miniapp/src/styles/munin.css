@@ -126,8 +126,8 @@ button:disabled { cursor:default; }
 .empty-task-list { padding:40px 12px; text-align:center; color:var(--muted-foreground); font-size:14px; }
 .empty-task-list h2 { font-size:18px; color:var(--foreground); font-weight:500; margin-bottom:12px; }
 .empty-task-list a { display:block; margin-top:16px; }
-.munin-form-dialog { width:calc(100% - 32px); max-width:580px; max-height:calc(100dvh - 32px); overflow-y:auto; border-radius:20px; }
-.munin-field { display:flex; flex-direction:column; gap:8px; font-size:13px; font-weight:400; min-width:0; }
+.munin-form-dialog { width:calc(100% - 32px); max-width:580px; max-height:calc(100dvh - 32px); overflow-y:auto; border-radius:20px; grid-template-columns:minmax(0,1fr); }
+.munin-field { display:flex; flex-direction:column; gap:8px; font-size:14px; font-weight:400; min-width:0; }
 .munin-field input,.munin-field [data-slot=select-trigger] { height:44px; background:var(--secondary); border:1px solid var(--border); font-size:16px; border-radius:10px; }
 .manual-task-options summary { min-height:44px; padding:12px 0; cursor:pointer; font-size:13px; color:var(--muted-foreground); }
 .munin-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:12px; }
@@ -299,10 +299,16 @@ button:disabled { cursor:default; }
 .date-popover .rdp-day_today:not(.rdp-day_selected) {font-weight:700;text-decoration:underline;text-underline-offset:4px;}
 .date-popover .rdp-nav_button {width:44px;height:44px;}
 .date-popover .rdp-caption_label {font-size:16px;}
-.date-presets {display:flex;gap:8px;}
-.date-presets button,.date-clear {min-height:44px;font-size:14px;}
-.date-clear {width:100%;}
-.munin-form-dialog {grid-template-columns:minmax(0,1fr);}
+.date-presets {display:flex;gap:8px;flex-wrap:wrap;}
+.date-presets button {min-height:44px;font-size:14px;padding-inline:10px;}
 .munin-form-dialog > form {min-width:0;}
-.munin-field {font-size:14px;}
 .munin-field [data-slot=select-trigger] {min-width:0;max-width:100%;overflow:hidden;}
+.date-dialog {gap:12px;}
+.date-dialog .rdp {margin:0;}
+.date-popover .rdp-table {table-layout:fixed;}
+.date-popover .rdp-head_cell {width:14.2857%;}
+[data-slot=dialog-overlay] .date-dialog {display:flex;flex-direction:column;overflow:hidden;}
+.date-dialog [data-slot=dialog-header],.date-dialog .date-presets {flex-shrink:0;}
+.date-dialog .date-calendar-scroll {min-height:0;overflow-y:auto;overscroll-behavior:contain;}
+.date-dialog .rdp-caption {position:sticky;top:0;z-index:2;background:var(--popover);}
+.date-dialog .rdp-head {position:sticky;top:44px;z-index:1;background:var(--popover);}
