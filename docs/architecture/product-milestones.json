@@ -3,12 +3,17 @@
   "states": [
     {
       "id": "thesis-reference",
-      "status": "awaiting_user_selection",
+      "status": "document_selected_code_and_screens_pending",
       "git_commit": null,
-      "document_sha256": null,
+      "document_sha256": "1092eac056c349a43c570f4e3232ae7a618ebb0a70c041235d39e679d3c95993",
       "screenshots": [],
       "candidate_inventory_local": "docs/vkr/milestones-2026-11-09/inventory.json",
-      "note": "Точный файл ВКР, срез кода и набор экранов выбирает владелец; названия В4/В5/В6 не определяют выбор."
+      "note": "Документ выбран автором как актуальный черновик с неисправленными замечаниями. Это основа для сопоставления текста с продуктом, а не утверждённая финальная записка. Срез кода и демонстрационные экраны ещё не выбраны.",
+      "document_local": "docs/vkr/milestones-2026-11-09/latest-user-draft/ВКР_В4_актуальный_черновик.docx",
+      "document_revision": "В4 — последняя редакция, присланная автором 09.11.2026",
+      "document_review_status": "known_issues_not_yet_corrected",
+      "document_selection": "confirmed_by_user",
+      "code_selection": "pending"
     },
     {
       "id": "defense-demo",
