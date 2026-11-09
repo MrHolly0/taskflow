@@ -24,8 +24,18 @@ public record UpdateTaskRequest(
         // Выключение отдельно гасит запланированные повторы (TaskServiceImpl.update).
         Boolean persistentReminder,
         Boolean clearGroup,
-        Boolean clearPlannedDate
+        Boolean clearPlannedDate,
+        Boolean clearDeadline,
+        Boolean clearEstimateMinutes
 ) {
+    public UpdateTaskRequest(String title, String description, TaskPriority priority, TaskStatus status,
+            OffsetDateTime deadline, UUID groupId, String groupName, List<String> tags, Integer estimateMinutes,
+            OffsetDateTime plannedDate, RecurrenceRule recurrence, Boolean persistentReminder,
+            Boolean clearGroup, Boolean clearPlannedDate) {
+        this(title, description, priority, status, deadline, groupId, groupName, tags, estimateMinutes,
+                plannedDate, recurrence, persistentReminder, clearGroup, clearPlannedDate, null, null);
+    }
+
     public UpdateTaskRequest(String title, String description, TaskPriority priority, TaskStatus status,
             OffsetDateTime deadline, UUID groupId, String groupName, List<String> tags, Integer estimateMinutes) {
         this(title, description, priority, status, deadline, groupId, groupName, tags, estimateMinutes, null, null,

@@ -107,7 +107,18 @@ public class TaskReminderService {
     }
 
     private Integer chainStartOrNull(TaskJpaEntity task) {
-        return task.isPersistentReminder() ? 0 : null;
+        if (!task.isPersistentReminder()) return null;
+        boolean activeChain = reminderRepository.findByTaskIdAndStatusOrderByFireAtAsc(task.getId(), ReminderStatus.PENDING)
+                .stream().anyMatch(reminder -> reminder.getChainStep() != null);
+        return activeChain ? null : 0;
+    }
+
+    @Transactional
+    public void armPendingReminder(UUID taskId) {
+        var pending = reminderRepository.findByTaskIdAndStatusOrderByFireAtAsc(taskId, ReminderStatus.PENDING);
+        if (pending.stream().anyMatch(reminder -> reminder.getChainStep() != null)) return;
+        pending.stream().filter(reminder -> reminder.getFireAt().isAfter(OffsetDateTime.now(clock))).findFirst()
+                .ifPresent(reminder -> { reminder.setChainStep(0); reminderRepository.save(reminder); });
     }
 
     /**
@@ -147,6 +158,11 @@ public class TaskReminderService {
                 .filter(r -> r.getChainStep() != null)
                 .toList();
         for (var reminder : pendingChainReminders) {
+            if (reminder.getChainStep() == 0) {
+                reminder.setChainStep(null);
+                reminderRepository.save(reminder);
+                continue;
+            }
             reminder.setStatus(ReminderStatus.CANCELLED);
             reminderRepository.save(reminder);
             notificationService.cancelReminderNotifications(reminder.getId());
@@ -182,14 +198,21 @@ public class TaskReminderService {
             }
             reminder.setStatus(ReminderStatus.DISMISSED);
             reminderRepository.save(reminder);
-            notificationService.cancelReminderNotifications(reminder.getId());
+            // Время уже настало: доставку держит отдельная очередь. Не удаляем
+            // её строку, иначе отставший отправитель потеряет это уведомление.
 
             int step = reminder.getChainStep();
             if (step < CHAIN_STEP_GAPS.size()) {
                 OffsetDateTime nextFireAt = reminder.getFireAt().plus(CHAIN_STEP_GAPS.get(step));
+                if (!nextFireAt.isAfter(now)) nextFireAt = now.plus(CHAIN_STEP_GAPS.get(step));
                 createReminder(task.getUserId(), task, nextFireAt, task.getDeadline(), step + 1);
             }
         }
+    }
+
+    @Transactional
+    public void refreshNotificationDetails(UUID userId, TaskJpaEntity task) {
+        notificationService.refreshTaskReminderDetails(userId, task.getId(), task.getTitle(), task.getDeadline());
     }
 
     /**

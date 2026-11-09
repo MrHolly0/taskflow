@@ -79,6 +79,27 @@ class TaskReadServiceIntegrationTest {
     }
 
     @Test
+    void recommendationRanksOldImportantWorkBeforeFiftyFuturePlans() {
+        var now = OffsetDateTime.now();
+        var working = task(user, "уже начато", TaskStatus.IN_PROGRESS);
+        working.setCreatedAt(now.minusDays(60)); entities.persist(working);
+        var overdue = task(user, "старое просроченное", TaskStatus.TODO);
+        overdue.setDeadline(now.minusDays(1)); overdue.setCreatedAt(now.minusDays(50)); entities.persist(overdue);
+        var next = task(user, "ближайшее без отложения", TaskStatus.TODO);
+        next.setDeadline(now.plusDays(3)); entities.persist(next);
+        for (int i = 0; i < 50; i++) {
+            var future = task(user, "позже " + i, TaskStatus.TODO);
+            future.setPlannedDate(now.plusDays(15)); future.setDeadline(now.plusDays(20)); entities.persist(future);
+        }
+        flush();
+        var filter = new TaskReadService.Filter("active", "all", "", "all", "recommendation", null, null, List.of());
+        var result = service.page(user, filter, 0, 8);
+        assertThat(result.totalElements()).isEqualTo(53);
+        assertThat(result.content().subList(0, 3)).extracting(task -> task.id())
+                .containsExactly(working.getId(), overdue.getId(), next.getId());
+    }
+
+    @Test
     void pagedReadLoadsOnlyVisibleTasksAndPreservesTotals() {
         var identifiers = new ArrayList<UUID>();
         var base = OffsetDateTime.parse("2026-01-01T00:00:00Z");

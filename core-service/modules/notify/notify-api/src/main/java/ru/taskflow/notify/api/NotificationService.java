@@ -18,6 +18,8 @@ public interface NotificationService {
     void scheduleReminder(UUID userId, UUID taskId, UUID reminderId, String title,
                           OffsetDateTime fireAt, OffsetDateTime deadline);
 
+    void refreshTaskReminderDetails(UUID userId, UUID taskId, String title, OffsetDateTime deadline);
+
     void cancelTaskNotifications(UUID taskId);
 
     /**

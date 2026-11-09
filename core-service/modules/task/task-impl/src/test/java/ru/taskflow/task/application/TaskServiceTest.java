@@ -18,6 +18,7 @@ import ru.taskflow.shared.exception.ValidationException;
 import ru.taskflow.task.api.RecurrenceType;
 import ru.taskflow.task.api.TaskPriority;
 import ru.taskflow.task.api.TaskStatus;
+import ru.taskflow.task.api.TaskSource;
 import ru.taskflow.task.api.dto.CreateTaskRequest;
 import ru.taskflow.task.api.dto.RecurrenceRule;
 import ru.taskflow.task.api.dto.ReminderResponse;
@@ -326,6 +327,70 @@ class TaskServiceTest {
 
         assertThatThrownBy(() -> taskService.findById(userId, taskId))
                 .isInstanceOf(TaskNotFoundException.class);
+    }
+
+    @Test
+    void savingUnchangedTitleAndDeadlineDoesNotRescheduleReminders() {
+        var entity = taskEntity();
+        entity.setDeadline(OffsetDateTime.now().plusDays(7));
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.save(any())).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, entity.getTitle()));
+        taskService.update(userId, taskId, new UpdateTaskRequest(entity.getTitle(), null, null, null,
+                entity.getDeadline(), null, null, null, null));
+        verify(taskReminderService, never()).cancelForTask(any());
+        verify(taskReminderService, never()).planForDeadline(any(), any());
+        verify(taskReminderService, never()).refreshNotificationDetails(any(), any());
+    }
+
+    @Test
+    void changingTitleOnlyRefreshesNotificationText() {
+        var entity = taskEntity();
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.save(any())).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, "Новое название"));
+        taskService.update(userId, taskId, new UpdateTaskRequest("Новое название", null, null, null, null, null, null, null, null));
+        verify(taskReminderService).refreshNotificationDetails(userId, entity);
+        verify(taskReminderService, never()).cancelForTask(any());
+        verify(taskReminderService, never()).planForDeadline(any(), any());
+    }
+
+    @Test
+    void explicitlyClearingDeadlineDescriptionAndEstimateKeepsReminderTimes() {
+        var entity = taskEntity(); entity.setDeadline(OffsetDateTime.now().plusDays(7)); entity.setEstimateMinutes(30); entity.setDescription("старое");
+        when(taskRepository.findForUpdate(taskId, userId)).thenReturn(Optional.of(entity));
+        when(taskRepository.save(any())).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, entity.getTitle()));
+        taskService.update(userId, taskId, new UpdateTaskRequest(null, "", null, null, null, null, null, null, null,
+                null, null, null, null, null, true, true));
+        assertThat(entity.getDeadline()).isNull(); assertThat(entity.getEstimateMinutes()).isNull(); assertThat(entity.getDescription()).isEmpty();
+        verify(taskReminderService).refreshNotificationDetails(userId, entity);
+        verify(taskReminderService, never()).cancelForTask(any());
+    }
+
+    @Test
+    void createQuickWithExplicitReminderDoesNotAlsoScheduleTheDefault() {
+        var entity = taskEntity();
+        var time = OffsetDateTime.now().plusDays(7);
+        var request = new CreateTaskRequest("Напомнить отдельно", null, TaskPriority.MEDIUM, time.plusDays(1),
+                null, null, List.of(), null, TaskSource.MANUAL, null, false, null, true, time);
+        when(taskRepository.save(any())).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, entity.getTitle()));
+        taskService.createQuick(userId, request);
+        verify(taskReminderService).createStandaloneReminder(userId, entity, time);
+        verify(taskReminderService, never()).planForDeadline(any(), any());
+    }
+
+    @Test
+    void createQuickCanExplicitlyDisableAutomaticReminders() {
+        var entity = taskEntity();
+        var request = new CreateTaskRequest("Без уведомлений", null, TaskPriority.MEDIUM, OffsetDateTime.now().plusDays(7),
+                null, null, List.of(), null, TaskSource.MANUAL, null, false, null, true, null);
+        when(taskRepository.save(any())).thenReturn(entity);
+        when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, entity.getTitle()));
+        taskService.createQuick(userId, request);
+        verify(taskReminderService, never()).createStandaloneReminder(any(), any(), any());
+        verify(taskReminderService, never()).planForDeadline(any(), any());
     }
 
     @Test

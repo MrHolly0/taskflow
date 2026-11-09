@@ -68,6 +68,7 @@ class TaskIdempotencyIntegrationTest {
         registry.add("spring.datasource.hikari.maximum-pool-size", () -> "8");
     }
 
+    @Autowired private com.fasterxml.jackson.databind.ObjectMapper mapper;
     @Autowired private TaskService tasks;
     @Autowired private TaskCreationService creation;
     @Autowired private AssistantService assistant;
@@ -85,6 +86,50 @@ class TaskIdempotencyIntegrationTest {
     @BeforeEach
     void allowRequests() {
         when(limiter.allow(any())).thenReturn(true);
+    }
+
+    @Test
+    void repeatedBoardStatusChangesDoNotInflateStats() {
+        UUID user = users.findOrCreateByTelegram(ThreadLocalRandom.current().nextLong(1000000000L, 9000000000L), "stats_moves", "Test", "User").id();
+        var created = tasks.createQuick(user, new CreateTaskRequest("Одна задача", null, null, null, null, null, List.of(), null, null));
+        for (int i = 0; i < 3; i++) {
+            tasks.update(user, created.id(), new UpdateTaskRequest(null, null, null, TaskStatus.DONE, null, null, null, null, null));
+            tasks.update(user, created.id(), new UpdateTaskRequest(null, null, null, TaskStatus.TODO, null, null, null, null, null));
+        }
+        assertThat(tasks.getStats(user).tasks()).noneMatch(task -> task.status() == TaskStatus.DONE);
+        tasks.update(user, created.id(), new UpdateTaskRequest(null, null, null, TaskStatus.DONE, null, null, null, null, null));
+        assertThat(tasks.getStats(user).tasks()).filteredOn(task -> task.status() == TaskStatus.DONE).hasSize(1);
+    }
+
+    @Test
+    void oldCreationKeysSurviveOptionalReminderFields() throws Exception {
+        UUID user = users.findOrCreateByTelegram(ThreadLocalRandom.current().nextLong(1000000000L, 9000000000L), "legacy_key", "Test", "User").id();
+        var request = new CreateTaskRequest("Проверить старый ключ", null, null, null, null, null, List.of(), null, null);
+        var first = creation.create(user, request, "legacy-format", true);
+        var oldPayload = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.valueToTree(request);
+        oldPayload.remove(List.of("skipDefaultReminders", "reminderAt"));
+        String legacy = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(("true:" + mapper.writeValueAsString(oldPayload)).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        jdbc.update("UPDATE task_creation_requests SET fingerprint=? WHERE user_id=? AND request_key=?", legacy, user, "legacy-format");
+        assertThat(creation.create(user, request, "legacy-format", true).id()).isEqualTo(first.id());
+    }
+
+    @Test
+    void editingTaskDoesNotReplaceIndependentReminderTimes() {
+        UUID user = users.findOrCreateByTelegram(ThreadLocalRandom.current().nextLong(1000000000L, 9000000000L), "reminder_save", "Test", "User").id();
+        var deadline = java.time.OffsetDateTime.now().plusDays(7).withNano(0);
+        var manualTime = deadline.minusDays(1);
+        var created = tasks.createQuick(user, new CreateTaskRequest("Доклад", null, null, deadline, null, null,
+                List.of(), null, null, null, false, null, true, manualTime));
+        var before = tasks.getReminders(user, created.id());
+        assertThat(before).singleElement().satisfies(reminder -> assertThat(reminder.fireAt().toInstant()).isEqualTo(manualTime.toInstant()));
+        tasks.update(user, created.id(), new UpdateTaskRequest("Новое название", "описание", null, null, deadline.plusDays(1), null, "Обучение", null, null));
+        assertThat(tasks.getReminders(user, created.id())).isEqualTo(before);
+        tasks.update(user, created.id(), new UpdateTaskRequest(null, "", null, null, null, null, null, null, null,
+                null, null, null, true, null, true, true));
+        var cleared = tasks.findById(user, created.id());
+        assertThat(cleared.deadline()).isNull(); assertThat(cleared.description()).isEmpty(); assertThat(cleared.groupId()).isNull();
+        assertThat(tasks.getReminders(user, created.id())).isEqualTo(before);
     }
 
     @Test

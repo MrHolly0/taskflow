@@ -67,6 +67,17 @@ class NotificationServiceImplTest {
     }
 
     @Test
+    void refreshingTextDoesNotDeleteOrCreateNotificationRows() throws Exception {
+        notificationService.refreshTaskReminderDetails(userId, taskId, "Новое название", fireAt.plusDays(1));
+        var payload = ArgumentCaptor.forClass(String.class);
+        verify(scheduledNotificationRepository).updateUnsentPayload(org.mockito.ArgumentMatchers.eq(userId), org.mockito.ArgumentMatchers.eq(taskId), payload.capture());
+        assertThat(objectMapper.readTree(payload.getValue()).path("taskTitle").asText()).isEqualTo("Новое название");
+        verify(scheduledNotificationRepository, never()).save(any());
+        verify(scheduledNotificationRepository, never()).deleteUnsentByTaskId(any());
+        verify(scheduledNotificationRepository, never()).deleteUnsentByReminderId(any());
+    }
+
+    @Test
     void scheduleReminder_createsOneRowPerChannelWhenBothIdentitiesExist() {
         // Строка на канал, не веер в одной: отказ одного не должен помешать другому.
         when(userService.findExternalId(userId, IdentityProvider.TELEGRAM)).thenReturn(Optional.of("12345"));

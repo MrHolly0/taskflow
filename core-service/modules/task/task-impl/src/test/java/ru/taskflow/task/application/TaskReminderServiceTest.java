@@ -311,6 +311,26 @@ class TaskReminderServiceTest {
         verify(notificationService, never()).cancelReminderNotifications(ordinaryReminder.getId());
     }
 
+    @Test
+    void disablingPersistencePreservesTheUnsentFirstReminder() {
+        var first = new ReminderJpaEntity(); first.setId(UUID.randomUUID()); first.setChainStep(0); first.setStatus(ReminderStatus.PENDING);
+        UUID task = UUID.randomUUID();
+        when(reminderRepository.findByTaskIdAndStatusOrderByFireAtAsc(task, ReminderStatus.PENDING)).thenReturn(List.of(first));
+        service.cancelPersistentChain(task);
+        assertThat(first.getChainStep()).isNull(); assertThat(first.getStatus()).isEqualTo(ReminderStatus.PENDING);
+        verify(notificationService, never()).cancelReminderNotifications(any());
+    }
+
+    @Test
+    void enablingPersistenceArmsTheExistingFirstFutureReminderOnlyOnce() {
+        UUID task = UUID.randomUUID(); var first = new ReminderJpaEntity(); first.setFireAt(now.plusHours(1)); first.setStatus(ReminderStatus.PENDING);
+        var later = new ReminderJpaEntity(); later.setFireAt(now.plusHours(2)); later.setStatus(ReminderStatus.PENDING);
+        when(reminderRepository.findByTaskIdAndStatusOrderByFireAtAsc(task, ReminderStatus.PENDING)).thenReturn(List.of(first, later));
+        service.armPendingReminder(task); service.armPendingReminder(task);
+        assertThat(first.getChainStep()).isZero(); assertThat(later.getChainStep()).isNull();
+        verify(reminderRepository, times(1)).save(first);
+    }
+
     // --- Б3: затухание — конечное число автоматических повторов, промежутки растут ---
 
     @Test
@@ -327,7 +347,7 @@ class TaskReminderServiceTest {
         service.advancePersistentChains(now);
 
         assertThat(due.getStatus()).isEqualTo(ReminderStatus.DISMISSED);
-        verify(notificationService).cancelReminderNotifications(due.getId());
+        verify(notificationService, never()).cancelReminderNotifications(due.getId());
 
         ArgumentCaptor<ReminderJpaEntity> captor = ArgumentCaptor.forClass(ReminderJpaEntity.class);
         verify(reminderRepository, times(2)).save(captor.capture());

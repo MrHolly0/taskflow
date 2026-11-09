@@ -97,6 +97,13 @@ public class NotificationServiceImpl implements NotificationService {
                 ids.forEach(destination -> scheduleForChannel(userId, taskId, reminderId, channel, destination, fireAt, payload)));
     }
 
+    @Override
+    @Transactional
+    public void refreshTaskReminderDetails(UUID userId, UUID taskId, String title, OffsetDateTime deadline) {
+        scheduledNotificationRepository.updateUnsentPayload(userId, taskId,
+                buildPayload(title, deadline, userService.getTimezone(userId)));
+    }
+
     private boolean channelEnabled(UserSettingsDto settings, IdentityProvider channel) {
         return switch (channel) {
             case TELEGRAM -> settings.notifyTelegram();

@@ -25,8 +25,17 @@ public record CreateTaskRequest(
         boolean persistentReminder,
         // День исполнения — предположение, не обязательство: живёт отдельно
         // от deadline и не участвует в планировании напоминаний.
-        OffsetDateTime plannedDate
+        OffsetDateTime plannedDate,
+        Boolean skipDefaultReminders,
+        OffsetDateTime reminderAt
 ) {
+    public CreateTaskRequest(String title, String description, TaskPriority priority, OffsetDateTime deadline,
+            UUID groupId, String groupName, List<String> tags, Integer estimateMinutes, TaskSource source,
+            RecurrenceRule recurrence, boolean persistentReminder, OffsetDateTime plannedDate) {
+        this(title, description, priority, deadline, groupId, groupName, tags, estimateMinutes, source,
+                recurrence, persistentReminder, plannedDate, null, null);
+    }
+
     public CreateTaskRequest {
         if (priority == null) priority = TaskPriority.MEDIUM;
         if (source == null) source = TaskSource.MANUAL;

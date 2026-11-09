@@ -74,7 +74,13 @@ public class TaskCreationService {
 
     private String fingerprint(CreateTaskRequest request, boolean quick) {
         try {
-            byte[] bytes = (quick + ":" + objectMapper.writeValueAsString(request)).getBytes(StandardCharsets.UTF_8);
+            var payload = objectMapper.valueToTree(request);
+            // Старые ключи сохраняют прежний хеш при добавлении необязательных полей.
+            if (payload instanceof com.fasterxml.jackson.databind.node.ObjectNode fields) {
+                if (!Boolean.TRUE.equals(request.skipDefaultReminders())) fields.remove("skipDefaultReminders");
+                if (request.reminderAt() == null) fields.remove("reminderAt");
+            }
+            byte[] bytes = (quick + ":" + objectMapper.writeValueAsString(payload)).getBytes(StandardCharsets.UTF_8);
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
         } catch (JsonProcessingException | NoSuchAlgorithmException exception) {
             throw new IllegalStateException("Не удалось проверить повторный запрос", exception);

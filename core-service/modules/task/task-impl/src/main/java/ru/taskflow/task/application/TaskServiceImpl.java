@@ -108,6 +108,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public TaskResponse create(UUID userId, CreateTaskRequest request) {
+        validateCreateReminder(request);
         var task = new TaskJpaEntity();
         task.setUserId(userId);
         task.setTitle(request.title());
@@ -132,7 +133,11 @@ public class TaskServiceImpl implements TaskService {
         TaskJpaEntity savedTask = taskRepository.save(task);
         auditService.record(userId, savedTask.getId(), AuditEventType.CREATED, null);
 
-        taskReminderService.planForDeadline(userId, savedTask);
+        if (request.reminderAt() != null) {
+            taskReminderService.createStandaloneReminder(userId, savedTask, request.reminderAt());
+        } else if (!Boolean.TRUE.equals(request.skipDefaultReminders())) {
+            taskReminderService.planForDeadline(userId, savedTask);
+        }
 
         RecurrenceRule recurrence = request.recurrence() != null
                 ? saveRecurrence(savedTask, request.recurrence())
@@ -343,14 +348,17 @@ public class TaskServiceImpl implements TaskService {
         Map<String, Object> delta = buildDelta(task, request);
         UUID oldGroupId = task.getGroup() != null ? task.getGroup().getId() : null;
 
-        boolean deadlineChanged = request.deadline() != null;
-        boolean titleChanged = request.title() != null;
+        boolean deadlineChanged = Boolean.TRUE.equals(request.clearDeadline()) ? task.getDeadline() != null
+                : request.deadline() != null && (task.getDeadline() == null || !request.deadline().isEqual(task.getDeadline()));
+        boolean titleChanged = request.title() != null && !Objects.equals(request.title(), task.getTitle());
 
         if (request.title() != null) task.setTitle(request.title());
         if (request.description() != null) task.setDescription(request.description());
         if (request.priority() != null) task.setPriority(request.priority());
-        if (request.deadline() != null) task.setDeadline(request.deadline());
-        if (request.estimateMinutes() != null) task.setEstimateMinutes(request.estimateMinutes());
+        if (Boolean.TRUE.equals(request.clearDeadline())) task.setDeadline(null);
+        else if (request.deadline() != null) task.setDeadline(request.deadline());
+        if (Boolean.TRUE.equals(request.clearEstimateMinutes())) task.setEstimateMinutes(null);
+        else if (request.estimateMinutes() != null) task.setEstimateMinutes(request.estimateMinutes());
         // Отдельный путь: день исполнения не участвует в deadlineChanged ниже
         // и не трогает напоминания — они привязаны к deadline, а не к нему.
         if (Boolean.TRUE.equals(request.clearPlannedDate())) {
@@ -388,6 +396,7 @@ public class TaskServiceImpl implements TaskService {
 
         // Б1/Б4: снятие флага гасит только запланированные повторы цепочки —
         // обычные напоминания той же задачи (chainStep == null) не трогает.
+        boolean turningPersistenceOn = Boolean.TRUE.equals(request.persistentReminder()) && !task.isPersistentReminder();
         boolean turningPersistenceOff = request.persistentReminder() != null
                 && !request.persistentReminder() && task.isPersistentReminder();
         if (request.persistentReminder() != null) {
@@ -398,6 +407,7 @@ public class TaskServiceImpl implements TaskService {
         if (turningPersistenceOff) {
             taskReminderService.cancelPersistentChain(taskId);
         }
+        if (turningPersistenceOn) taskReminderService.armPendingReminder(taskId);
 
         if (groupRequested) {
             UUID newGroupId = updatedTask.getGroup() != null ? updatedTask.getGroup().getId() : null;
@@ -414,8 +424,7 @@ public class TaskServiceImpl implements TaskService {
         if (becameTerminal) {
             taskReminderService.cancelForTask(taskId);
         } else if (deadlineChanged || titleChanged) {
-            taskReminderService.cancelForTask(taskId);
-            taskReminderService.planForDeadline(userId, updatedTask);
+            taskReminderService.refreshNotificationDetails(userId, updatedTask);
         }
 
         RecurrenceRule recurrence = request.recurrence() != null
@@ -675,6 +684,8 @@ public class TaskServiceImpl implements TaskService {
         if (request.priority() != null && !request.priority().equals(task.getPriority())) {
             delta.put("priority", request.priority());
         }
+        if (Boolean.TRUE.equals(request.clearDeadline()) && task.getDeadline() != null) delta.put("deadline", null);
+        if (Boolean.TRUE.equals(request.clearEstimateMinutes()) && task.getEstimateMinutes() != null) delta.put("estimateMinutes", null);
         if (request.deadline() != null && !request.deadline().equals(task.getDeadline())) {
             delta.put("deadline", request.deadline());
         }
@@ -960,6 +971,7 @@ public class TaskServiceImpl implements TaskService {
     @Override
     @Transactional
     public TaskResponse createQuick(UUID userId, CreateTaskRequest request) {
+        validateCreateReminder(request);
         var task = new TaskJpaEntity();
         task.setUserId(userId);
         task.setTitle(request.title());
@@ -985,13 +997,22 @@ public class TaskServiceImpl implements TaskService {
 
         TaskJpaEntity savedTask = taskRepository.save(task);
 
-        taskReminderService.planForDeadline(userId, savedTask);
+        if (request.reminderAt() != null) {
+            taskReminderService.createStandaloneReminder(userId, savedTask, request.reminderAt());
+        } else if (!Boolean.TRUE.equals(request.skipDefaultReminders())) {
+            taskReminderService.planForDeadline(userId, savedTask);
+        }
 
         RecurrenceRule recurrence = request.recurrence() != null
                 ? saveRecurrence(savedTask, request.recurrence())
                 : null;
 
         return withRecurrence(taskMapper.toResponse(savedTask), recurrence);
+    }
+
+    private void validateCreateReminder(CreateTaskRequest request) {
+        if (request.reminderAt() != null && !request.reminderAt().isAfter(OffsetDateTime.now(clock)))
+            throw new ValidationException("Время напоминания уже прошло");
     }
 
     @Override

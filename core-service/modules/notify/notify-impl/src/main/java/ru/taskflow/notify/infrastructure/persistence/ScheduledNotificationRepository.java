@@ -12,6 +12,10 @@ import java.util.UUID;
 public interface ScheduledNotificationRepository extends JpaRepository<ScheduledNotificationJpaEntity, UUID> {
 
     @Modifying
+    @Query("UPDATE ScheduledNotificationJpaEntity s SET s.payload = :payload WHERE s.userId = :userId AND s.taskId = :taskId AND s.sent = false")
+    int updateUnsentPayload(@Param("userId") UUID userId, @Param("taskId") UUID taskId, @Param("payload") String payload);
+
+    @Modifying
     @Query("DELETE FROM ScheduledNotificationJpaEntity s WHERE s.taskId = :taskId AND s.sent = false")
     void deleteUnsentByTaskId(UUID taskId);
 

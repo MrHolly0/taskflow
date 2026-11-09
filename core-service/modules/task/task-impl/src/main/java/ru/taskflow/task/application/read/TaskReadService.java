@@ -88,7 +88,15 @@ public class TaskReadService {
             case "priority" -> "CASE priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END";
             case "status" -> "CASE status WHEN 'IN_PROGRESS' THEN 0 ELSE 1 END";
             case "completed" -> "completed_at DESC NULLS LAST";
-            case "recommendation" -> "CASE WHEN status='TODO' AND priority='URGENT' THEN 0 WHEN status='TODO' THEN 1 ELSE 2 END";
+            case "recommendation" -> {
+                params.addValue("recommendationNow", now);
+                params.addValue("recommendationDayEnd", LocalDate.now(users.getTimezone(userId)).plusDays(1)
+                        .atStartOfDay(users.getTimezone(userId)).toOffsetDateTime());
+                yield "CASE WHEN status='IN_PROGRESS' THEN 0 WHEN planned_date >= :recommendationDayEnd THEN 6 "
+                        + "WHEN deadline < :recommendationNow THEN 1 WHEN priority='URGENT' THEN 2 "
+                        + "WHEN planned_date IS NOT NULL THEN 3 WHEN deadline IS NOT NULL THEN 4 ELSE 5 END, "
+                        + "deadline ASC NULLS LAST";
+            }
             default -> throw badFilter();
         };
         if (!filter.revealIds().isEmpty()) {
