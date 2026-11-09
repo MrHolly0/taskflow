@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { IconCheck, IconChevronDown } from '@tabler/icons-react';
 import {
   useFocusTasks,
   useUpcomingFocusTasks,
   useTasksList,
+  useTaskPage,
   usePlannedDateSuggestion,
   type TaskResponse,
 } from '@/lib/hooks/useTasks';
@@ -35,6 +36,9 @@ function FocusRow({
 }
 export function FocusPage() {
   const name = useDisplayName();
+  const [search, setSearch] = useSearchParams();
+  const requestedId = search.get('task');
+  const pinnedId = requestedId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedId) ? requestedId : undefined;
   const [minutes, setMinutes] = useState<number>();
   const [details, setDetails] = useState(false);
   const [selected, setSelected] = useState<TaskResponse | null>(null);
@@ -48,10 +52,13 @@ export function FocusPage() {
   const revealIds = useTaskUi((s) => s.revealIds);
   const revealedAt = useTaskUi((s) => s.revealedAt);
   useMinuteTick();
+  const revealing = revealIds.length > 0 && Date.now() - revealedAt < 8000;
+  const visibleIds = pinnedId ? [pinnedId] : revealIds;
+  const { data: revealedPage } = useTaskPage({ status: 'active', revealIds: visibleIds, size: 3 }, 0, revealing || Boolean(pinnedId));
   const extra =
-    Date.now() - revealedAt < 8000
-      ? all.filter(
-          (t) => revealIds.includes(t.id) && t.status !== 'DONE' && t.status !== 'CANCELLED'
+    revealing || pinnedId
+      ? (revealedPage?.content ?? all).filter(
+          (t) => visibleIds.includes(t.id) && t.status !== 'DONE' && t.status !== 'CANCELLED'
         )
       : [];
   const source = focus.length ? focus : upcoming;
@@ -137,6 +144,7 @@ export function FocusPage() {
             <IconChevronDown />
           </button>
         </div>
+        {!focus.length && tasks.length > 0 && <p className="page-note">Для текущего фокуса дел нет. Можно начать заранее — это ближайшее из твоего списка.</p>}
         {details && (
           <div className="day-summary">
             <p>
@@ -150,6 +158,7 @@ export function FocusPage() {
             <Link to="/stats">Посмотреть свой прогресс →</Link>
           </div>
         )}
+        {pinnedId && extra.length > 0 && <p className="focus-plan-note">Открыта выбранная задача. <button type="button" className="underline" onClick={() => setSearch(previous => { const next = new URLSearchParams(previous); next.delete('task'); return next; })}>Вернуться к подбору</button></p>}
         <div>
           {tasks.map((task, i) => (
             <FocusRow

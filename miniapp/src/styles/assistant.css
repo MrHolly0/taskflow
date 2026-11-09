@@ -44,3 +44,16 @@
   .munin-composer-hint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .munin-chat-examples button { transition: none; } }
+
+.assistant-recommendations {margin-top:24px;display:grid;gap:16px;}
+.assistant-recommendations h2 {font-size:16px;font-weight:600;}
+.assistant-recommendations article {padding-block:16px;border-top:1px solid var(--border);}
+.assistant-recommendations strong {font-size:16px;font-weight:500;}
+.assistant-recommendations p {font-size:14px;line-height:1.5;color:var(--muted-foreground);margin:6px 0 12px;}
+.assistant-recommendations button {min-height:44px;}
+
+@media (max-width:767px) {
+  .munin-chat-proposal input:not([type=checkbox]):not([type=radio]) {font-size:16px;min-height:44px;}
+  .munin-chat-proposal button {min-height:44px;font-size:14px;}
+  .munin-chat-proposal label {font-size:14px;}
+}

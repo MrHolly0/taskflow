@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { useQuery, useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData, type InfiniteData } from '@tanstack/react-query';
 import { getAuthenticatedClient as getClient } from '@/lib/authenticated-client';
 
 export interface ReminderResponse {
@@ -178,6 +178,9 @@ export const useAllTasks = (date?: string) => {
 };
 
 export interface CreateTaskRequest {
+  skipDefaultReminders?: boolean;
+  reminderAt?: string;
+
   title: string;
   description?: string;
   priority: string;
@@ -266,6 +269,7 @@ export const useTasksList = (filters: TaskListFilters = {}, enabled = true) => {
   const result = useInfiniteQuery({
     queryKey: ['tasks', 'list', filters],
     initialPageParam: 0,
+    placeholderData: keepPreviousData,
     queryFn: async ({ pageParam, signal }) => (await getClient().get<TasksPage>('/tasks/view', {
       params: { ...listParams(filters), page: pageParam, size: filters.size ?? 24 }, signal,
     })).data,
@@ -309,6 +313,8 @@ export interface UpdateTaskRequest {
   groupId?: string | null;
   clearGroup?: boolean;
   clearPlannedDate?: boolean;
+  clearDeadline?: boolean;
+  clearEstimateMinutes?: boolean;
   recurrence?: RecurrenceRule | null;
   persistentReminder?: boolean | null;
 }
@@ -321,6 +327,8 @@ export const useUpdateTask = () => {
         ...patch,
         ...(patch.groupId === null ? { clearGroup: true } : {}),
         ...(patch.plannedDate === null ? { clearPlannedDate: true } : {}),
+        ...(patch.deadline === null ? { clearDeadline: true } : {}),
+        ...(patch.estimateMinutes === null ? { clearEstimateMinutes: true } : {}),
       });
       return response.data;
     },
@@ -392,6 +400,7 @@ export const useTaskReminders = (taskId: string | undefined, enabled: boolean) =
       return response.data;
     },
     enabled: enabled && !!taskId,
+    refetchInterval: enabled ? 30000 : false,
   });
 };
 

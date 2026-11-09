@@ -5,6 +5,7 @@ import {
   DndContext,
   DragOverlay,
   MouseSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
@@ -121,7 +122,7 @@ function GroupTile({
             <strong>{group.name}</strong>
             <small>{count ? 'в планах' : 'пока пусто'}</small>
           </button>
-          <Dropdown.Root>
+          {group.id !== 'none' && <Dropdown.Root>
             <Dropdown.Trigger asChild>
               <button className="group-tile-more" aria-label={`Управлять группой ${group.name}`}>
                 <IconDots />
@@ -132,14 +133,14 @@ function GroupTile({
                 <GroupMenu kind="dropdown" group={group} onEdit={onEdit} onDelete={onDelete} />
               </Dropdown.Content>
             </Dropdown.Portal>
-          </Dropdown.Root>
+          </Dropdown.Root>}
         </div>
       </ContextMenu.Trigger>
-      <ContextMenu.Portal>
+      {group.id !== 'none' && <ContextMenu.Portal>
         <ContextMenu.Content className="task-menu">
           <GroupMenu kind="context" group={group} onEdit={onEdit} onDelete={onDelete} />
         </ContextMenu.Content>
-      </ContextMenu.Portal>
+      </ContextMenu.Portal>}
     </ContextMenu.Root>
   );
 }
@@ -238,11 +239,12 @@ const collision: CollisionDetection = (args) => {
 };
 export function GroupsPage() {
   const {
-    data: groups = [],
+    data: savedGroups = [],
     isLoading: loadingGroups,
     error: groupError,
     refetch: refetchGroups,
   } = useGroups();
+  const groups: GroupResponse[] = [{ id: 'none', name: 'Без группы', icon: 'folder', color: '#717182' }, ...savedGroups];
   const update = useUpdateTask(),
     remove = useDeleteGroup();
   const reveal = useTaskUi((s) => s.reveal),
@@ -273,12 +275,13 @@ export function GroupsPage() {
   const taskError = taskPage.error || overview.error;
   const refetchTasks = () => Promise.all([taskPage.refetch(), overview.refetch()]);
   const groupCounts = overview.data?.groups ?? [];
-  const selectedCounts = groupCounts.find(group => group.groupId === selected?.id);
+  const selectedCounts = groupCounts.find(group => (group.groupId ?? 'none') === selected?.id);
   const activeTask = tasks.find((t) => t.id === activeId);
   const stageRef = useRef<HTMLDivElement>(null);
   const frozenHeight = useRef(510);
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
     useSensor(KeyboardSensor)
   );
   const matching = groups.filter((g) =>
@@ -311,11 +314,11 @@ export function GroupsPage() {
     setActiveId(null);
     setPreviewId(null);
     setHoverId(null);
-    if (!task || !target?.groupId || target.kind === 'cancel' || target.groupId === task.groupId)
+    if (!task || !target?.groupId || target.kind === 'cancel' || target.groupId === (task.groupId ?? 'none'))
       return;
     const id = String(target.groupId);
     try {
-      await update.mutateAsync({ id: task.id, groupId: id });
+      await update.mutateAsync({ id: task.id, groupId: id === 'none' ? null : id });
       setSelectedId(id);
       setOpened(true);
       setPage(1);
@@ -330,7 +333,7 @@ export function GroupsPage() {
               { id: task.id, groupId: task.groupId ?? null },
               {
                 onSuccess: () => {
-                  setSelectedId(task.groupId ?? null);
+                  setSelectedId(task.groupId ?? 'none');
                   setPinned(task.id);
                   reveal([task.id]);
                 },
@@ -361,7 +364,7 @@ export function GroupsPage() {
         </Button>
       </header>
       <div className="group-page-caption">
-        <span>{groups.length} групп</span>
+        <span>{savedGroups.length} групп</span>
         <span className="task-interaction-hint">
           <span className="mouse-hint">
             ЛКМ: открыть · ПКМ: управлять · задачи можно перетаскивать
@@ -369,7 +372,7 @@ export function GroupsPage() {
           <span className="touch-hint">Управление в ⋯</span>
         </span>
       </div>
-      {loadingGroups || loadingTasks ? (
+      {loadingGroups ? (
         <div className="page-state">Загружаем группы…</div>
       ) : groupError || taskError ? (
         <div className="page-state">
@@ -436,7 +439,7 @@ export function GroupsPage() {
                   <GroupTile
                     key={group.id}
                     group={group}
-                    count={groupCounts.find(item => item.groupId === group.id)?.active ?? 0}
+                    count={groupCounts.find(item => (item.groupId ?? 'none') === group.id)?.active ?? 0}
                     selected={group.id === selected?.id}
                     onOpen={() => open(group)}
                     onEdit={() => setEditor({ group })}
@@ -481,7 +484,7 @@ export function GroupsPage() {
                         {selectedCounts?.history ?? 0} в истории
                       </p>
                     </div>
-                    <Dropdown.Root>
+                    {selected.id !== 'none' && <Dropdown.Root>
                       <Dropdown.Trigger asChild>
                         <button
                           className="task-more"
@@ -500,7 +503,7 @@ export function GroupsPage() {
                           />
                         </Dropdown.Content>
                       </Dropdown.Portal>
-                    </Dropdown.Root>
+                    </Dropdown.Root>}
                   </header>
                   <div className="group-stage-tools">
                     <Button variant="outline" onClick={() => setCreate(true)} className="gap-2">
@@ -517,6 +520,7 @@ export function GroupsPage() {
                       {history ? 'Активные' : 'Завершённые и отменённые'}
                     </button>
                   </div>
+                  {loadingTasks && <p className="page-state" role="status">Загружаем задачи…</p>}
                   <div className="group-task-grid">
                     {items.map((task) => (
                       <DraggableTask
@@ -596,13 +600,11 @@ export function GroupsPage() {
       <CreateTaskDialog
         open={create}
         onClose={() => setCreate(false)}
-        groupId={selected?.id}
+        groupId={selected?.id === 'none' ? undefined : selected?.id}
         onCreated={(task) => {
-          if (task.groupId) {
-            setSelectedId(task.groupId);
-            setOpened(true);
-            setPinned(task.id);
-          }
+          setSelectedId(task.groupId ?? 'none');
+          setOpened(true);
+          setPinned(task.id);
           setHistory(false);
           setPage(1);
         }}

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useTaskUi } from '@/lib/task-ui';
 import { IconSend, IconAlertTriangle } from '@tabler/icons-react';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
@@ -12,7 +14,12 @@ import {
   Proposal,
   ApplyResult,
 } from '@/lib/hooks/useAssistant';
-import { useUpdateTask } from '@/lib/hooks/useTasks';
+import { useUpdateTask, useTaskPage, useGroups, type TaskResponse } from '@/lib/hooks/useTasks';
+import { buildAssistantRecommendations } from '@/lib/assistant-recommendations';
+import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
+import { useMinuteTick } from '@/lib/hooks/useMinuteTick';
+import { TaskDetailModal } from '@/app/components/TaskDetailModal';
+import { toast } from 'sonner';
 import { useEffectiveVoiceMode } from '@/lib/hooks/useVoiceMode';
 import { useVoiceRecording } from '@/lib/hooks/useVoiceRecording';
 import { ProposalCard } from '@/app/components/ProposalCard';
@@ -20,13 +27,14 @@ import { VoiceRecorderTrigger } from '@/app/components/VoiceRecorderTrigger';
 import { VoiceRecordingBar } from '@/app/components/VoiceRecordingBar';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
-import { cn } from '@/lib/utils';
+import { cn, formatDeadline } from '@/lib/utils';
+import { useStore } from '@/lib/store';
 import '@/styles/assistant.css';
 
 type Entry =
   | { kind: 'user'; text: string }
   | { kind: 'pending'; localId: string }
-  | { kind: 'proposal'; proposal: Proposal; localId: string }
+  | { kind: 'proposal'; proposal: Proposal; localId: string; error?: string }
   | { kind: 'applied'; result: ApplyResult; localId: string }
   | { kind: 'rejected'; localId: string }
   | { kind: 'error'; message: string; localId: string };
@@ -52,6 +60,30 @@ function errorMessage(error: unknown): string {
 export function AssistantPage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [input, setInput] = useState('');
+  const navigate = useNavigate();
+  const reveal = useTaskUi(state => state.reveal);
+  const [recommendedSection, setRecommendedSection] = useState<'reminders' | 'group' | 'deadline' | 'planned'>();
+  const [recommendedTask, setRecommendedTask] = useState<TaskResponse | null>(null);
+  const candidates = useTaskPage({ status: 'active', order: 'recommendation', size: 8 }, 0, entries.length === 0);
+  const { data: groups = [] } = useGroups();
+  useMinuteTick();
+  const { timezone } = useUserTimezone();
+  const userId = useStore(state => state.user?.id);
+  const hiddenKey = `munin-hidden-recommendations:${userId ?? 'local'}`;
+  const [hiddenRecommendations, setHiddenRecommendations] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(hiddenKey) ?? '[]');
+      setHiddenRecommendations(Array.isArray(saved) ? saved.filter((item): item is string => typeof item === 'string').slice(-500) : []);
+    }
+    catch { setHiddenRecommendations([]); }
+  }, [hiddenKey]);
+  const dismissRecommendation = (id: string) => {
+    const next = [...hiddenRecommendations, id].slice(-500); setHiddenRecommendations(next);
+    try { localStorage.setItem(hiddenKey, JSON.stringify(next)); } catch { /* Скрытие действует до закрытия страницы. */ }
+  };
+  const recommendations = buildAssistantRecommendations(candidates.data?.content ?? [], groups.length > 0, new Date(), timezone)
+    .filter(item => !hiddenRecommendations.includes(`${item.task.id}:${item.kind}`)).slice(0, 3);
   const conversation = useRef<HTMLDivElement>(null);
   const inputField = useRef<HTMLTextAreaElement>(null);
   const previousCount = useRef(0);
@@ -68,10 +100,6 @@ export function AssistantPage() {
     previousCount.current = entries.length;
   }, [entries.length, lastKind]);
 
-  const useExample = (text: string) => {
-    setInput(text);
-    inputField.current?.focus();
-  };
   const sendMessage = useSendAssistantMessage();
   const setActionAccepted = useSetActionAccepted();
   const selectAlternative = useSelectAlternative();
@@ -165,7 +193,7 @@ export function AssistantPage() {
           }
         }
       },
-      onError: () => replaceEntry(localId, { kind: 'error', message: errorMessage(undefined), localId }),
+      onError: () => replaceEntry(localId, { kind: 'proposal', proposal, error: 'Не удалось применить. Выбранные действия сохранены — попробуй ещё раз.', localId }),
     });
   };
 
@@ -173,7 +201,7 @@ export function AssistantPage() {
     if (!proposal.id) return;
     rejectProposal.mutate(proposal.id, {
       onSuccess: () => replaceEntry(localId, { kind: 'rejected', localId }),
-      onError: () => replaceEntry(localId, { kind: 'error', message: errorMessage(undefined), localId }),
+      onError: () => replaceEntry(localId, { kind: 'proposal', proposal, error: 'Не удалось отклонить предложение. Попробуй ещё раз.', localId }),
     });
   };
 
@@ -199,11 +227,27 @@ export function AssistantPage() {
         {entries.length === 0 && (
           <div className="munin-chat-intro">
             <p>Можно добавить дела, перенести планы или рассказать, что уже готово. Мунин предложит изменения, а ты проверишь их перед применением.</p>
-            <div className="munin-chat-examples" aria-label="Примеры обращений">
-              {['Завтра нужно отправить документы', 'Позвонил Саше, задача готова', 'Перенеси встречу на пятницу'].map((example) => (
-                <button type="button" key={example} onClick={() => useExample(example)}>{example}</button>
-              ))}
-            </div>
+            <section className="assistant-recommendations" aria-label="Рекомендации по твоим задачам">
+              {recommendations.length > 0 && <h2>Что можно сделать сейчас</h2>}
+              {recommendations.map(item => <article key={item.task.id}>
+                <strong>{item.task.title}</strong>
+                {item.task.deadline && <p>Срок: {formatDeadline(item.task.deadline, timezone, item.task.status)}</p>}
+                <p>{item.reason}</p>
+                <Button variant="outline" disabled={updateTask.isPending} onClick={() => {
+                  if (item.kind === 'continue') { reveal([item.task.id]); navigate(`/?task=${item.task.id}`); return; }
+                  if (item.kind !== 'start') {
+                    setRecommendedSection(item.kind === 'reminder' ? 'reminders' : item.kind === 'group' ? 'group' : item.kind === 'planned' ? 'planned' : 'deadline');
+                    setRecommendedTask(item.task); return;
+                  }
+                  updateTask.mutate({ id: item.task.id, status: 'IN_PROGRESS' }, {
+                    onSuccess: () => toast.success('Задача в работе', { description: item.task.title }),
+                    onError: () => toast.error('Не получилось взять задачу в работу. Попробуй ещё раз.'),
+                  });
+                }}>{item.label}</Button>
+                <Button variant="ghost" onClick={() => dismissRecommendation(`${item.task.id}:${item.kind}`)}>Не предлагать это действие</Button>
+              </article>)}
+              {candidates.isError && <p role="alert">Не удалось загрузить рекомендации. <button onClick={() => void candidates.refetch()}>Повторить</button></p>}
+            </section>
           </div>
         )}
         <AnimatePresence initial={false}>
@@ -246,6 +290,7 @@ export function AssistantPage() {
                 <ApplyResultCard result={entry.result} />
               )}
 
+              {entry.kind === 'proposal' && entry.error && <p className="text-sm text-destructive" role="alert">{entry.error}</p>}
               {entry.kind === 'proposal' && (
                 <ProposalCard
                   proposal={entry.proposal}
@@ -304,6 +349,8 @@ export function AssistantPage() {
         </div>
         <p className="munin-composer-hint">Enter: отправить · Shift + Enter: новая строка</p>
       </div>
+      <TaskDetailModal task={recommendedTask ? candidates.data?.content.find(task => task.id === recommendedTask.id) ?? recommendedTask : null}
+        initialSection={recommendedSection} open={Boolean(recommendedTask)} onClose={() => setRecommendedTask(null)} />
     </div>
   );
 }

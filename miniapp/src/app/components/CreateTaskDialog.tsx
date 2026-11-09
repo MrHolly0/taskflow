@@ -5,8 +5,10 @@ import { toast } from 'sonner';
 import { useCreateTask, useUpdateTask, useGroups, type TaskResponse } from '@/lib/hooks/useTasks';
 import { getStatusLabel, type Status } from '@/lib/store';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
-import { zonedInputToIso } from '@/lib/reminderPresets';
+import { buildReminderPresets, isoToZonedDate, isoToZonedTime, zonedInputToIso } from '@/lib/reminderPresets';
 import { useTaskUi } from '@/lib/task-ui';
+import { useSettings } from '@/lib/hooks/useSettings';
+import { formatReminderTime } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +25,7 @@ import {
 } from '@/app/components/ui/select';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
+import { DateField } from '@/app/components/DateField';
 
 const schema = z.object({
   title: z.string().trim().min(1, 'Напиши название').max(512, 'Не больше 512 символов'),
@@ -58,12 +61,18 @@ export function CreateTaskDialog({
     handleSubmit,
     reset,
     setError,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<Fields>({
     defaultValues: { title: '', description: '', date: '', time: '', planned: '', minutes: '' },
   });
   const [group, setGroup] = useState(groupId || '__none__');
   const [priority, setPriority] = useState('MEDIUM');
+  const [reminderMode, setReminderMode] = useState('auto');
+  const [reminderDate, setReminderDate] = useState('');
+  const [reminderTime, setReminderTime] = useState('');
+  const { data: settings } = useSettings();
   const create = useCreateTask();
   const update = useUpdateTask();
   const { data: groups = [] } = useGroups();
@@ -74,6 +83,7 @@ export function CreateTaskDialog({
       reset();
       setGroup(groupId || '__none__');
       setPriority('MEDIUM');
+      setReminderMode('auto'); setReminderDate(''); setReminderTime('');
     }
   }, [open, groupId, reset]);
   const submit = handleSubmit(async (values) => {
@@ -84,8 +94,15 @@ export function CreateTaskDialog({
       );
       return;
     }
+    if (reminderMode === 'custom' && (!reminderDate || !reminderTime)) {
+      toast.error('Выбери дату и время напоминания.'); return;
+    }
+    const reminderAt = reminderMode === 'custom' ? zonedInputToIso(reminderDate, reminderTime, timezone) : undefined;
+    if (reminderAt && Date.parse(reminderAt) <= Date.now()) { toast.error('Время напоминания уже прошло.'); return; }
     try {
       let task = await create.mutateAsync({
+        skipDefaultReminders: reminderMode !== 'auto',
+        reminderAt,
         title: parsed.data.title,
         description: values.description || undefined,
         priority,
@@ -119,6 +136,12 @@ export function CreateTaskDialog({
       toast.error('Не удалось создать задачу. Введённый текст сохранён.');
     }
   });
+  const deadlineDate = watch('date');
+  const deadlineTime = watch('time');
+  const deadlineInPast = deadlineDate ? Date.parse(zonedInputToIso(deadlineDate, deadlineTime || '23:59', timezone)) <= Date.now() : false;
+  const defaultFireAt = deadlineDate && settings && !deadlineInPast
+    ? new Date(Math.max(Date.now(), Date.parse(zonedInputToIso(deadlineDate, deadlineTime || '23:59', timezone)) - settings.defaultReminderMinutes * 60000))
+    : null;
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="munin-form-dialog">
@@ -158,21 +181,42 @@ export function CreateTaskDialog({
               </SelectContent>
             </Select>
           </label>
+          <div className="munin-form-grid">
+            <label className="munin-field">Срок сдачи
+              <DateField label="Срок сдачи" value={deadlineDate} onChange={value => setValue('date', value)} />
+            </label>
+            <label className="munin-field">Время срока
+              <Input type="time" {...register('time')} disabled={!deadlineDate} />
+              <small>Если время не выбрано — до конца дня.</small>
+            </label>
+            <label className="munin-field">День работы
+              <DateField label="День работы" value={watch('planned')} onChange={value => setValue('planned', value)} />
+              <small>Когда хочешь заняться задачей. Это не срок сдачи.</small>
+            </label>
+          </div>
+          <div className="munin-field">
+            <span>Напоминание</span>
+            <Select value={reminderMode} onValueChange={setReminderMode}>
+              <SelectTrigger aria-label="Режим напоминания"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">По настройкам перед сроком</SelectItem>
+                <SelectItem value="off">Не напоминать</SelectItem>
+                <SelectItem value="custom">Выбрать время</SelectItem>
+              </SelectContent>
+            </Select>
+            {reminderMode === 'auto' && <small>{deadlineInPast ? 'Срок уже прошёл, автоматическое напоминание не назначим.' : defaultFireAt ? `Время напоминания: ${formatReminderTime(defaultFireAt.toISOString(), timezone)}.` : 'Назначим по настройкам, когда укажешь срок.'}</small>}
+            {reminderMode !== 'off' && settings && (!settings.notificationsEnabled || !(settings.notifyTelegram || settings.notifyEmail || settings.notifyPush)) && <small>Доставка уведомлений выключена. Включи её в настройках, чтобы получать напоминания.</small>}
+            {reminderMode === 'custom' && <>
+              <div className="flex flex-wrap gap-2">{buildReminderPresets(new Date(), timezone).map(preset => <Button key={preset.key} type="button" variant="outline" onClick={() => { setReminderDate(isoToZonedDate(preset.fireAt.toISOString(), timezone)); setReminderTime(isoToZonedTime(preset.fireAt.toISOString(), timezone)); }}>{preset.label}</Button>)}</div>
+              <div className="munin-form-grid">
+                <DateField label="Дата напоминания" value={reminderDate} onChange={setReminderDate} />
+                <Input aria-label="Время напоминания" type="time" value={reminderTime} onChange={event => setReminderTime(event.target.value)} />
+              </div>
+            </>}
+          </div>
           <details className="manual-task-options">
-            <summary>Даты, оценка и другие детали</summary>
+            <summary>Оценка, приоритет и описание</summary>
             <div className="munin-form-grid">
-              <label className="munin-field">
-                Срок
-                <Input type="date" {...register('date')} />
-              </label>
-              <label className="munin-field">
-                Время
-                <Input type="time" {...register('time')} />
-              </label>
-              <label className="munin-field">
-                День исполнения
-                <Input type="date" {...register('planned')} />
-              </label>
               <label className="munin-field">
                 Оценка, мин
                 <Input type="number" min="1" max="1440" {...register('minutes')} />
@@ -206,7 +250,7 @@ export function CreateTaskDialog({
               </label>
             </div>
           </details>
-          <div className="flex gap-2">
+          <div className="manual-task-footer">
             <Button type="submit" disabled={create.isPending || update.isPending || !isReady}>
               {create.isPending || update.isPending ? 'Добавляем…' : 'Добавить'}
             </Button>

@@ -7,6 +7,7 @@ import { Toaster } from '@/app/components/ui/sonner';
 import { AppLayout } from '@/app/components/layout/AppLayout';
 import { AuthPage } from '@/app/pages/AuthPage';
 import { useStore } from '@/lib/store';
+import { useVisualViewport } from '@/lib/hooks/useVisualViewport';
 
 // По маршруту, не всё разом: раньше все восемь страниц уходили в один чанк
 // 1.2 МБ вместе со стартовым экраном — в мобильной сети мини-приложения это
@@ -35,6 +36,7 @@ const queryClient = new QueryClient({
 });
 
 function AppContent() {
+  useVisualViewport();
   const isAuthenticated = useStore((s) => s.isAuthenticated);
   const setAuthenticated = useStore((s) => s.setAuthenticated);
   const login = useStore((s) => s.login);

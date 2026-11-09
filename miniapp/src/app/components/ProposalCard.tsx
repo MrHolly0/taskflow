@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { IconCheck, IconX, IconAlertTriangle, IconBell, IconCalendar } from '@tabler/icons-react';
 import { Proposal, ProposedAction } from '@/lib/hooks/useAssistant';
 import { useUserTimezone } from '@/lib/hooks/useUserTimezone';
-import { isoToZonedDate, isoToZonedTime, zonedInputToIso, isPastReminderTime } from '@/lib/reminderPresets';
+import { buildReminderPresets, isoToZonedDate, isoToZonedTime, zonedInputToIso, isPastReminderTime } from '@/lib/reminderPresets';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
+import { DateField } from '@/app/components/DateField';
 import { cn, formatReminderTime, formatPlannedDate } from '@/lib/utils';
 
 // Час по умолчанию для дня исполнения — пользователю незачем указывать
@@ -76,8 +77,11 @@ function ReminderLine({
   if (editing) {
     return (
       <div className="ml-6 mt-1 space-y-1.5 rounded-lg border border-border/60 p-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex flex-wrap gap-2">
+          {buildReminderPresets(new Date(), timezone).map(preset => <Button key={preset.key} type="button" variant="outline" disabled={disabled} onClick={() => { onChange(preset.fireAt.toISOString()); setEditing(false); }}>{preset.label}</Button>)}
+        </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setError(''); }} className="h-8 text-xs" />
+          <DateField label="Дата напоминания" value={date} onChange={value => { setDate(value); setError(''); }} />
           <Input type="time" value={time} onChange={(e) => { setTime(e.target.value); setError(''); }} className="h-8 text-xs" disabled={!date} />
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
@@ -85,11 +89,11 @@ function ReminderLine({
           <Button type="button" size="sm" className="h-7 text-xs" disabled={!date || !time || disabled} onClick={save}>
             Сохранить
           </Button>
-          {reminderAt && (
+          {(reminderAt || (action.payload.deadline && action.payload.no_reminder_needed !== true)) ? (
             <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" disabled={disabled} onClick={remove}>
-              Убрать
+              Не напоминать
             </Button>
-          )}
+          ) : null}
           <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditing(false)}>
             Отмена
           </Button>
@@ -107,6 +111,10 @@ function ReminderLine({
       <IconBell className="h-3 w-3 flex-shrink-0" />
       {reminderAt ? (
         <>напомнить {formatReminderTime(reminderAt, timezone)} · <span className="underline">изменить</span></>
+      ) : action.payload.no_reminder_needed === true ? (
+        <>Не напоминать · <span className="underline">изменить</span></>
+      ) : action.payload.deadline ? (
+        <>По настройкам перед сроком · <span className="underline">изменить</span></>
       ) : (
         <span className="underline">добавить напоминание</span>
       )}
@@ -151,7 +159,7 @@ function PlannedDateLine({
   if (editing) {
     return (
       <div className="ml-6 mt-1 space-y-1.5 rounded-lg border border-border/60 p-2" onClick={(e) => e.stopPropagation()}>
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-8 text-xs" />
+        <DateField label="День работы" value={date} onChange={setDate} />
         <div className="flex gap-1.5">
           <Button type="button" size="sm" className="h-7 text-xs" disabled={!date || disabled} onClick={save}>
             Сохранить
@@ -177,9 +185,9 @@ function PlannedDateLine({
     >
       <IconCalendar className="h-3 w-3 flex-shrink-0" />
       {plannedDate ? (
-        <>заняться {formatPlannedDate(plannedDate, timezone)} · <span className="underline">изменить</span></>
+        <>Предлагаю заняться {formatPlannedDate(plannedDate, timezone)} · <span className="underline">изменить</span></>
       ) : (
-        <span className="underline">предложить день</span>
+        <span className="underline">Выбрать день работы</span>
       )}
     </button>
   );
@@ -219,7 +227,10 @@ export function ProposalCard({
       return next;
     });
   };
-  const applyWithPersistent = () => onApply(Array.from(persistentOrdinals));
+  const allowsPersistent = (action: ProposedAction) => action.payload.no_reminder_needed !== true
+    && Boolean(action.payload.reminder_at || action.payload.deadline);
+  const applyWithPersistent = () => onApply(Array.from(persistentOrdinals).filter(ordinal =>
+    proposal.actions.some(action => action.ordinal === ordinal && action.accepted && allowsPersistent(action))));
   const isDegraded = proposal.status === 'FAILED' && !proposal.id;
   const isClarification = !proposal.actions.length && !!proposal.clarification && !isDegraded;
 
@@ -307,6 +318,8 @@ export function ProposalCard({
                 {action.summary}
               </span>
             </label>
+            {action.type === 'CREATE' && typeof action.payload.group === 'string' && <p className="ml-6 mt-1 text-sm text-muted-foreground">Группа: {action.payload.group}</p>}
+            {action.payload.deadline_time_inferred === true && <p className="ml-6 mt-1 text-sm text-muted-foreground">Срок до конца дня: точное время не указано.</p>}
             {action.type === 'CREATE' && action.accepted && (
               <>
                 <ReminderLine
@@ -322,11 +335,12 @@ export function ProposalCard({
                 <label className="ml-6 mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    checked={persistentOrdinals.has(action.ordinal)}
+                    checked={allowsPersistent(action) && persistentOrdinals.has(action.ordinal)}
+                    disabled={!allowsPersistent(action) || applying || rejecting}
                     onChange={(e) => togglePersistent(action.ordinal, e.target.checked)}
                     className="flex-shrink-0"
                   />
-                  напоминать настойчиво, пока не отмечу
+                  напоминать повторно, если не отмечу
                 </label>
               </>
             )}

@@ -154,7 +154,7 @@ export function StatsPage() {
       if (next.status !== 'IN_PROGRESS')
         await updateTask.mutateAsync({ id: next.id, status: 'IN_PROGRESS' });
       reveal([next.id]);
-      navigate('/');
+      navigate(`/?task=${next.id}`);
     } catch {
       setStartError('Не получилось взять дело в работу. Попробуй ещё раз.');
     }

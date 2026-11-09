@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { IconTrash, IconClock, IconBell, IconBellPlus, IconX, IconRepeat } from '@tabler/icons-react';
+import { IconTrash, IconBell, IconBellPlus, IconX, IconRepeat } from '@tabler/icons-react';
 import { Priority, Status } from '@/lib/store';
 import {
   useUpdateTask,
+  type UpdateTaskRequest,
   useDeleteTask,
   useGroups,
   useTaskReminders,
@@ -23,6 +24,7 @@ import {
 } from '@/lib/reminderPresets';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
+import { DateField } from '@/app/components/DateField';
 import { Textarea } from '@/app/components/ui/textarea';
 import {
   Dialog,
@@ -80,6 +82,7 @@ export interface TaskInput {
   priority: string;
   status: string;
   deadline?: string;
+  plannedDate?: string;
   group?: string;
   groupName?: string;
   groupId?: string;
@@ -94,6 +97,7 @@ interface TaskDetailModalProps {
   open: boolean;
   onClose: () => void;
   showFocusHint?: boolean;
+  initialSection?: 'reminders' | 'group' | 'deadline' | 'planned';
 }
 
 function AddReminderForm({
@@ -117,8 +121,12 @@ function AddReminderForm({
       setError('Это время уже прошло');
       return;
     }
-    await addReminder({ taskId, fireAt: fireAt.toISOString() });
-    onDone();
+    try {
+      await addReminder({ taskId, fireAt: fireAt.toISOString() });
+      onDone();
+    } catch {
+      setError('Не удалось назначить напоминание. Выбранное время сохранено, попробуй ещё раз.');
+    }
   };
 
   const handleManualSubmit = () => {
@@ -144,7 +152,7 @@ function AddReminderForm({
         ))}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); setError(''); }} className="h-9 text-sm" />
+        <DateField label="Дата напоминания" value={date} onChange={value => { setDate(value); setError(''); }} />
         <Input
           type="time"
           value={time}
@@ -166,12 +174,14 @@ function AddReminderForm({
   );
 }
 
-export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: TaskDetailModalProps) {
+export function TaskDetailModal({ task, open, onClose, showFocusHint = false, initialSection }: TaskDetailModalProps) {
   const { mutateAsync: updateTask } = useUpdateTask();
   const { mutate: deleteTask } = useDeleteTask();
   const { data: groups = [] } = useGroups();
   const { timezone, isReady: timezoneReady } = useUserTimezone();
-  const { data: reminders = [] } = useTaskReminders(task?.id, open);
+  const remindersQuery = useTaskReminders(task?.id, open);
+  const reminders = (remindersQuery.data ?? []).filter(reminder => reminder.status === 'PENDING').sort((a, b) => a.fireAt.localeCompare(b.fireAt));
+  const nextReminder = reminders.find(reminder => Date.parse(reminder.fireAt) > Date.now());
   const { mutate: cancelReminder } = useCancelReminder();
   const { mutate: snoozeReminder } = useSnoozeReminder();
   const { mutateAsync: clearRecurrence } = useClearRecurrence();
@@ -187,9 +197,11 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
   const [persistentReminder, setPersistentReminder] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
   const [deadlineDate, setDeadlineDate] = useState('');
+  const [plannedDay, setPlannedDay] = useState('');
   const [deadlineTime, setDeadlineTime] = useState('');
   const [estimatedTime, setEstimatedTime] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [showAddReminder, setShowAddReminder] = useState(false);
   const [snoozingReminderId, setSnoozingReminderId] = useState<string | null>(null);
   const [recurrenceType, setRecurrenceType] = useState(NO_RECURRENCE);
@@ -200,6 +212,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
 
   useEffect(() => {
     if (task) {
+      setSaveError('');
       setShowAddReminder(false);
       setSnoozingReminderId(null);
       setTitle(task.title);
@@ -223,7 +236,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
       setRecurrenceDays(recurrence?.daysOfWeek ?? []);
       setRecurrenceDayOfMonth(recurrence?.dayOfMonth ? String(recurrence.dayOfMonth) : '');
     }
-  }, [task?.id, groups.length]);
+  }, [task?.id, open]);
 
   // Тот же приём, что и с дедлайном чуть ниже: зависит от часового пояса.
   useEffect(() => {
@@ -237,10 +250,23 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
   // а не показывают дату/время, посчитанные в поясе браузера.
   useEffect(() => {
     if (task && timezoneReady) {
+      setPlannedDay(isoToZonedDate(task.plannedDate, timezone));
       setDeadlineDate(isoToZonedDate(task.deadline, timezone));
       setDeadlineTime(isoToZonedTime(task.deadline, timezone) || '20:59');
     }
   }, [task?.id, timezoneReady, timezone]);
+
+  useEffect(() => {
+    if (!open || !initialSection || !task) return;
+    if (initialSection === 'reminders') setShowAddReminder(true);
+    const timer = setTimeout(() => {
+      const section = document.querySelector<HTMLElement>(`[data-task-section="${initialSection}"]`);
+      section?.scrollIntoView({ block: 'nearest' });
+      const control = section?.matches('button, input') ? section : section?.querySelector<HTMLElement>('button, input');
+      control?.focus({ preventScroll: true });
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [open, task?.id, initialSection]);
 
   const taskId = task?.id;
 
@@ -271,21 +297,24 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
       if (recurrenceType === NO_RECURRENCE && task?.recurrence) {
         await clearRecurrence(taskId);
       }
-      await updateTask({
-        id: taskId,
-        title: title.trim() || undefined,
-        description: description || undefined,
-        priority,
-        status,
-        deadline: deadlineDate ? zonedInputToIso(deadlineDate, deadlineTime || '20:59', timezone) : undefined,
-        groupId: selectedGroupId || undefined,
-        estimateMinutes: estimatedTime ? parseInt(estimatedTime) : undefined,
-        recurrence: buildRecurrence(),
-        persistentReminder,
-      });
+      const patch: UpdateTaskRequest = { id: taskId };
+      if (title.trim() !== task?.title) patch.title = title.trim();
+      if (description !== (task?.description ?? '')) patch.description = description;
+      if (priority !== task?.priority) patch.priority = priority;
+      if (status !== task?.status) patch.status = status;
+      const nextDeadline = deadlineDate ? zonedInputToIso(deadlineDate, deadlineTime || '23:59', timezone) : null;
+      if ((nextDeadline ? Date.parse(nextDeadline) : null) !== (task?.deadline ? Date.parse(task.deadline) : null)) patch.deadline = nextDeadline;
+      if (plannedDay !== isoToZonedDate(task?.plannedDate, timezone)) patch.plannedDate = plannedDay ? zonedInputToIso(plannedDay, '09:00', timezone) : null;
+      if (selectedGroupId !== (task?.groupId ?? '')) patch.groupId = selectedGroupId || null;
+      const nextEstimate = estimatedTime ? Number(estimatedTime) : null;
+      if (nextEstimate !== (task?.estimateMinutes ?? task?.estimatedTime ?? null)) patch.estimateMinutes = nextEstimate;
+      if (persistentReminder !== (task?.persistentReminder ?? false)) patch.persistentReminder = persistentReminder;
+      const recurrence = buildRecurrence();
+      if (recurrence && JSON.stringify(recurrence) !== JSON.stringify(task?.recurrence)) patch.recurrence = recurrence;
+      await updateTask(patch);
       onClose();
     } catch {
-      onClose();
+      setSaveError('Не удалось сохранить. Изменения остались в форме, попробуй ещё раз.');
     } finally {
       setSaving(false);
     }
@@ -396,15 +425,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
               Дедлайн
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="relative min-w-0">
-                <IconClock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  value={deadlineDate}
-                  onChange={(e) => setDeadlineDate(e.target.value)}
-                  className="pl-9 h-10 text-sm w-full"
-                />
-              </div>
+              <DateField label="Срок сдачи" section="deadline" value={deadlineDate} onChange={setDeadlineDate} />
               <Input
                 type="time"
                 value={deadlineTime}
@@ -418,7 +439,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
           {/* Напоминания (Б1/Б2) — сразу под дедлайном: то же самое время, что и он,
               а не отдельная тема в конце формы. Независимы от срока, могут стоять
               и на задаче без дедлайна. */}
-          <div className="space-y-2">
+          <div className="space-y-2" data-task-section="reminders">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Напоминания
@@ -436,6 +457,12 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
                 </Button>
               )}
             </div>
+            <p className="reminder-state" role="status">
+              {remindersQuery.isPending ? 'Проверяем напоминания…' : remindersQuery.isError
+                ? 'Не удалось проверить напоминания. Попробуй ещё раз.'
+                : nextReminder ? `Следующее напоминание: ${formatReminderTime(nextReminder.fireAt, timezone)}`
+                : 'Будущих напоминаний нет. Можно назначить отдельное время.'}
+            </p>
             {/* Настойчивость (Б1) — ставит человек, не ассистент. */}
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <input
@@ -444,8 +471,9 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
                 onChange={(e) => setPersistentReminder(e.target.checked)}
                 className="flex-shrink-0"
               />
-              Напоминать настойчиво, пока не отмечу выполненной
+              Напоминать повторно, если не отмечу выполненной
             </label>
+            {persistentReminder && !reminders.length && <p className="text-sm text-muted-foreground">Сначала назначь первое напоминание. Настойчивый повтор начнётся после него.</p>}
             {reminders.length > 0 && (
               <div className="space-y-1.5">
                 {reminders.map((r) => (
@@ -509,6 +537,11 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
             )}
           </div>
 
+          <div className="space-y-1.5">
+            <label htmlFor="task-planned-day" className="text-sm font-medium">День работы</label>
+            <DateField id="task-planned-day" section="planned" label="День работы" value={plannedDay} onChange={setPlannedDay} />
+            <p className="text-sm text-muted-foreground">Когда хочешь заняться задачей. Это не срок сдачи.</p>
+          </div>
           {/* Group + Estimate row */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
@@ -519,7 +552,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
                 value={selectedGroupId || '__none__'}
                 onValueChange={(v) => setSelectedGroupId(v === '__none__' ? '' : v)}
               >
-                <SelectTrigger className="h-10">
+                <SelectTrigger className="h-10" data-task-section="group">
                   <SelectValue placeholder="Без группы" />
                 </SelectTrigger>
                 <SelectContent>
@@ -617,12 +650,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
             {recurrenceType !== NO_RECURRENCE && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span className="flex-shrink-0">Закончить</span>
-                <Input
-                  type="date"
-                  value={recurrenceEndsAt}
-                  onChange={(e) => setRecurrenceEndsAt(e.target.value)}
-                  className="h-9 text-sm"
-                />
+                <DateField label="Последний день повтора" value={recurrenceEndsAt} onChange={setRecurrenceEndsAt} />
               </div>
             )}
           </div>
@@ -642,6 +670,7 @@ export function TaskDetailModal({ task, open, onClose, showFocusHint = false }: 
             <IconTrash className="h-4 w-4" />
           </Button>
         </div>
+        {saveError && <p className="text-sm text-destructive" role="alert">{saveError}</p>}
       </DialogContent>
     </Dialog>
   );
