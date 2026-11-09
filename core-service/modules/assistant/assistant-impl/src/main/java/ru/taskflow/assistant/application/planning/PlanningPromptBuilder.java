@@ -6,6 +6,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import ru.taskflow.assistant.api.AssistantEntryPoint;
 import java.time.Clock;
+import java.time.LocalDate;
+import java.time.DayOfWeek;
+import java.time.temporal.TemporalAdjusters;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -13,6 +16,20 @@ import java.util.Map;
 
 @Component
 public class PlanningPromptBuilder {
+    private static final String WORKFLOW_RULES = """
+
+            Последовательные этапы и группы:
+            Подготовить/доделать работу и затем сдать/отправить её — два разных дела, даже если объект один.
+            Не схлопывай подготовку в название финальной сдачи и не теряй её в description.
+            Для каждого самостоятельного этапа нужен свой create. Срок финального события не переносится на подготовку.
+            Если для подготовки назван диапазон вроде «на следующей неделе», учитывай начало недели в понедельник
+            и финальный срок: предложенный день подготовки должен быть до сдачи. Для такого дня используй
+            planned_date в create, не deadline: это план работы, а не жёсткий срок. Полный ISO8601 со смещением.
+            Если день не задан точно, отметь в note, что это предложенный день. Если совместить условия нельзя, уточни противоречие.
+            У каждого create выбирай подходящую разрешённую группу по смыслу, когда соответствие однозначно:
+            курсовая, доклад по предмету, экзамен относятся к существующей группе «Учёба»/«Обучение».
+            Если подходят несколько групп или подходящей нет, оставь без группы; новых групп не создавай.
+            """;
     private final ObjectMapper json;
     private final Clock clock;
     private final String brand;
@@ -25,7 +42,7 @@ public class PlanningPromptBuilder {
 
     public String build(PlanningMode mode, List<Map<String, Object>> candidates, List<String> groups,
                         ZoneId zone, AssistantEntryPoint entry) {
-        if (mode == PlanningMode.BATCH_PLAN) return buildJson(candidates, groups, zone, entry);
+        if (mode == PlanningMode.BATCH_PLAN) return buildJson(candidates, groups, zone, entry) + calendarHints(zone) + WORKFLOW_RULES;
         String common = """
                 Ты — ассистент задач %s. Сейчас %s, зона %s. Относительные даты считай от этого момента.
                 Подготовь предложение изменений: ничего самостоятельно не применяется.
@@ -93,7 +110,7 @@ public class PlanningPromptBuilder {
                 """.formatted(brand, OffsetDateTime.now(clock.withZone(zone)), zone, encode(candidates), encode(groups));
         if (entry == AssistantEntryPoint.QUICK_ADD)
             common += "\nПри двоякости поставь вариант create первым: обращение пришло через быстрое добавление.\n";
-        return common + """
+        return common + calendarHints(zone) + WORKFLOW_RULES + """
                 Единственный инструмент execute_code с полем code. Предпочтителен формат async () => { ... }.
                 Код исполняется в песочнице. Нет файлов, сети, импортов, process или console.
                 api.tasks — те же кандидаты, api.now — СТРОКА ISO8601, НЕ функция: new Date(api.now), а не api.now().
@@ -175,7 +192,7 @@ public class PlanningPromptBuilder {
                 Изменение без новых значений и перенос без нового срока — clarification, не пустое действие.
 
                 Поля action по типу:
-                create: title обязательно; description,priority,deadline,group,tags,reminder_at при необходимости.
+                create: title обязательно; description,priority,deadline,planned_date,group,tags,reminder_at при необходимости.
                 complete/cancel: без полей изменений. reschedule: new_deadline либо new_deadline_time обязательно.
                 update: только реально изменённые title,description,priority,group.
                 remind: reminder_at ИЛИ reminder_before_deadline_minutes. Не добавляй другие изменения.
@@ -201,10 +218,11 @@ public class PlanningPromptBuilder {
                   с прошедшей датой и не пропускай её срок. Только час без дня для напоминания — ближайшее будущее наступление часа.
 
                 Даты:
+                planned_date — только явно названный день работы/подготовки. Без такой просьбы его не назначай.
                 Все абсолютные времена — полный ISO8601 с датой, временем и смещением зоны пользователя.
                 Дата/время БЕЗ просьбы напомнить всегда относится к deadline, а не reminder_at. Не добавляй уведомления автоматически.
                 Не оставляй день только в title: «сегодня сделать X» требует deadline сегодня даже после 09:00.
-                «Вечером» = 19:00, «утром» = 09:00, «днём» = 14:00. Только день для deadline = 09:00.
+                «Вечером» = 19:00, «утром» = 09:00, «днём» = 14:00. Только день без часа для deadline = конец этого дня, 23:59.
                 При переносе без нового дня «на 18», «в 18:00» передай new_deadline_time:"18:00" БЕЗ new_deadline:
                 сервер возьмёт день выбранной задачи. Это НЕ 18-е число. Если новый день назван, нужен полный new_deadline.
                 День в перечислении наследуется до следующего дня.
@@ -217,6 +235,14 @@ public class PlanningPromptBuilder {
                 %s
                 """.formatted(brand, OffsetDateTime.now(clock.withZone(zone)), zone, encode(candidates), inventory, encode(groups),
                 entry == AssistantEntryPoint.QUICK_ADD ? "При выборе альтернатив поставь create первым." : "");
+    }
+
+    private String calendarHints(ZoneId zone) {
+        LocalDate today = LocalDate.now(clock.withZone(zone));
+        LocalDate nextMonday = today.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
+        return "\nКалендарные опоры: сегодня " + today + "; через неделю " + today.plusDays(7)
+                + "; следующая календарная неделя с " + nextMonday + " по " + nextMonday.plusDays(6)
+                + ". Это справочные границы, не команда назначить сроки всем задачам.\n";
     }
 
     private String encode(Object value) {

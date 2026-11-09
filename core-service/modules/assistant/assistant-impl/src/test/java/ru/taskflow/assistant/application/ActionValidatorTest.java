@@ -46,6 +46,17 @@ class ActionValidatorTest {
     }
 
     @Test
+    void validatesPlannedDayAndRejectsItAfterDeadline() {
+        var window = windowWith(taskId);
+        assertThat(validator.validate(AssistantActionType.CREATE, Map.of("title", "Подготовить доклад",
+                "planned_date", "2026-08-28T09:00:00+03:00"), window).valid()).isTrue();
+        assertThat(validator.validate(AssistantActionType.CREATE, Map.of("title", "Подготовить доклад",
+                "planned_date", "не дата"), window).valid()).isFalse();
+        assertThat(validator.validate(AssistantActionType.CREATE, Map.of("title", "Подготовить доклад",
+                "planned_date", "2026-08-29T09:00:00+03:00", "deadline", "2026-08-28T09:00:00+03:00"), window).valid()).isFalse();
+    }
+
+    @Test
     void validate_acceptsCreateWithTitle() {
         var result = validator.validate(AssistantActionType.CREATE,
                 Map.of("title", "созвониться с Марком"), windowWith(taskId));

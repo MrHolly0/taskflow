@@ -26,7 +26,9 @@ class RelativeDayPolicyTest {
         "завтра купить, 25 числа забрать",
         "завтра купить, 25.11 забрать",
         "напомни через полтора дня",
-        "напомни про врача"
+        "напомни про врача",
+        "через неделю сдать доклад, на следующей неделе его доделать",
+        "завтра записаться на курс, на этой неделе подготовить документы"
     })
     void leavesMixedAndUnsupportedDateExpressionsUntouched(String source) {
         assertThat(RelativeDayPolicy.uniqueOffset(source)).isEmpty();

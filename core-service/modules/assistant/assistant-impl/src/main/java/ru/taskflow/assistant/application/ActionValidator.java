@@ -103,6 +103,13 @@ public class ActionValidator {
         if (args.containsKey("deadline") && !isParseableDeadline(args.get("deadline"))) {
             return ValidationResult.fail("не удалось разобрать срок: " + args.get("deadline"));
         }
+        if (args.containsKey("planned_date")) {
+            OffsetDateTime planned = parseTimeOrNull(args.get("planned_date"));
+            if (planned == null) return ValidationResult.fail("не удалось разобрать день работы");
+            OffsetDateTime deadline = parseTimeOrNull(args.get("deadline"));
+            if (deadline != null && planned.isAfter(deadline))
+                return ValidationResult.fail("день работы не может быть позже срока задачи");
+        }
         if (args.containsKey("recurrence")) {
             return ValidationResult.fail("повторяющиеся задачи пока не поддерживаются");
         }

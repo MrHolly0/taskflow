@@ -98,6 +98,11 @@ class PlanningModesIntegrationTest {
         result=planner.run(mode,user,"Заверши все отчёты",ZoneId.of("Europe/Moscow"),AssistantEntryPoint.CHAT);
         assertThat(result.actions()).isEmpty();assertThat(result.rejections()).contains("SELECTION_LIMIT");
     }
+    private static String dayEnd(String value) {
+        return OffsetDateTime.parse(value).atZoneSameInstant(ZoneId.of("UTC")).toLocalDate()
+                .atTime(23, 59).atOffset(java.time.ZoneOffset.UTC).toString();
+    }
+
     @Test void inventedReferencesAndUnsafeCodeAreRejected() throws Exception {
         UUID user=user();task(user,"Своя задача",null,null);
         reply(PlanningMode.CODE_MODE,"{}","return {actions:[{type:'complete',task_ref:'T999'}]};");
@@ -505,7 +510,7 @@ class PlanningModesIntegrationTest {
                 new LlmToolResponse(List.of(),first.replace("reminder_at","deadline"),30,40,false));
         var result = planner.run(PlanningMode.BATCH_PLAN,user,"Через два дня отправить письмо",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
         assertThat(result.rejections()).isEmpty();assertThat(result.passes()).isEqualTo(2);
-        assertThat(result.actions().getFirst().payload()).containsEntry("deadline",at).doesNotContainKey("reminder_at");
+        assertThat(result.actions().getFirst().payload()).containsEntry("deadline", dayEnd(at)).doesNotContainKey("reminder_at");
     }
 
     @Test void anExplicitDayCannotBeLeftOnlyInTheTitle() {
@@ -514,7 +519,7 @@ class PlanningModesIntegrationTest {
         String fixed = "{\"steps\":[{\"action\":{\"type\":\"create\",\"title\":\"Отправить письмо\",\"deadline\":\"" + at + "\"}}]}";
         when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),first,10,20,false),new LlmToolResponse(List.of(),fixed,30,40,false));
         var result = planner.run(PlanningMode.BATCH_PLAN,user,"Завтро отправить письмо",ZoneId.of("UTC"),AssistantEntryPoint.CHAT);
-        assertThat(result.rejections()).isEmpty();assertThat(result.actions().getFirst().payload()).containsEntry("deadline",at);
+        assertThat(result.rejections()).isEmpty();assertThat(result.actions().getFirst().payload()).containsEntry("deadline", dayEnd(at));
         assertThat(result.passes()).isEqualTo(2);
     }
 

@@ -130,7 +130,7 @@ public class ExperimentalAgentLoop {
         } else {
             Map<String, Object> actionProperties = new LinkedHashMap<>();
             actionProperties.put("type", Map.of("type", "string", "enum", List.of("create","complete","cancel","reschedule","update","remind")));
-            for (String field : List.of("title","description","deadline","new_deadline","new_deadline_time","group","note","reason","reminder_at","ambiguous_reason"))
+            for (String field : List.of("title","description","deadline","planned_date","new_deadline","new_deadline_time","group","note","reason","reminder_at","ambiguous_reason"))
                 actionProperties.put(field, Map.of("type", "string"));
             actionProperties.put("reminder_before_deadline_minutes", Map.of("type", "integer", "minimum", 0, "maximum", 525600));
             actionProperties.put("priority", Map.of("type", "string", "enum", List.of("LOW","MEDIUM","HIGH","URGENT")));

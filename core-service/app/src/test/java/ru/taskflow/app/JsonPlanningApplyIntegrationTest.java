@@ -48,6 +48,24 @@ class JsonPlanningApplyIntegrationTest {
     }
     void reply(String plan) { when(model.callWithTools(any())).thenReturn(new LlmToolResponse(List.of(),plan,20,30,false)); }
 
+    @Test void preparationKeepsItsPlannedDayWithoutInventingADeadline() {
+        UUID user = user();
+        reply("""
+                {"steps":[{"action":{"type":"create","title":"Доделать доклад","planned_date":"2030-11-16T09:00:00+03:00"}},
+                {"action":{"type":"create","title":"Сдать доклад","deadline":"2030-11-17T18:00:00+03:00"}}]}
+                """);
+        var proposal = assistant.handleText(user, "16 ноября 2030 доделать доклад, а 17 ноября в 18:00 сдать", AssistantChannel.WEB);
+        assertThat(proposal.actions()).hasSize(2);
+        var applied = assistant.apply(user, proposal.id());
+        assertThat(applied.appliedCount()).isEqualTo(2);
+        var preparation = tasks.findById(user, applied.outcomes().getFirst().taskId());
+        var delivery = tasks.findById(user, applied.outcomes().getLast().taskId());
+        assertThat(preparation.deadline()).isNull();
+        assertThat(preparation.plannedDate().toInstant()).isEqualTo(OffsetDateTime.parse("2030-11-16T09:00:00+03:00").toInstant());
+        assertThat(delivery.deadline().toInstant()).isEqualTo(OffsetDateTime.parse("2030-11-17T18:00:00+03:00").toInstant());
+        assertThat(assistant.apply(user, proposal.id())).isEqualTo(applied);
+    }
+
     @Test void relativeReminderIsStoredAtTheActualDeadlineOffsetAndApplyIsIdempotent() {
         UUID user = user();var deadline = OffsetDateTime.now().plusDays(8).withNano(0);var target = task(user,deadline);
         var before = tasks.getReminders(user,target.id());

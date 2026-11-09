@@ -107,6 +107,40 @@ class PlanningComparisonLiveTest {
         assertThat(tasks.findById(user,report.id()).deadline()).isBefore(OffsetDateTime.now());
         assertThat(measurements).anyMatch(m->m.inputTokens()>0);
     }
+    @Test void preservesPreparationBeforeDelivery() throws Exception {
+        assumeTrue("true".equals(System.getenv("PLANNING_LIVE_APPROVED")));
+        assumeTrue(System.getenv("GROQ_API_KEY") != null && !System.getenv("GROQ_API_KEY").isBlank());
+        when(limiter.allow(any())).thenReturn(true);
+        long telegram = ThreadLocalRandom.current().nextLong(1000000000L, 9000000000L);
+        UUID user = users.findOrCreateByTelegram(telegram, "workflow_" + telegram, "Test", "User").id();
+        task(user, "Купить блокнот", "Обучение", null);
+        task(user, "Заказать бумагу", "Работа", null);
+        ZoneId zone = ZoneId.of("Europe/Moscow");
+        var rows = new ArrayList<Map<String, Object>>();
+        for (int repeat = 0; repeat < 3; repeat++) {
+            var result = experimental.run(PlanningMode.BATCH_PLAN, user,
+                    "Через неделю мне нужно сдать доклад по физике, нужно на следующей неделе его доделать, а затем сдать",
+                    zone, AssistantEntryPoint.CHAT);
+            var created = result.actions().stream().filter(action -> action.type() == AssistantActionType.CREATE).toList();
+            rows.add(Map.of("actions", json.valueToTree(created), "rejections", result.rejections()));
+            Path report = Path.of("build/reports/workflow-planning-live.json");
+            Files.createDirectories(report.getParent());
+            json.writerWithDefaultPrettyPrinter().writeValue(report.toFile(), Map.of("rows", rows, "httpAttempts", gateway.attempts.get()));
+            assertThat(created).hasSize(2);
+            var delivery = created.stream().filter(action -> String.valueOf(action.payload().get("title")).toLowerCase(Locale.ROOT).contains("сдат")).findFirst().orElseThrow();
+            var preparation = created.stream().filter(action -> action != delivery).findFirst().orElseThrow();
+            var due = OffsetDateTime.parse(String.valueOf(delivery.payload().get("deadline")));
+            var before = OffsetDateTime.parse(String.valueOf(preparation.payload().get("planned_date")));
+            assertThat(due.atZoneSameInstant(zone).toLocalDate()).isEqualTo(LocalDate.now(zone).plusDays(7));
+            assertThat(before).isBefore(due);
+            assertThat(before.atZoneSameInstant(zone).toLocalDate())
+                    .isAfterOrEqualTo(LocalDate.now(zone).with(java.time.temporal.TemporalAdjusters.next(DayOfWeek.MONDAY)));
+            assertThat(created).allSatisfy(action -> assertThat(action.payload().get("group")).isEqualTo("Обучение"));
+        }
+        Path path = Path.of("build/reports/workflow-planning-live.json");
+        Files.createDirectories(path.getParent());
+        json.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), Map.of("rows", rows, "httpAttempts", gateway.attempts.get()));
+    }
     boolean dateMatches(Map<String,Object> payload,Scenario scenario) {
         if(scenario.dateField()==null)return true;
         try{return OffsetDateTime.parse(String.valueOf(payload.get(scenario.dateField()))).toInstant().equals(scenario.date());}

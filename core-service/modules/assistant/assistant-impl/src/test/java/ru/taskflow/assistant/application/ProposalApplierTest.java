@@ -469,11 +469,8 @@ class ProposalApplierTest {
         verify(taskService, never()).scheduleReminder(any(), any(), any());
     }
 
-    // Срок задачи и время напоминания — разные вещи: create с reminder_at
-    // ставит напоминание отдельным вызовом уже после создания задачи, а не
-    // выводит его из deadline. Работает и без deadline вовсе.
     @Test
-    void apply_createWithReminderAtSchedulesReminderAfterCreation() {
+    void apply_createPassesExplicitReminderWithinAtomicCreation() {
         UUID createdId = UUID.randomUUID();
         ProposalActionJpaEntity a1 = action(0, AssistantActionType.CREATE, null,
                 "{\"title\":\"позвонить маме\",\"reminder_at\":\"2026-08-13T10:00:00+03:00\"}", true);
@@ -485,8 +482,11 @@ class ProposalApplierTest {
 
         applier.apply(userId, entity);
 
-        verify(taskService).createQuick(eq(userId), any());
-        verify(taskService).scheduleReminder(userId, createdId, OffsetDateTime.parse("2026-08-13T10:00:00+03:00"));
+        var request = org.mockito.ArgumentCaptor.forClass(ru.taskflow.task.api.dto.CreateTaskRequest.class);
+        verify(taskService).createQuick(eq(userId), request.capture());
+        assertThat(request.getValue().reminderAt()).isEqualTo(OffsetDateTime.parse("2026-08-13T10:00:00+03:00"));
+        assertThat(request.getValue().skipDefaultReminders()).isTrue();
+        verify(taskService, never()).scheduleReminder(any(), any(), any());
     }
 
     @Test
@@ -502,6 +502,20 @@ class ProposalApplierTest {
         applier.apply(userId, entity);
 
         verify(taskService, never()).scheduleReminder(any(), any(), any());
+    }
+
+    @Test
+    void explicitRemovalDisablesDefaultReminderToo() {
+        var a = action(0, AssistantActionType.CREATE, null,
+                "{\"title\":\"Доклад\",\"deadline\":\"2026-08-13T10:00:00+03:00\",\"no_reminder_needed\":true}", true);
+        when(actionValidator.revalidateForApply(userId, AssistantActionType.CREATE, null))
+                .thenReturn(new ActionValidator.ValidationResult(true, null, null));
+        when(taskService.createQuick(eq(userId), any())).thenReturn(taskResponse(UUID.randomUUID()));
+        applier.apply(userId, proposal("WEB", "TEXT", a));
+        var request = org.mockito.ArgumentCaptor.forClass(ru.taskflow.task.api.dto.CreateTaskRequest.class);
+        verify(taskService).createQuick(eq(userId), request.capture());
+        assertThat(request.getValue().skipDefaultReminders()).isTrue();
+        assertThat(request.getValue().reminderAt()).isNull();
     }
 
     @Test

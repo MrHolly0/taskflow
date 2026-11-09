@@ -15,7 +15,7 @@ import java.util.*;
 
 public class PlanningSession {
     private static final Set<String> SELECTOR_FIELDS = Set.of("ref", "query", "group", "status", "priority", "overdue", "deadlineFrom", "deadlineBefore", "all");
-    private static final Set<String> ACTION_FIELDS = Set.of("type", "task_ref", "title", "description", "priority", "deadline", "new_deadline", "group", "tags", "note", "reason", "reminder_at", "ambiguous_reason");
+    private static final Set<String> ACTION_FIELDS = Set.of("type", "task_ref", "title", "description", "priority", "deadline", "planned_date", "new_deadline", "group", "tags", "note", "reason", "reminder_at", "ambiguous_reason");
     private static final String DEADLINE_TIME = "new_deadline_time";
     private static final String BEFORE_DEADLINE = "reminder_before_deadline_minutes";
     private static final Set<String> JSON_ACTION_FIELDS;
@@ -207,12 +207,12 @@ public class PlanningSession {
             if (action.hasNonNull("reminder_at")) throw new PlanningException("INVALID_ACTION",
                     "Пользователь не просил уведомление. Время без просьбы напомнить относится к deadline, не reminder_at. Сохрани все действия.");
         if (actions.size() == 1 && "create".equals(actions.get(0).path("type").asText())
-                && !actions.get(0).hasNonNull("deadline") && !requestsReminder()
+                && !actions.get(0).hasNonNull("deadline") && !actions.get(0).hasNonNull("planned_date") && !requestsReminder()
                 && !sourceWithoutQuotes().contains("с названием")
                 && !sourceWithoutQuotes().matches("(?s).*(без\\s+(срок\\p{L}*|дедлайн\\p{L}*)|не\\s+(ставь|указывай|назначай)\\s+(срок|дедлайн)).*")
                 && java.util.regex.Pattern.compile("(?U)\\b(сегодня|завтр[ао]|послезавтра)\\b").matcher(sourceWithoutQuotes()).find())
             throw new PlanningException("INVALID_ACTION", "В реплике явно назван день, но у create пропущен deadline. "
-                    + "Исправь дату из исходной реплики, включая ошибки диктовки. При отсутствии часа используй 09:00, даже если этот deadline уже прошёл.");
+                    + "Исправь дату из исходной реплики, включая ошибки диктовки. При отсутствии часа используй конец дня, 23:59, даже если этот deadline уже прошёл.");
         actions = contextualChoice(actions);
         validateRequestedValues(actions);
         boolean ambiguous = false;
@@ -318,7 +318,7 @@ public class PlanningSession {
         fields(action, JSON_ACTION_FIELDS);
         String type = action.path("type").asText();
         Set<String> mutable = switch (type) {
-            case "create" -> Set.of("title", "description", "priority", "deadline", "group", "tags", "reminder_at", BEFORE_DEADLINE);
+            case "create" -> Set.of("title", "description", "priority", "deadline", "planned_date", "group", "tags", "reminder_at", BEFORE_DEADLINE);
             case "update" -> Set.of("title", "description", "priority", "group");
             case "reschedule" -> Set.of("new_deadline", DEADLINE_TIME, "reminder_at", BEFORE_DEADLINE);
             case "remind" -> Set.of("reminder_at", BEFORE_DEADLINE);
@@ -473,6 +473,8 @@ public class PlanningSession {
                 if (!issued.contains(action.path("task_ref").asText())) throw new PlanningException("UNISSUED_REFERENCE");
             }
         }
+        if (smartSearch && actions instanceof com.fasterxml.jackson.databind.node.ArrayNode array)
+            DeadlinePrecisionPolicy.normalize(array, sourceWithoutQuotes(), zone);
         return List.of(new LlmToolCall("plan", "propose_actions", result.toString()));
     }
 
