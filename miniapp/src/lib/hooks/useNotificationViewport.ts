@@ -11,7 +11,8 @@ export function useNotificationViewport(route: string) {
       const bounds = workspace.current?.getBoundingClientRect();
       if (!bounds) return;
       const viewport = window.visualViewport;
-      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight);
+      const safeBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0;
+      const bottom = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - safeBottom;
       const visibleDock = captureDock.current?.getBoundingClientRect();
       const nav = navigation.current?.getBoundingClientRect();
       const footerTop = visibleDock?.height ? visibleDock.top : nav?.height ? nav.top : bottom;

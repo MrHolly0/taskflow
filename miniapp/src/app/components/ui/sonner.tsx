@@ -32,6 +32,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       containerAriaLabel="Уведомления"
       closeButton
       duration={5000}
+      visibleToasts={1}
+      expand
       toastOptions={{ closeButtonAriaLabel: 'Закрыть уведомление' }}
       style={
         {

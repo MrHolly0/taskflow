@@ -318,7 +318,7 @@ button:disabled { cursor:default; }
 
 [data-sonner-toaster].munin-notifications[data-x-position=center] {left:var(--notice-center,50%);right:auto;width:var(--width);}
 .munin-notifications [data-sonner-toast] {font-family:inherit;}
-.munin-notifications [data-sonner-toast][data-styled=true] {border-radius:14px;padding:16px 44px 16px 16px;font-size:14px;}
+.munin-notifications [data-sonner-toast][data-styled=true] {border-radius:14px;padding:16px 44px 16px 16px;font-size:14px;max-height:var(--notice-height,70dvh);overflow-y:auto;overscroll-behavior:contain;}
 .munin-notifications [data-close-button] {left:auto;right:6px;top:6px;transform:none;width:28px;height:28px;border:0;background:transparent;box-shadow:none;}
 .munin-notifications .task-receipt-toast {width:var(--width);}
 .task-receipt {display:flex;flex-direction:column;max-height:var(--notice-height,70dvh);overflow:hidden;width:100%;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 30px oklch(0 0 0 / .12);font-size:14px;line-height:1.4;}
@@ -359,3 +359,4 @@ button:disabled { cursor:default; }
 .munin-notifications .task-receipt-toast {touch-action:auto;}
 .task-receipt-body {touch-action:pan-y;}
 .receipt-cancelled .task-receipt-heading {padding-bottom:14px;}
+.munin-notifications [data-sonner-toast][data-visible=false] {visibility:hidden;pointer-events:none;}

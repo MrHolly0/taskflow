@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { toast, useSonner } from 'sonner';
 import { IconCheck, IconCalendar, IconBell, IconPencil, IconTrash, IconX, IconAlertTriangle } from '@tabler/icons-react';
@@ -48,7 +48,24 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const [visibleCount, setVisibleCount] = useState(3);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const receipt = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    // Удаление кнопки после повтора запроса не вызывает blur.
+    setFocused(Boolean(receipt.current?.contains(document.activeElement)));
+  });
   const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (!held) return;
+    const release = () => setHeld(false);
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+    window.addEventListener('blur', release);
+    return () => {
+      window.removeEventListener('pointerup', release, true);
+      window.removeEventListener('pointercancel', release, true);
+      window.removeEventListener('blur', release);
+    };
+  }, [held]);
   const [failure, setFailure] = useState<{ taskId: string; message: string } | null>(null);
   const activeIds = allIds.filter(taskId => !cancelled.includes(taskId));
   const visibleIds = activeIds.slice(0, visibleCount);
@@ -77,7 +94,7 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   };
   const title = errors.length ? 'Применено не всё' : activeIds.length === 1 ? 'Задача создана'
     : `Создано ${activeIds.length} ${plural(activeIds.length, ['задача', 'задачи', 'задач'])}`;
-  return <div className="task-receipt" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+  return <div ref={receipt} className="task-receipt" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     onPointerDown={() => setHeld(true)} onPointerUp={() => setHeld(false)} onPointerCancel={() => setHeld(false)}
     onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <ReceiptHeading title={title} warning={errors.length > 0} dismiss={dismiss} />
