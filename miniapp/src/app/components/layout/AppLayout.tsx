@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNotificationViewport } from '@/lib/hooks/useNotificationViewport';
+import { TaskInspector } from '@/app/components/TaskInspector';
 import { Link, useLocation } from 'react-router-dom';
 import {
   IconSparkles,
@@ -54,6 +56,7 @@ const navItems: NavItem[] = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const notices = useNotificationViewport(location.pathname);
   const quickInputOpen = useTaskUi(s => s.captureOpen);
   const openCapture = useTaskUi(s => s.openCapture);
   const closeCapture = useTaskUi(s => s.closeCapture);
@@ -108,9 +111,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col min-w-0">
+      <div ref={notices.workspace} className="flex flex-1 flex-col min-w-0">
         {/* Top Bar */}
-        <header className="flex min-h-[calc(3.5rem+var(--safe-top))] items-center justify-between border-b border-border px-4 lg:px-5 pt-[var(--safe-top)] flex-shrink-0">
+        <header ref={notices.header} className="flex min-h-[calc(3.5rem+var(--safe-top))] items-center justify-between border-b border-border px-4 lg:px-5 pt-[var(--safe-top)] flex-shrink-0">
           <div className="lg:hidden">
             <MuninLogo variant="header" className="h-5 w-auto text-foreground" />
           </div>
@@ -152,7 +155,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
 
         {location.pathname !== '/assistant' && (
-          <div className={cn('mobile-capture-dock', location.pathname === '/' && 'mobile-capture-focus')}>
+          <div ref={notices.captureDock} className={cn('mobile-capture-dock', location.pathname === '/' && 'mobile-capture-focus')}>
             <button onClick={openCapture} aria-label="Рассказать Мунину" className="mobile-capture-button">
               {location.pathname === '/' ? <><SoundWave /><span>Рассказать Мунину</span><IconArrowRight /></> : <MuninBird />}
             </button>
@@ -160,7 +163,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Mobile Bottom Navigation */}
-        <nav className="lg:hidden z-30 flex flex-shrink-0 items-center border-t border-border bg-background pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
+        <nav ref={notices.navigation} className="lg:hidden z-30 flex flex-shrink-0 items-center border-t border-border bg-background pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)]">
           {[
             { href: '/', icon: IconSparkles, label: 'Сейчас' },
             { href: '/assistant', icon: IconMessageCircle, label: 'Ассистент' },
@@ -225,6 +228,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Quick Input Modal */}
+      <TaskInspector />
       <QuickInputModal open={quickInputOpen} onClose={closeCapture} />
     </div>
   );

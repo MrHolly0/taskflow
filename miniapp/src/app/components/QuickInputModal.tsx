@@ -2,6 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { IconSend, IconSparkles, IconArrowLeft, IconPaperclip, IconAlertTriangle, IconMicrophone } from '@tabler/icons-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuickAdd, useSetActionAccepted, useSelectAlternative, useUpdateActionReminder, useUpdateActionPlannedDate, useApplyProposal, useRejectProposal, Proposal } from '@/lib/hooks/useAssistant';
+import { toast } from 'sonner';
+import { showTaskReceipt } from '@/app/components/TaskReceipt';
+import type { ApplyResult } from '@/lib/hooks/useAssistant';
 import { useUpdateTask } from '@/lib/hooks/useTasks';
 import { useEffectiveVoiceMode } from '@/lib/hooks/useVoiceMode';
 import { useVoiceRecording } from '@/lib/hooks/useVoiceRecording';
@@ -20,7 +23,7 @@ import { cn } from '@/lib/utils';
 import { shortcutLabel } from '@/lib/shortcuts';
 import { useTaskUi } from '@/lib/task-ui';
 
-type Phase = 'input' | 'processing' | 'confirm' | 'done';
+type Phase = 'input' | 'processing' | 'confirm';
 
 interface QuickInputModalProps {
   open: boolean;
@@ -53,30 +56,34 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
   const [text, setText] = useState('');
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [doneLabel, setDoneLabel] = useState('Добавлено!');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const successTimer = useRef<ReturnType<typeof setTimeout>>();
   const sending = useRef(false);
   const reveal = useTaskUi(s => s.reveal);
   const voiceMode = useEffectiveVoiceMode();
   const recording = useVoiceRecording(voiceMode, (file) => send({ file }));
 
   useEffect(() => {
-    if (open && phase === 'done') {
-      setPhase('input');
-      setText('');
-      setProposal(null);
-      setError(null);
-    }
     const focusTimer = open ? setTimeout(() => textareaRef.current?.focus(), 100) : undefined;
-    return () => { clearTimeout(focusTimer); clearTimeout(successTimer.current); };
+    return () => clearTimeout(focusTimer);
   }, [open]);
 
-  const closeWithSuccess = (label: string, ids: string[]) => {
-    setDoneLabel(label);
-    setPhase('done');
-    successTimer.current = setTimeout(() => { onClose(); reveal(ids); }, 1500);
+  const finishApply = (result: ApplyResult, origin: Proposal) => {
+    const succeeded = result.outcomes.filter(outcome => outcome.success);
+    if (!succeeded.length) {
+      const message = result.outcomes.map(outcome => outcome.error || outcome.summary).join('. ') || 'Ни одно изменение не применено.';
+      setError(message);
+      setPhase('input');
+      toast.error('Изменения не применены', { description: message, duration: 12000 });
+      return;
+    }
+    onClose();
+    reveal(succeeded.flatMap(outcome => outcome.taskId ? [outcome.taskId] : []).slice(0, 20));
+    showTaskReceipt(result, origin);
+    setPhase('input');
+    setText('');
+    setProposal(null);
+    setError(null);
   };
 
   const send = (payload: { text?: string; file?: File }) => {
@@ -88,7 +95,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
       onSuccess: (result) => {
         sending.current = false;
         if (result.applied) {
-          closeWithSuccess('Добавлено!', result.applied.outcomes.filter(o => o.success && o.taskId).map(o => o.taskId!));
+          finishApply(result.applied, result.proposal);
         } else {
           setProposal(result.proposal);
           setPhase('confirm');
@@ -150,7 +157,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
     if (!proposal?.id) return;
     applyProposal.mutate(proposal.id, {
       onSuccess: (result) => {
-        closeWithSuccess('Применено!', result.outcomes.filter(o => o.success && o.taskId).map(o => o.taskId!));
+        finishApply(result, proposal);
         for (const outcome of result.outcomes) {
           if (outcome.success && outcome.taskId && persistentOrdinals.includes(outcome.ordinal)) {
             updateTask.mutate({ id: outcome.taskId, persistentReminder: true });
@@ -331,14 +338,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
               </motion.div>
             )}
 
-            {phase === 'done' && (
-              <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center py-6 space-y-4">
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', duration: 0.5 }} className="w-14 h-14 bg-green-500 rounded-full flex items-center justify-center">
-                  <IconSparkles className="h-7 w-7 text-white" />
-                </motion.div>
-                <p className="font-medium">{doneLabel}</p>
-              </motion.div>
-            )}
+
           </AnimatePresence>
         </div>
       </DialogContent>

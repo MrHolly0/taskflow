@@ -315,3 +315,47 @@ button:disabled { cursor:default; }
 .date-dialog .date-calendar-scroll {min-height:0;overflow-y:auto;overscroll-behavior:contain;}
 .date-dialog .rdp-caption {position:sticky;top:0;z-index:2;background:var(--popover);}
 .date-dialog .rdp-head {position:sticky;top:44px;z-index:1;background:var(--popover);}
+
+[data-sonner-toaster].munin-notifications[data-x-position=center] {left:var(--notice-center,50%);right:auto;width:var(--width);}
+.munin-notifications [data-sonner-toast] {font-family:inherit;}
+.munin-notifications [data-sonner-toast][data-styled=true] {border-radius:14px;padding:16px 44px 16px 16px;font-size:14px;}
+.munin-notifications [data-close-button] {left:auto;right:6px;top:6px;transform:none;width:28px;height:28px;border:0;background:transparent;box-shadow:none;}
+.munin-notifications .task-receipt-toast {width:var(--width);}
+.task-receipt {display:flex;flex-direction:column;max-height:var(--notice-height,70dvh);overflow:hidden;width:100%;background:var(--popover);color:var(--popover-foreground);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 30px oklch(0 0 0 / .12);font-size:14px;line-height:1.4;}
+.task-receipt-heading {display:flex;align-items:center;gap:10px;padding:14px 14px 8px;flex-shrink:0;}
+.task-receipt-heading strong {font-weight:600;flex:1;}
+.receipt-success,.receipt-warning {display:grid;place-items:center;flex-shrink:0;width:22px;height:22px;border-radius:50%;}
+.receipt-success {background:oklch(.53 .14 150);color:oklch(.99 0 0);}
+.receipt-warning {color:var(--destructive);}
+.receipt-success svg,.receipt-warning svg {width:16px;height:16px;stroke-width:2.5;}
+.receipt-close {display:grid;place-items:center;min-width:32px;min-height:32px;border-radius:8px;color:var(--muted-foreground);}
+.receipt-close:hover {background:var(--secondary);color:var(--foreground);}
+.receipt-close svg {width:18px;height:18px;}
+.task-receipt-body {overflow-y:auto;overscroll-behavior:contain;min-height:0;padding:0 16px 8px;}
+.task-receipt-item + .task-receipt-item {border-top:1px solid var(--border);padding-top:12px;}
+.task-receipt-item h3 {font-size:16px;font-weight:600;line-height:1.4;overflow-wrap:anywhere;margin:0 0 12px;}
+.receipt-facts {display:grid;gap:10px;margin:0;}
+.receipt-facts > div {display:grid;grid-template-columns:18px minmax(0,1fr) minmax(0,1.2fr);align-items:start;gap:10px;}
+.receipt-facts svg {width:18px;height:18px;color:var(--muted-foreground);}
+.receipt-facts dt {color:var(--muted-foreground);}
+.receipt-facts dd {margin:0;text-align:right;font-weight:500;overflow-wrap:anywhere;}
+.receipt-facts dd span {display:block;}
+.receipt-group,.receipt-loading {font-size:13px;color:var(--muted-foreground);margin:10px 0;}
+.receipt-error,.receipt-load-error {font-size:13px;color:var(--destructive);margin:10px 0;}
+.receipt-load-error button {color:var(--foreground);text-decoration:underline;min-height:40px;}
+.receipt-actions {display:flex;flex-wrap:wrap;gap:4px 16px;border-top:1px solid var(--border);margin-top:12px;padding-block:5px;}
+.receipt-actions button {display:flex;align-items:center;gap:7px;min-height:36px;font-size:13px;border-radius:6px;}
+.receipt-actions button:hover {text-decoration:underline;text-underline-offset:3px;}
+.receipt-actions svg {width:16px;height:16px;}
+.receipt-actions button:disabled {opacity:.5;cursor:wait;}
+.receipt-more {min-height:44px;text-decoration:underline;}
+.task-receipt button:focus-visible {outline:2px solid var(--ring);outline-offset:2px;}
+@media(max-width:1023px) {
+  [data-sonner-toaster].munin-notifications[data-x-position=center] {left:var(--notice-center,50%)!important;right:auto!important;transform:translateX(-50%);width:var(--width)!important;}
+  .receipt-close {min-width:44px;min-height:44px;margin:-6px -6px -6px 0;}
+  .receipt-actions button {min-height:44px;font-size:14px;}
+  .munin-notifications [data-close-button] {width:36px;height:36px;}
+}
+.munin-notifications .task-receipt-toast {touch-action:auto;}
+.task-receipt-body {touch-action:pan-y;}
+.receipt-cancelled .task-receipt-heading {padding-bottom:14px;}

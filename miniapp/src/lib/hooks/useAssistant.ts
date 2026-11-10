@@ -89,6 +89,7 @@ export const useQuickAdd = () => {
       requestKey.current = null;
       if (result.applied) {
         queryClient.invalidateQueries({ queryKey: ['tasks'] });
+        queryClient.invalidateQueries({ queryKey: ['groups'] });
       }
     },
   });
@@ -150,6 +151,7 @@ export const useApplyProposal = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['groups'] });
     },
   });
 };

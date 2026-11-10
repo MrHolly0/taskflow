@@ -153,6 +153,14 @@ export const useCompleteTask = () => {
   });
 };
 
+export const taskDetailQuery = (id: string | null) => ({
+  queryKey: ['tasks', 'detail', id],
+  queryFn: async ({ signal }: { signal: AbortSignal }) =>
+    (await getClient().get<TaskResponse>(`/tasks/${id}`, { signal })).data,
+  enabled: Boolean(id),
+  staleTime: 30000,
+});
+
 export const useDeleteTask = () => {
   const queryClient = useQueryClient();
   return useMutation({

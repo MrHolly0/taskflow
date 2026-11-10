@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { useEffect, useRef } from 'react';
 
 interface TaskUiState {
+  inspectTaskId: string | null;
+  inspectTask: (id: string | null) => void;
   captureOpen: boolean;
   revealIds: string[];
   revealedAt: number;
@@ -11,6 +13,8 @@ interface TaskUiState {
 }
 
 export const useTaskUi = create<TaskUiState>((set) => ({
+  inspectTaskId: null,
+  inspectTask: (id) => set({ inspectTaskId: id }),
   captureOpen: false,
   revealIds: [],
   revealedAt: 0,
