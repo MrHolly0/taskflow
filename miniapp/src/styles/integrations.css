@@ -1,4 +1,4 @@
-.munin-integrations { width: 100%; max-width: 680px; margin-right: auto; }
+.munin-integrations { width: 100%; max-width: 680px; margin-inline: auto; }
 .munin-integrations-heading { margin-bottom: 24px; }
 .munin-integrations-heading h1 { font-size: 30px; font-weight: 550; line-height: 1.2; letter-spacing: -.7px; }
 .munin-integrations-heading p { margin-top: 8px; color: var(--muted-foreground); font-size: 13px; }

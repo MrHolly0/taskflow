@@ -210,7 +210,7 @@ function Preview({ group, tasks }: { group: GroupResponse; tasks: TaskResponse[]
           <p>Отпусти над пунктиром или значком группы</p>
         </div>
       </header>
-      <div ref={setNodeRef} className={cn('group-preview-drop', isOver && 'is-over')}>
+      <div ref={setNodeRef} className={cn('group-preview-drop', tasks.length === 0 && 'is-empty', isOver && 'is-over')}>
         <div className="group-task-grid">
           {tasks.slice(0, 4).map((task) => (
             <div className="preview-task" key={task.id}>

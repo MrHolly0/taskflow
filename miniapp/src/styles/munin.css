@@ -179,6 +179,9 @@ button:disabled { cursor:default; }
 .group-preview { position:absolute; inset:0; z-index:2; background:var(--background); animation:munin-preview-enter 180ms ease-out; }
 @keyframes munin-preview-enter {from {opacity:0;} to {opacity:1;} }
 .group-preview-drop { margin-top:16px; min-height:100px; border:1px dashed var(--muted-foreground); border-radius:14px; padding:12px; }
+.group-preview-drop.is-empty {display:flex;align-items:center;justify-content:center;}
+.group-preview-drop.is-empty .group-task-grid {display:none;}
+.group-preview-drop.is-empty .preview-caption {margin:0;line-height:1.5;}
 .group-preview-drop.is-over { background:color-mix(in oklch,var(--secondary) 40%,var(--background)); }
 .preview-task { display:flex; align-items:flex-start; gap:10px; padding:14px; min-height:90px; border:1px solid var(--border); border-radius:12px; background:var(--background); min-width:0; }
 .preview-ring { width:19px; height:19px; flex-shrink:0; border:1px solid var(--muted-foreground); border-radius:50%; }
