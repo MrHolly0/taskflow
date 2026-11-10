@@ -25,6 +25,7 @@ import {
 } from '@/app/components/ui/select';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
+import { dismissTaskReceipt } from '@/app/components/TaskReceipt';
 import { DateField } from '@/app/components/DateField';
 
 const schema = z.object({
@@ -125,6 +126,7 @@ export function CreateTaskDialog({
       onCreated?.(task);
       reveal([task.id]);
       onClose();
+      dismissTaskReceipt();
       toast.success(
         onCreated && !task.groupId ? 'Задача добавлена без группы.' : 'Задача добавлена.',
         {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { toast, useSonner } from 'sonner';
 import { IconCheck, IconCalendar, IconBell, IconPencil, IconTrash, IconX, IconAlertTriangle } from '@tabler/icons-react';
 import type { ApplyResult, Proposal } from '@/lib/hooks/useAssistant';
@@ -47,6 +48,14 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const [cancelled, setCancelled] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(3);
   const [hovered, setHovered] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  useEffect(() => {
+    const update = () => setDialogOpen(Boolean(document.querySelector('[data-slot="dialog-overlay"][data-state="open"], [data-slot="sheet-overlay"][data-state="open"]')));
+    const observer = new MutationObserver(update);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-state'] });
+    update();
+    return () => observer.disconnect();
+  }, []);
   const [focused, setFocused] = useState(false);
   const receipt = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -71,30 +80,38 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const visibleIds = activeIds.slice(0, visibleCount);
   const tasks = useQueries({ queries: visibleIds.map(taskDetailQuery) });
   const remove = useDeleteTask();
+  const queryClient = useQueryClient();
   const inspect = useTaskUi(state => state.inspectTask);
   const { timezone, isReady, error: timezoneError, refetch: reloadTimezone } = useUserTimezone();
   const { data: settings } = useSettings();
   const { toasts } = useSonner();
   const behind = toasts.length > 0 && toasts[0].id !== id;
   const dismiss = useCallback(() => { toast.dismiss(id); }, [id]);
-  useReceiptLifetime(dismiss, hovered || focused || held || behind || !isReady || remove.isPending || Boolean(failure)
+  useReceiptLifetime(dismiss, hovered || focused || held || behind || dialogOpen || !isReady || remove.isPending || Boolean(failure)
     || tasks.some(task => task.isPending || task.isError));
   const errors = result.outcomes.filter(outcome => !outcome.success);
   const otherCount = result.outcomes.filter(outcome => outcome.success && !allIds.includes(outcome.taskId ?? '')).length;
+  const finishCancellation = (taskId: string) => {
+    if (activeIds.length === 1) {
+      toast.custom(nextId => <CancelledReceipt id={nextId} />, { id, duration: 5000, closeButton: false, dismissible: true, className: 'task-receipt-toast' });
+    } else setCancelled(previous => previous.includes(taskId) ? previous : [...previous, taskId]);
+  };
   const cancel = (taskId: string) => {
     setFailure(null);
     remove.mutate(taskId, {
-      onSuccess: () => {
-        if (activeIds.length === 1) {
-          toast.custom(nextId => <CancelledReceipt id={nextId} />, { id, duration: 5000, closeButton: false, dismissible: true, className: 'task-receipt-toast' });
-        } else setCancelled(previous => [...previous, taskId]);
+      onSuccess: () => finishCancellation(taskId),
+      onError: error => {
+        if (isAxiosError(error) && error.response?.status === 404) {
+          void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          finishCancellation(taskId);
+        } else setFailure({ taskId, message: 'Не удалось подтвердить отмену. Повтори попытку или открой задачу для проверки.' });
       },
-      onError: () => setFailure({ taskId, message: 'Не удалось отменить создание. Задача сохранена — попробуй ещё раз.' }),
     });
   };
   const title = errors.length ? 'Применено не всё' : activeIds.length === 1 ? 'Задача создана'
     : `Создано ${activeIds.length} ${plural(activeIds.length, ['задача', 'задачи', 'задач'])}`;
-  return <div ref={receipt} className="task-receipt" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+  return <div ref={receipt} className="task-receipt" onPointerEnter={event => { if (event.pointerType === 'mouse' && window.matchMedia('(hover: hover)').matches) setHovered(true); }}
+    onPointerLeave={event => { if (event.pointerType === 'mouse') setHovered(false); }}
     onPointerDown={() => setHeld(true)} onPointerUp={() => setHeld(false)} onPointerCancel={() => setHeld(false)}
     onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}>
     <ReceiptHeading title={title} warning={errors.length > 0} dismiss={dismiss} />
@@ -132,7 +149,15 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   </div>;
 }
 
+let latestReceipt: string | number | undefined;
+
+export function dismissTaskReceipt() {
+  if (latestReceipt !== undefined) toast.dismiss(latestReceipt);
+  latestReceipt = undefined;
+}
+
 export function showTaskReceipt(result: ApplyResult, proposal: Proposal) {
+  dismissTaskReceipt();
   if (!createdTaskIds(result, proposal).length) {
     const errors = result.outcomes.filter(outcome => !outcome.success);
     const applied = result.outcomes.filter(outcome => outcome.success).map(outcome => outcome.summary);
@@ -142,7 +167,7 @@ export function showTaskReceipt(result: ApplyResult, proposal: Proposal) {
     } else toast.success('Изменения применены', { description: applied.join('. ') });
     return;
   }
-  toast.custom(id => <TaskReceipt id={id} result={result} proposal={proposal} />, {
+  latestReceipt = toast.custom(id => <TaskReceipt id={id} result={result} proposal={proposal} />, {
     duration: Infinity, closeButton: false, dismissible: false, className: 'task-receipt-toast',
   });
 }
