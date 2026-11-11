@@ -1,0 +1,46 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><style>
+:root{color-scheme:light dark;--ink:var(--tg-theme-text-color,#111216);--hint:var(--tg-theme-hint-color,#6c707c);--line:var(--tg-theme-section-separator-color,#e5e7ed);--surface:var(--tg-theme-secondary-bg-color,#f0f2f6);--accent:var(--tg-theme-link-color,#4c6cf0)}
+body{margin:0;padding:22px 22px max(20px,env(safe-area-inset-bottom));background:var(--tg-theme-bg-color,#fff);color:var(--ink);font:15px/1.45 system-ui}
+.brand{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600}.brand svg{width:19px;height:19px;fill:currentColor}.brand span{margin-left:auto;font-weight:400;color:var(--hint)}
+h1{font-size:24px;line-height:1.15;letter-spacing:-.7px;margin:22px 0 14px;font-weight:650;overflow-wrap:anywhere}.intro{margin:0 0 16px;color:var(--hint);font-size:14px}
+.task{padding:16px;border-radius:15px;background:var(--surface)}h2{font-size:17px;line-height:1.3;letter-spacing:-.2px;margin:0;font-weight:600;overflow-wrap:anywhere;max-height:5.2em;overflow:hidden}
+.row{display:flex;gap:12px;justify-content:space-between;margin-top:12px;font-size:14px}.row span{color:var(--hint)}.row strong{font-weight:550;text-align:right}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}button{min-height:44px;border-radius:11px;border:1px solid var(--line);background:transparent;color:var(--ink);font:550 14px/1.2 system-ui;padding:12px 14px;cursor:pointer;flex:1}button.primary{background:var(--ink);border-color:var(--ink);color:var(--tg-theme-bg-color,#fff)}button.wide{flex-basis:100%}button:active{opacity:.72}button:disabled{opacity:.5;cursor:default}
+.note{font-size:13px;line-height:1.4;color:var(--hint);margin:14px 0 0}.status{display:none;align-items:flex-start;gap:8px;margin-top:16px;font-size:14px}.status.show{display:flex}.mark{color:var(--accent);font-weight:700}.error{color:var(--tg-theme-destructive-text-color,#c13746)}
+@media(max-width:300px){body{padding:18px 16px 20px 20px}h1{font-size:20px;margin:16px 0 10px}h2{max-height:3.9em}.intro,.note{display:none}.row{flex-wrap:wrap;gap:3px}.row strong{text-align:left}.actions button{flex-basis:100%}}
+</style></head><body>
+<div class="brand"><svg viewBox="0 0 21 21" aria-hidden="true"><path fill-rule="evenodd" d="M3.14831 9.11969C2.20003 9.57814 0.289024 11.132 0.0146484 13.6511C1.81975 18.4141 9.41563 22.8587 16.405 18.0232C12.6071 16.9145 11.3281 13.9878 11.3281 12.4121C11.2219 12.5473 10.0806 13.0516 9.10556 13.2581C8.13051 13.4646 7.38967 13.8306 7.14112 13.9878C7.66409 13.6391 8.14898 13.3513 8.50586 13.1444C10.2676 12.1744 11.3218 11.161 11.755 10.3503C13.5111 6.77147 16.8575 7.2666 18.3112 7.96151C17.9877 5.47141 15.7407 4.54969 14.6577 4.40009C13.2598 1.1456 7.60572 2.33949 4.95342 3.34325L6.3253 3.87891C3.42557 5.12975 1.61277 8.5406 1.06883 10.0897C1.63491 9.499 2.69102 9.19691 3.14831 9.11969ZM12.6071 4.67516C11.9255 4.13082 10.4265 4.37114 9.76221 4.55934L10.4409 4.79098C10.6431 5.14809 11.2092 5.81018 11.8561 5.60171C12.5031 5.39324 12.6263 4.89715 12.6071 4.67516Z"/></svg>Мунин<span id="kind"></span></div>
+<h1 id="heading"></h1><p class="intro" id="intro"></p>
+<div class="task"><h2 id="title"></h2><div id="rows"></div></div>
+<div id="actions" class="actions"></div><div id="status" class="status" role="status"><span class="mark" id="mark">✓</span><span id="result"></span></div>
+<p id="note" class="note"></p>
+<script>
+var W=window.TelegramWidget,d=null,busy=false;
+var modes={
+ reminder:{kind:'Напоминание',heading:'Время для этого дела.',intro:'Один следующий шаг — и ты уже в процессе.',buttons:[['Взять в работу','working',1],['Через час','later',0]],note:'Срок задачи при переносе напоминания не меняется.'},
+ checkin:{kind:'Как успехи?',heading:'Получилось завершить?',intro:'Если планы изменились — это нормально.',buttons:[['Готово','done',1],['Ещё в работе','working',0],['Напомнить через час','later',0,1]],note:'Один вопрос по этому сроку. Без повторных проверок.'},
+ proposal:{kind:'Разобрал голосовое',heading:'Вот что я услышал.',intro:'Срок и напоминание — отдельно. Проверь, всё ли верно.',buttons:[['Добавить задачу','a',1],['Не добавлять','r',0]],note:'Изменения сохранятся после нажатия кнопки.'}
+};
+function el(id){return document.getElementById(id)}
+function text(id,value){el(id).textContent=value||''}
+function show(message,error){el('status').className='status show'+(error?' error':'');text('mark',error?'!':'✓');text('result',message)}
+function render(next){
+ if(!next||!modes[next.kind]||!next.title)return;
+ if(d&&Number(next.revision||0)<Number(d.revision||0))return;
+ d=next;var m=modes[d.kind];text('kind',m.kind);text('heading',d.terminal?(d.heading||'Готово.'):m.heading);text('intro',d.terminal?(d.summary||'Изменения сохранены.'):m.intro);text('title',d.title);text('note',d.note||m.note);
+ el('rows').textContent='';(Array.isArray(d.rows)?d.rows:[]).slice(0,3).forEach(function(pair){var row=document.createElement('div'),label=document.createElement('span'),value=document.createElement('strong');row.className='row';label.textContent=pair[0];value.textContent=pair[1];row.appendChild(label);row.appendChild(value);el('rows').appendChild(row)});
+ el('actions').textContent='';el('status').className='status';
+ if(d.terminal){show(d.status||'Готово.');return}
+ m.buttons.forEach(function(action){var b=document.createElement('button');b.textContent=action[0];b.className=(action[2]?'primary':'')+(action[3]?' wide':'');b.disabled=busy||!d.key;b.addEventListener('click',function(){act(d.key+':'+action[1])});el('actions').appendChild(b)});
+}
+function act(code){
+ if(busy||!W)return;busy=true;render(d);show('Сохраняю…',false);text('mark','…');
+ var request;try{request=W.request(code)}catch(e){busy=false;render(d);show('Не удалось отправить действие. Попробуй ещё раз.',true);return}
+ request.then(function(answer){var result;try{result=JSON.parse(answer.result||'null')}catch(e){}
+  busy=false;if(!result||result.ok!==true){render(d);show(result&&result.message||'Не получил подтверждение. Попробуй ещё раз.',true);return}
+  if(result.state){render(result.state)}else{d.terminal=true;d.status=result.message||'Готово.';render(d)}
+ }).catch(function(){busy=false;render(d);show('Ответ задержался. Попробуй ещё раз.',true)});
+}
+function read(){try{render(JSON.parse(W.chatData||'null'))}catch(e){show('Не удалось прочитать карточку. Открой задачу в Мунине.',true)}}
+if(W){read();W.onEvent('chatDataChanged',read);W.ready()}else{text('heading','Карточка Мунина');text('title','Открой предварительный просмотр или сообщение в Telegram.')}
+</script></body></html>
