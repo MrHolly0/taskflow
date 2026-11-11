@@ -44,7 +44,7 @@ public class ScheduledNotificationPoller {
                     LIMIT ? FOR UPDATE SKIP LOCKED
                 )
                 UPDATE scheduled_notifications n
-                SET lease_token = ?, lease_until = NOW() + (? * INTERVAL '1 second'),
+                SET quiet_deferred_until=NULL,lease_token = ?, lease_until = NOW() + (? * INTERVAL '1 second'),
                     retry_count = retry_count + 1
                 FROM ready WHERE n.id = ready.id
                 RETURNING n.id, n.channel, n.destination, n.payload_type, n.payload, n.lease_token, n.retry_count
@@ -69,17 +69,18 @@ public class ScheduledNotificationPoller {
         if(!"TELEGRAM".equals(notification.channel()) || !"TASK_REMINDER".equals(notification.payloadType())) return false;
         var rows=jdbcTemplate.query("""
                 SELECT n.user_id, EXISTS(SELECT 1 FROM engagement_prompts p WHERE p.user_id=n.user_id AND p.task_id=t.id
-                  AND p.kind IN ('TASK_CHECKIN','WORK_CHECKIN') AND p.deadline_snapshot IS NOT DISTINCT FROM t.deadline
+                  AND p.kind IN ('TASK_CHECKIN','WORK_CHECKIN','DEADLINE_CHECKIN') AND p.deadline_snapshot IS NOT DISTINCT FROM t.deadline
                   AND p.cancelled_at IS NULL AND p.sent_at>=n.fire_at) AS covered
                 FROM scheduled_notifications n JOIN tasks t ON t.id=n.task_id AND t.user_id=n.user_id
                 JOIN user_settings s ON s.user_id=n.user_id
                 WHERE n.id=? AND n.lease_token=? AND n.lease_until>NOW() AND NOT n.sent AND n.failed_at IS NULL
                   AND n.channel=? AND n.destination=? AND n.payload_type='TASK_REMINDER'
+                  AND NOT EXISTS(SELECT 1 FROM reminders source WHERE source.id=n.reminder_id AND (source.explicit_timing OR source.purpose='OUTCOME_CHECK'))
                   AND n.fire_at<=NOW()-INTERVAL '30 minutes' AND t.deadline<=NOW()-INTERVAL '30 minutes'
                   AND NOT t.is_deleted AND t.status IN ('TODO','IN_PROGRESS')
                   AND s.notifications_enabled AND s.notify_telegram AND s.task_checkins_enabled
                   AND NOT EXISTS(SELECT 1 FROM engagement_prompts prior WHERE prior.user_id=n.user_id AND prior.task_id=t.id
-                    AND prior.kind IN ('TASK_CHECKIN','WORK_CHECKIN') AND prior.deadline_snapshot IS NOT DISTINCT FROM t.deadline
+                    AND prior.kind IN ('TASK_CHECKIN','WORK_CHECKIN','DEADLINE_CHECKIN') AND prior.deadline_snapshot IS NOT DISTINCT FROM t.deadline
                     AND prior.cancelled_at IS NULL AND prior.sent_at<n.fire_at)
                 """,(rs,row)->new OverdueReminder(rs.getObject("user_id",UUID.class),rs.getBoolean("covered")),
                 notification.id(),notification.leaseToken(),notification.channel(),notification.destination());
@@ -97,6 +98,30 @@ public class ScheduledNotificationPoller {
         return true;
     }
     private record OverdueReminder(UUID user,boolean covered) {}
+
+    @Transactional
+    public boolean cancelStaleOutcome(PendingNotification notification) {
+        return jdbcTemplate.update("""
+                DELETE FROM scheduled_notifications n USING reminders r,tasks t
+                WHERE n.id=? AND n.lease_token=? AND n.lease_until>NOW() AND NOT n.sent
+                  AND r.id=n.reminder_id AND r.task_id=n.task_id AND t.id=r.task_id AND t.user_id=n.user_id AND r.purpose='OUTCOME_CHECK'
+                  AND (t.is_deleted OR t.status NOT IN ('TODO','IN_PROGRESS') OR t.deadline IS DISTINCT FROM r.deadline_snapshot)
+                """,notification.id(),notification.leaseToken())>0;
+    }
+    @Transactional(readOnly=true)
+    public boolean isDeadlineReminder(PendingNotification notification) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM scheduled_notifications n JOIN reminders r ON r.id=n.reminder_id AND r.task_id=n.task_id
+                  JOIN tasks t ON t.id=n.task_id AND t.user_id=n.user_id WHERE n.id=? AND n.lease_token=? AND r.fire_at=t.deadline)
+                """,Boolean.class,notification.id(),notification.leaseToken()));
+    }
+    @Transactional(readOnly=true)
+    public boolean isOutcomeCheck(PendingNotification notification) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM scheduled_notifications n JOIN reminders r ON r.id=n.reminder_id
+                  WHERE n.id=? AND n.lease_token=? AND r.task_id=n.task_id AND r.purpose='OUTCOME_CHECK')
+                """,Boolean.class,notification.id(),notification.leaseToken()));
+    }
 
     @Transactional
     public void markAsSent(PendingNotification notification) {
@@ -135,19 +160,26 @@ public class ScheduledNotificationPoller {
     }
 
     private boolean isEngagement(PendingNotification notification) {
-        return "CHECKIN_BATCH".equals(notification.payloadType()) || "WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType());
+        return "CHECKIN_BATCH".equals(notification.payloadType()) || "WORK_CHECKIN".equals(notification.payloadType()) || ("TASK_CHECKIN".equals(notification.payloadType()) || "DEADLINE_CHECKIN".equals(notification.payloadType())) || "RETURN_NUDGE".equals(notification.payloadType());
     }
 
     @Transactional(readOnly = true)
     public EngagementGate checkEngagement(PendingNotification notification, UUID promptId) {
         var rows = jdbcTemplate.query("""
-                SELECT u.timezone, t.title, CURRENT_TIMESTAMP AS now,
+                SELECT u.timezone,t.title,s.quiet_hours_enabled,s.quiet_hours_start,s.quiet_hours_end,p.explicit_timing,CURRENT_TIMESTAMP AS now,
                   (n.user_id = p.user_id AND n.payload_type = p.kind AND n.channel = 'TELEGRAM'
                     AND p.sent_at IS NULL AND p.answered_at IS NULL AND p.cancelled_at IS NULL
                     AND p.expires_at > NOW() AND s.notifications_enabled AND s.notify_telegram
                     AND EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id = u.id
                       AND i.provider = 'TELEGRAM' AND i.external_id = n.destination)
-                    AND CASE WHEN p.kind = 'TASK_CHECKIN' THEN
+                    AND (p.kind NOT IN ('TASK_CHECKIN','WORK_CHECKIN') OR ("""+ru.taskflow.shared.engagement.PassiveCheckinRules.allowedSql("t")+"""
+                    ))
+                    AND CASE WHEN p.kind='DEADLINE_CHECKIN' THEN
+                      s.task_checkins_enabled AND t.user_id=p.user_id AND NOT t.is_deleted
+                      AND t.status IN ('TODO','IN_PROGRESS') AND t.deadline=p.deadline_snapshot
+                      AND t.deadline<=NOW() AND t.deadline>NOW()-INTERVAL '15 minutes'
+                      AND (t.planned_date IS NULL OR t.planned_date<=NOW())
+                    WHEN p.kind = 'TASK_CHECKIN' THEN
                       s.task_checkins_enabled AND t.user_id = p.user_id AND NOT t.is_deleted
                       AND (t.status='TODO' OR (t.status='IN_PROGRESS' AND t.started_at IS NULL)) AND t.deadline = p.deadline_snapshot
                       AND t.deadline <= NOW() - INTERVAL '30 minutes'
@@ -171,11 +203,14 @@ public class ScheduledNotificationPoller {
                           AND item.deadline IS NOT DISTINCT FROM child.deadline_snapshot AND child.due_at<=NOW()
                           AND (item.planned_date IS NULL OR item.planned_date<=NOW() OR (child.kind='WORK_CHECKIN'
                             AND (item.planned_date_set_at IS NULL OR item.planned_date_set_at<=item.started_at)))
-                          AND ((child.kind='TASK_CHECKIN' AND (item.status='TODO' OR item.started_at IS NULL))
+                          AND ((child.kind='DEADLINE_CHECKIN' AND item.deadline<=NOW() AND item.deadline>NOW()-INTERVAL '15 minutes')
+                            OR (child.kind='TASK_CHECKIN' AND (item.status='TODO' OR item.started_at IS NULL))
                             OR (child.kind='WORK_CHECKIN' AND item.status='IN_PROGRESS' AND item.started_at=child.started_snapshot
                               AND item.estimate_minutes IS NOT DISTINCT FROM child.estimate_snapshot))
-                          AND NOT EXISTS(SELECT 1 FROM reminders r WHERE r.task_id=item.id AND r.status='PENDING'
-                            AND r.fire_at BETWEEN NOW()-INTERVAL '30 minutes' AND NOW()+INTERVAL '30 minutes'))
+                          AND (child.kind='DEADLINE_CHECKIN' OR ("""+ru.taskflow.shared.engagement.PassiveCheckinRules.allowedSql("item")+"""
+                          ))
+                          AND (child.kind='DEADLINE_CHECKIN' OR NOT EXISTS(SELECT 1 FROM reminders r WHERE r.task_id=item.id AND r.status='PENDING'
+                            AND r.fire_at BETWEEN NOW()-INTERVAL '30 minutes' AND NOW()+INTERVAL '30 minutes')))
                     WHEN p.kind = 'RETURN_NUDGE' THEN
                       s.return_nudges_enabled AND GREATEST(u.last_active_at, s.return_nudges_enabled_at)
                         <= p.created_at - INTERVAL '3 days'
@@ -188,12 +223,8 @@ public class ScheduledNotificationPoller {
                 """, (rs, row) -> {
             if (!rs.getBoolean("valid")) return new EngagementGate(false, null, null, null);
             var local = rs.getObject("now", OffsetDateTime.class).atZoneSameInstant(ZoneId.of(rs.getString("timezone")));
-            OffsetDateTime deferUntil = null;
-            if (local.toLocalTime().isBefore(LocalTime.of(9, 0))) {
-                deferUntil = local.toLocalDate().atTime(9, 0).atZone(local.getZone()).toOffsetDateTime();
-            } else if (!local.toLocalTime().isBefore(LocalTime.of(21, 0))) {
-                deferUntil = local.toLocalDate().plusDays(1).atTime(9, 0).atZone(local.getZone()).toOffsetDateTime();
-            }
+            OffsetDateTime deferUntil=rs.getBoolean("explicit_timing")?null:ru.taskflow.shared.engagement.QuietHours.deferUntil(
+                    local.toInstant(),local.getZone(),rs.getBoolean("quiet_hours_enabled"),rs.getString("quiet_hours_start"),rs.getString("quiet_hours_end"));
             return new EngagementGate(true, deferUntil, rs.getString("title"), rs.getString("timezone"));
         }, notification.id(), notification.leaseToken(), promptId);
         return rows.isEmpty() ? new EngagementGate(false, null, null, null) : rows.getFirst();
@@ -214,13 +245,30 @@ public class ScheduledNotificationPoller {
 
     @Transactional
     public void deferEngagement(PendingNotification notification, OffsetDateTime until) {
+        // Настройка и освобождение аренды согласуются на одной строке политики.
+        var locked=jdbcTemplate.queryForList("""
+                SELECT s.user_id FROM user_settings s JOIN scheduled_notifications n ON n.user_id=s.user_id
+                WHERE n.id=? AND n.lease_token=? AND n.lease_until>NOW() FOR SHARE OF s
+                """,UUID.class,notification.id(),notification.leaseToken());
+        if(locked.isEmpty()) return;
+        var current=jdbcTemplate.query("""
+                SELECT u.timezone,s.quiet_hours_enabled,s.quiet_hours_start,s.quiet_hours_end,CURRENT_TIMESTAMP AS now
+                FROM scheduled_notifications n JOIN users u ON u.id=n.user_id JOIN user_settings s ON s.user_id=u.id
+                WHERE n.id=? AND n.lease_token=? AND n.lease_until>NOW()
+                """,(rs,row)->new QuietSnapshot(rs.getObject("now",OffsetDateTime.class),rs.getString("timezone"),rs.getBoolean("quiet_hours_enabled"),rs.getString("quiet_hours_start"),rs.getString("quiet_hours_end")),notification.id(),notification.leaseToken());
+        if(current.isEmpty()) return;
+        var settings=current.getFirst();
+        until=ru.taskflow.shared.engagement.QuietHours.deferUntil(settings.now().toInstant(),ZoneId.of(settings.zone()),settings.enabled(),settings.start(),settings.end());
+        var next=until==null?settings.now():until;
+
         jdbcTemplate.update("""
-                UPDATE scheduled_notifications SET next_attempt_at = ?, lease_token = NULL, lease_until = NULL,
+                UPDATE scheduled_notifications SET next_attempt_at = ?, quiet_deferred_until=?, lease_token = NULL, lease_until = NULL,
                   retry_count = GREATEST(0, retry_count - 1)
                 WHERE id = ? AND lease_token = ? AND NOT sent
-                """, until, notification.id(), notification.leaseToken());
+                """, next,until, notification.id(), notification.leaseToken());
     }
 
+    private record QuietSnapshot(OffsetDateTime now,String zone,boolean enabled,String start,String end) {}
     public record EngagementGate(boolean valid, OffsetDateTime deferUntil, String title, String timezone) {}
 
     @Transactional

@@ -44,6 +44,13 @@ public class ReminderJpaEntity {
     @Column(name = "chain_step")
     private Integer chainStep;
 
+    @Column(name="purpose",nullable=false,length=16)
+    private String purpose="REMINDER";
+    @Column(name="deadline_snapshot")
+    private OffsetDateTime deadlineSnapshot;
+    @Column(name="explicit_timing",nullable=false)
+    private boolean explicitTiming;
+
     @PrePersist
     void prePersist() {
         if (createdAt == null) {

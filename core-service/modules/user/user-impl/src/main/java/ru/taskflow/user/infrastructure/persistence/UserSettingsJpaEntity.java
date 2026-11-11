@@ -16,6 +16,13 @@ public class UserSettingsJpaEntity {
     @Column(name = "telegram_widgets_enabled", nullable = false)
     private boolean telegramWidgetsEnabled = true;
 
+    @Column(name="quiet_hours_enabled", nullable=false)
+    private boolean quietHoursEnabled=true;
+    @Column(name="quiet_hours_start", nullable=false, length=5)
+    private String quietHoursStart="21:00";
+    @Column(name="quiet_hours_end", nullable=false, length=5)
+    private String quietHoursEnd="09:00";
+
     @Id
     private UUID userId;
 

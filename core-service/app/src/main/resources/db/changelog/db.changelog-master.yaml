@@ -102,3 +102,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/050-checkin-batches.yaml
+
+  - include:
+      file: db/changelog/051-notification-timing.yaml

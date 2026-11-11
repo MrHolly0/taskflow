@@ -1,0 +1,40 @@
+databaseChangeLog:
+  - changeSet:
+      id: 051-notification-timing
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE user_settings ADD COLUMN quiet_hours_enabled BOOLEAN NOT NULL DEFAULT true;
+              ALTER TABLE user_settings ADD COLUMN quiet_hours_start VARCHAR(5) NOT NULL DEFAULT '21:00';
+              ALTER TABLE user_settings ADD COLUMN quiet_hours_end VARCHAR(5) NOT NULL DEFAULT '09:00';
+              ALTER TABLE user_settings ADD COLUMN deadline_notices_since TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+              ALTER TABLE user_settings ADD CONSTRAINT quiet_hours_valid CHECK (
+                quiet_hours_start ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' AND
+                quiet_hours_end ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' AND quiet_hours_start<>quiet_hours_end);
+              ALTER TABLE engagement_prompts ADD COLUMN explicit_timing BOOLEAN NOT NULL DEFAULT false;
+              ALTER TABLE engagement_prompts DROP CONSTRAINT engagement_kind_check;
+              ALTER TABLE engagement_prompts DROP CONSTRAINT engagement_subject_check;
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_kind_check CHECK (kind IN ('TASK_CHECKIN','WORK_CHECKIN','RETURN_NUDGE','CHECKIN_BATCH','DEADLINE_CHECKIN'));
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_subject_check CHECK (
+                (kind IN ('TASK_CHECKIN','DEADLINE_CHECKIN') AND task_id IS NOT NULL AND deadline_snapshot IS NOT NULL)
+                OR (kind='WORK_CHECKIN' AND task_id IS NOT NULL AND started_snapshot IS NOT NULL AND due_at IS NOT NULL)
+                OR (kind IN ('RETURN_NUDGE','CHECKIN_BATCH') AND task_id IS NULL));
+              CREATE UNIQUE INDEX idx_deadline_notice ON engagement_prompts(task_id,deadline_snapshot)
+                WHERE kind='DEADLINE_CHECKIN' AND cancelled_at IS NULL;
+              ALTER TABLE reminders ADD COLUMN purpose VARCHAR(16) NOT NULL DEFAULT 'REMINDER';
+              ALTER TABLE reminders ADD COLUMN deadline_snapshot TIMESTAMPTZ;
+              ALTER TABLE reminders ADD COLUMN explicit_timing BOOLEAN NOT NULL DEFAULT false;
+              ALTER TABLE reminders ADD CONSTRAINT reminder_purpose_valid CHECK (purpose IN ('REMINDER','OUTCOME_CHECK'));
+              CREATE INDEX idx_outcome_reminder ON reminders(task_id,deadline_snapshot) WHERE purpose='OUTCOME_CHECK' AND status IN ('PENDING','DISMISSED');
+              ALTER TABLE reminders ADD CONSTRAINT outcome_deadline_present CHECK (purpose<>'OUTCOME_CHECK' OR deadline_snapshot IS NOT NULL);
+              UPDATE reminders r SET purpose='OUTCOME_CHECK',deadline_snapshot=t.deadline,explicit_timing=true
+                FROM tasks t WHERE t.id=r.task_id AND r.status='PENDING' AND t.deadline IS NOT NULL
+                  AND r.fire_at>t.deadline AND t.status IN ('TODO','IN_PROGRESS') AND NOT t.is_deleted;
+              ALTER TABLE scheduled_notifications ADD COLUMN quiet_deferred_until TIMESTAMPTZ;
+              ALTER TABLE engagement_prompts ADD COLUMN answer_message TEXT;
+              UPDATE scheduled_notifications n SET quiet_deferred_until=n.next_attempt_at
+                FROM users u WHERE n.user_id=u.id AND n.engagement_prompt_id IS NOT NULL
+                  AND NOT n.sent AND n.failed_at IS NULL AND n.retry_count=0 AND n.last_error IS NULL
+                  AND n.next_attempt_at>NOW() AND n.lease_until IS NULL
+                  AND (n.next_attempt_at AT TIME ZONE u.timezone)::time=TIME '09:00';

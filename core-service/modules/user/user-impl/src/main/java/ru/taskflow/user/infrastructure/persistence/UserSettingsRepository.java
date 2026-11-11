@@ -10,5 +10,8 @@ public interface UserSettingsRepository extends JpaRepository<UserSettingsJpaEnt
 
     Optional<UserSettingsJpaEntity> findByUserId(UUID userId);
 
+    @org.springframework.data.jpa.repository.Query(value = "SELECT user_id FROM user_settings WHERE user_id=:userId FOR UPDATE", nativeQuery = true)
+    Optional<UUID> lockForUpdate(@org.springframework.data.repository.query.Param("userId") UUID userId);
+
     List<UserSettingsJpaEntity> findAllByAutoCleanCompletedDaysNotNull();
 }

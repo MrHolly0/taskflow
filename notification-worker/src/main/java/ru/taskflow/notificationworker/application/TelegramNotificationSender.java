@@ -84,8 +84,8 @@ public class TelegramNotificationSender implements NotificationSender {
         String prefix = "eng:" + payload.promptId() + ":";
         var rows = new java.util.ArrayList<List<Map<String, String>>>();
         String text;
-        if ("TASK_CHECKIN".equals(kind) || "WORK_CHECKIN".equals(kind)) {
-            text = "Как продвигается дело?\n\n<b>" + escape(payload.taskTitle())
+        if ("TASK_CHECKIN".equals(kind) || "WORK_CHECKIN".equals(kind) || "DEADLINE_CHECKIN".equals(kind)) {
+            text = ("DEADLINE_CHECKIN".equals(kind)?"Наступил срок задачи":"Как продвигается дело?")+"\n\n<b>" + escape(payload.taskTitle())
                     + "</b>" + deadlineLine(payload.deadline(), payload.timezone()) + "\n\nПолучилось завершить?";
             rows.add(List.of(Map.of("text", "✅ Готово", "callback_data", prefix + "done"),
                     Map.of("text", "⏳ Ещё в работе", "callback_data", prefix + "working")));
@@ -95,8 +95,8 @@ public class TelegramNotificationSender implements NotificationSender {
         }
         if (payload.appUrl() != null && !payload.appUrl().isBlank()) {
             String url = payload.appUrl().replaceAll("/+$", "");
-            if (payload.taskId() != null) url += "/?task=" + payload.taskId();
-            rows.add(List.of(Map.of("text", "Открыть Мунин", "url", url)));
+            if (payload.taskId() != null) url += "/?task=" + payload.taskId()+("DEADLINE_CHECKIN".equals(kind)?"&section=deadline":"");
+            rows.add(List.of(Map.of("text", "DEADLINE_CHECKIN".equals(kind)?"Перенести срок":"Открыть Мунин", "url", url)));
         }
         if ("RETURN_NUDGE".equals(kind)) rows.add(List.of(
                 Map.of("text", "Не напоминать об этом", "callback_data", prefix + "mute")));

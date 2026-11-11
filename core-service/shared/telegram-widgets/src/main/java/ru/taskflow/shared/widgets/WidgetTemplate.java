@@ -53,7 +53,7 @@ public final class WidgetTemplate {
     }
     public static String caption(WidgetState state) {
         StringBuilder text = new StringBuilder();
-        if (state.heading()!=null) text.append("✓ ").append(state.heading()).append("\n");
+        if (state.heading()!=null) text.append(state.terminal() || state.kind().equals("receipt")?"✓ ":"").append(state.heading()).append("\n");
         if (state.total()!=null) text.append(state.kind().equals("checkins")?"Дело ":"Действие ").append(state.page()+1).append(" из ").append(state.total())
                  .append(state.selected()==null?"":" · выбрано "+state.selected()).append("\n");
         if(!state.kind().equals("return") && !(state.kind().equals("checkins")&&state.terminal()))

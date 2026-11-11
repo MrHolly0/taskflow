@@ -15,8 +15,28 @@ public record UpdateSettingsRequest(
         String displayName,
         Boolean taskCheckinsEnabled,
         Boolean returnNudgesEnabled,
-        Boolean telegramWidgetsEnabled
+        Boolean telegramWidgetsEnabled,
+        Boolean quietHoursEnabled,
+        String quietHoursStart,
+        String quietHoursEnd
 ) {
+    public UpdateSettingsRequest(Boolean notificationsEnabled,
+        Boolean notifyTelegram,
+        Boolean notifyEmail,
+        Boolean notifyPush,
+        Integer defaultReminderMinutes,
+        Boolean urgentExtraReminder,
+        String preferredLlm,
+        Integer autoCleanCompletedDays,
+        String voiceInputModeDesktop,
+        String voiceInputModeMobile,
+        String timezone,
+        String displayName,
+        Boolean taskCheckinsEnabled,
+        Boolean returnNudgesEnabled,
+        Boolean telegramWidgetsEnabled) {
+        this(notificationsEnabled, notifyTelegram, notifyEmail, notifyPush, defaultReminderMinutes, urgentExtraReminder, preferredLlm, autoCleanCompletedDays, voiceInputModeDesktop, voiceInputModeMobile, timezone, displayName, taskCheckinsEnabled, returnNudgesEnabled, telegramWidgetsEnabled, null, null, null);
+    }
     public UpdateSettingsRequest(Boolean notificationsEnabled, Boolean notifyTelegram, Boolean notifyEmail,
             Boolean notifyPush, Integer defaultReminderMinutes, Boolean urgentExtraReminder,
             String preferredLlm, Integer autoCleanCompletedDays, String voiceInputModeDesktop,

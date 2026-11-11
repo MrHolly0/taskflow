@@ -91,12 +91,13 @@ public class NotificationDispatcher {
                     .sendWidgetSync(notification);
             return true;
         }
-        if ("CHECKIN_BATCH".equals(notification.payloadType()) || "WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
+        if ("CHECKIN_BATCH".equals(notification.payloadType()) || "WORK_CHECKIN".equals(notification.payloadType()) || ("TASK_CHECKIN".equals(notification.payloadType()) || "DEADLINE_CHECKIN".equals(notification.payloadType())) || "RETURN_NUDGE".equals(notification.payloadType())) {
             return dispatchEngagement(notification);
         }
         if (!"TASK_REMINDER".equals(notification.payloadType())) {
             throw new NotificationDeliveryException("UNKNOWN_PAYLOAD_TYPE", true, null);
         }
+        if(poller.cancelStaleOutcome(notification)) return false;
         if(poller.coalesceOverdueReminder(notification)) return false;
         NotificationSender sender = senders.stream()
                 .filter(candidate -> candidate.supports(notification.channel()))
@@ -111,7 +112,7 @@ public class NotificationDispatcher {
         } catch (Exception invalidPayload) {
             throw new NotificationDeliveryException("INVALID_PAYLOAD", true, null);
         }
-        if (widgetsEnabled && "TELEGRAM".equals(notification.channel())) sender.sendTaskReminderCard(notification,payload.taskTitle(),payload.deadline(),payload.timezone());
+        if ((widgetsEnabled || poller.isOutcomeCheck(notification) || poller.isDeadlineReminder(notification)) && "TELEGRAM".equals(notification.channel())) sender.sendTaskReminderCard(notification,payload.taskTitle(),payload.deadline(),payload.timezone());
         else sender.sendTaskReminder(notification.destination(), payload.taskTitle(), payload.deadline(), payload.timezone());
         return true;
     }

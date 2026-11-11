@@ -37,12 +37,12 @@ public final class WidgetKeyboard {
                     if(!navigation.isEmpty()) rows.add(navigation);
                     if(state.status()==null) {
                         rows.add(List.of(button("Готово",key+"done"),button("Ещё в работе",key+"working")));
-                        rows.add(List.of(button("Напомнить через час",key+"later")));
+                        if(!"Наступил срок задачи".equals(state.heading())) rows.add(List.of(button("Напомнить через час",key+"later")));
                     }
                 }
                 case "reminder", "checkin" -> {
                     rows.add(List.of(button("Готово",key+"done"),button("Ещё в работе",key+"working")));
-                    rows.add(List.of(button("Напомнить через час",key+"later")));
+                    if(!"Наступил срок задачи".equals(state.heading())) rows.add(List.of(button("Напомнить через час",key+"later")));
                 }
                 case "return" -> rows.add(List.of(button("Не напоминать об этом",key+"mute")));
                 default -> { }
@@ -50,8 +50,8 @@ public final class WidgetKeyboard {
         } else if (!context.expanded()) rows.add(List.of(button("Показать текст",key+"details")));
         if(context.expanded() && "WIDGET".equals(context.transport())) rows.add(List.of(button("Скрыть текст",key+"hide")));
         String task=state.taskId()!=null?state.taskId():context.taskId()==null?null:context.taskId().toString();
-        if(appUrl!=null && !appUrl.isBlank()) rows.add(List.of(Map.of("text",task==null?"Открыть Мунин":state.kind().equals("receipt")?"Изменить":"Открыть задачу",
-                "web_app",Map.of("url",appUrl.replaceAll("/+$", "")+(task==null?"":"/?task="+task)))));
+        if(appUrl!=null && !appUrl.isBlank()) rows.add(List.of(Map.of("text",task==null?"Открыть Мунин":"Наступил срок задачи".equals(state.heading())?"Перенести срок":state.kind().equals("receipt")?"Изменить":"Открыть задачу",
+                "web_app",Map.of("url",appUrl.replaceAll("/+$", "")+(task==null?"":"/?task="+task+("Наступил срок задачи".equals(state.heading())?"&section=deadline":""))))));
         return Map.of("inline_keyboard",rows);
     }
     private static Map<String,Object> button(String text,String data) { return Map.of("text",text,"callback_data",data); }

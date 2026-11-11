@@ -12,6 +12,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.concurrent.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,19 +33,19 @@ class EngagementGateTest {
                 CREATE TABLE users(id UUID PRIMARY KEY, timezone TEXT, last_active_at TIMESTAMPTZ);
                 CREATE TABLE user_settings(user_id UUID PRIMARY KEY, notifications_enabled BOOLEAN DEFAULT true,
                   notify_telegram BOOLEAN DEFAULT true, task_checkins_enabled BOOLEAN DEFAULT true,
-                  return_nudges_enabled BOOLEAN DEFAULT true, task_checkins_enabled_at TIMESTAMPTZ, return_nudges_enabled_at TIMESTAMPTZ);
+                  return_nudges_enabled BOOLEAN DEFAULT true, task_checkins_enabled_at TIMESTAMPTZ, return_nudges_enabled_at TIMESTAMPTZ,quiet_hours_enabled BOOLEAN DEFAULT true,quiet_hours_start TEXT DEFAULT '21:00',quiet_hours_end TEXT DEFAULT '09:00');
                 CREATE TABLE user_identities(user_id UUID, provider TEXT, external_id TEXT);
                 CREATE TABLE tasks(id UUID PRIMARY KEY, user_id UUID, title TEXT, deadline TIMESTAMPTZ,
                   planned_date TIMESTAMPTZ, planned_date_set_at TIMESTAMPTZ,started_at TIMESTAMPTZ,estimate_minutes INT,status TEXT DEFAULT 'TODO', is_deleted BOOLEAN DEFAULT false);
-                CREATE TABLE reminders(task_id UUID, status TEXT DEFAULT 'PENDING', fire_at TIMESTAMPTZ);
+                CREATE TABLE reminders(id UUID DEFAULT gen_random_uuid(),purpose TEXT DEFAULT 'REMINDER',deadline_snapshot TIMESTAMPTZ,explicit_timing BOOLEAN DEFAULT false,task_id UUID, status TEXT DEFAULT 'PENDING', fire_at TIMESTAMPTZ);
                 CREATE TABLE engagement_prompts(id UUID PRIMARY KEY, user_id UUID, task_id UUID, kind TEXT,
                   deadline_snapshot TIMESTAMPTZ,started_snapshot TIMESTAMPTZ,estimate_snapshot INT,due_at TIMESTAMPTZ, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
-                  sent_at TIMESTAMPTZ, answered_at TIMESTAMPTZ, answer TEXT, cancelled_at TIMESTAMPTZ,batch_id UUID);
-                CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY, user_id UUID, task_id UUID, engagement_prompt_id UUID,
+                  sent_at TIMESTAMPTZ, answered_at TIMESTAMPTZ, answer TEXT, cancelled_at TIMESTAMPTZ,batch_id UUID,explicit_timing BOOLEAN DEFAULT false);
+                CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY, user_id UUID, task_id UUID, reminder_id UUID,engagement_prompt_id UUID,
                   channel TEXT, destination TEXT, payload_type TEXT, payload JSONB, fire_at TIMESTAMPTZ,
                   sent BOOLEAN DEFAULT false, sent_at TIMESTAMPTZ, retry_count INT DEFAULT 0,
                   failed_at TIMESTAMPTZ, lease_token UUID, lease_until TIMESTAMPTZ, last_error TEXT,
-                  next_attempt_at TIMESTAMPTZ DEFAULT NOW());
+                  next_attempt_at TIMESTAMPTZ DEFAULT NOW(),quiet_deferred_until TIMESTAMPTZ);
                 """);
         poller = new ScheduledNotificationPoller(jdbc);
         ReflectionTestUtils.setField(poller, "maxAttempts", 5);
@@ -257,6 +258,91 @@ class EngagementGateTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications", Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT sent_at FROM engagement_prompts", OffsetDateTime.class)).isNull();
         assertThat(jdbc.queryForObject("SELECT cancelled_at IS NOT NULL FROM engagement_prompts", Boolean.class)).isTrue();
+    }
+
+    @Test void changingQuietHoursBetweenGateAndDeferralDoesNotLeaveTheOldDelay() {
+        jdbc.update("UPDATE users SET timezone=?",zoneAtHour(23));
+        var claim=claim();var old=poller.checkEngagement(claim,prompt);assertThat(old.deferUntil()).isNotNull();
+        jdbc.update("UPDATE user_settings SET quiet_hours_enabled=false");
+        poller.deferEngagement(claim,old.deferUntil());
+        assertThat(jdbc.queryForObject("SELECT quiet_deferred_until FROM scheduled_notifications",OffsetDateTime.class)).isNull();
+        assertThat(poller.claimPending(1)).hasSize(1);
+    }
+    @Test void policyChangesWaitUntilDeferralReleasesItsLease() throws Exception {
+        jdbc.update("UPDATE users SET timezone=?",zoneAtHour(23));
+        var claim=claim();var gate=poller.checkEngagement(claim,prompt);
+        var tx=new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbc.getDataSource()));
+        var deferred=new CountDownLatch(1);var commit=new CountDownLatch(1);var updating=new CountDownLatch(1);
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            var worker=executor.submit(()->tx.executeWithoutResult(status->{
+                poller.deferEngagement(claim,gate.deferUntil());deferred.countDown();
+                try { if(!commit.await(5,TimeUnit.SECONDS)) throw new IllegalStateException("Commit timed out"); }
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
+            }));
+            try {
+                assertThat(deferred.await(5,TimeUnit.SECONDS)).isTrue();
+                var change=executor.submit(()->{updating.countDown();return jdbc.update("UPDATE user_settings SET quiet_hours_enabled=false");});
+                assertThat(updating.await(5,TimeUnit.SECONDS)).isTrue();
+                org.assertj.core.api.Assertions.assertThatThrownBy(()->change.get(200,TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                commit.countDown();worker.get(5,TimeUnit.SECONDS);assertThat(change.get(5,TimeUnit.SECONDS)).isEqualTo(1);
+                assertThat(jdbc.queryForObject("SELECT lease_token FROM scheduled_notifications",UUID.class)).isNull();
+            } finally { commit.countDown(); }
+        }
+    }
+    @Test void deferralWaitsForPolicyCommitAndReadsItsNewValue() throws Exception {
+        jdbc.update("UPDATE users SET timezone=?",zoneAtHour(23));
+        var claim=claim();var gate=poller.checkEngagement(claim,prompt);
+        var tx=new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbc.getDataSource()));
+        var changed=new CountDownLatch(1);var commit=new CountDownLatch(1);var deferring=new CountDownLatch(1);
+        try(var executor=Executors.newVirtualThreadPerTaskExecutor()) {
+            var api=executor.submit(()->tx.executeWithoutResult(status->{
+                jdbc.update("UPDATE user_settings SET quiet_hours_enabled=false");changed.countDown();
+                try { if(!commit.await(5,TimeUnit.SECONDS)) throw new IllegalStateException("Commit timed out"); }
+                catch(InterruptedException e){Thread.currentThread().interrupt();throw new IllegalStateException(e);}
+            }));
+            try {
+                assertThat(changed.await(5,TimeUnit.SECONDS)).isTrue();
+                var worker=executor.submit(()->tx.executeWithoutResult(status->{deferring.countDown();poller.deferEngagement(claim,gate.deferUntil());}));
+                assertThat(deferring.await(5,TimeUnit.SECONDS)).isTrue();
+                org.assertj.core.api.Assertions.assertThatThrownBy(()->worker.get(200,TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                commit.countDown();api.get(5,TimeUnit.SECONDS);worker.get(5,TimeUnit.SECONDS);
+                assertThat(jdbc.queryForObject("SELECT quiet_deferred_until FROM scheduled_notifications",OffsetDateTime.class)).isNull();
+                assertThat(poller.claimPending(1)).hasSize(1);
+            } finally { commit.countDown(); }
+        }
+    }
+    @Test void aDeadlineNoticeIgnoresQuietHoursAndNearbyRemindersButBecomesStaleAfterRescheduling() {
+        jdbc.update("UPDATE users SET timezone=?",zoneAtHour(23));
+        jdbc.update("UPDATE tasks SET deadline=NOW()-INTERVAL '1 minute'");
+        jdbc.update("UPDATE engagement_prompts SET kind='DEADLINE_CHECKIN',explicit_timing=true,deadline_snapshot=(SELECT deadline FROM tasks LIMIT 1)");
+        jdbc.update("UPDATE scheduled_notifications SET payload_type='DEADLINE_CHECKIN'");
+        jdbc.update("UPDATE reminders SET fire_at=NOW()+INTERVAL '10 minutes',purpose='OUTCOME_CHECK',deadline_snapshot=(SELECT deadline FROM tasks LIMIT 1)");
+        var claim=claim();var gate=poller.checkEngagement(claim,prompt);
+        assertThat(gate.valid()).isTrue();assertThat(gate.deferUntil()).isNull();
+        jdbc.update("UPDATE tasks SET deadline=NOW()+INTERVAL '1 day'");
+        assertThat(poller.checkEngagement(claim,prompt).valid()).isFalse();
+    }
+    @Test void userQuietHoursCanBeDisabledOrSetToADaytimeInterval() {
+        jdbc.update("UPDATE users SET timezone=?",zoneAtHour(13));
+        jdbc.update("UPDATE user_settings SET quiet_hours_start='09:00',quiet_hours_end='18:00'");
+        var claim=claim();assertThat(poller.checkEngagement(claim,prompt).deferUntil().getHour()).isEqualTo(18);
+        jdbc.update("UPDATE user_settings SET quiet_hours_enabled=false");
+        assertThat(poller.checkEngagement(claim,prompt).deferUntil()).isNull();
+    }
+    @Test void aPromisedOutcomeSuppressesAnAlreadyQueuedPassiveQuestionEvenTwoHoursAway() {
+        jdbc.update("UPDATE reminders SET purpose='OUTCOME_CHECK',deadline_snapshot=(SELECT deadline FROM tasks LIMIT 1),fire_at=NOW()+INTERVAL '2 hours'");
+        assertThat(poller.checkEngagement(claim(),prompt).valid()).isFalse();
+    }
+    @Test void anExplicitSnoozeDoesNotWaitForThePassiveQuestionAndCancelsAfterADeadlineChange() {
+        jdbc.update("UPDATE reminders SET purpose='OUTCOME_CHECK',explicit_timing=true,deadline_snapshot=(SELECT deadline FROM tasks LIMIT 1)");
+        jdbc.update("UPDATE scheduled_notifications SET payload_type='TASK_REMINDER',task_id=(SELECT id FROM tasks LIMIT 1),reminder_id=(SELECT id FROM reminders LIMIT 1)");
+        var claim=claim();assertThat(poller.coalesceOverdueReminder(claim)).isFalse();assertThat(poller.isOutcomeCheck(claim)).isTrue();
+        assertThat(poller.cancelStaleOutcome(claim)).isFalse();
+        jdbc.update("UPDATE tasks SET deadline=NOW()+INTERVAL '1 day'");
+        assertThat(poller.cancelStaleOutcome(claim)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications",Integer.class)).isZero();
     }
 
     private PendingNotification claim() { return poller.claimPending(1).getFirst(); }

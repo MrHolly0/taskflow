@@ -40,7 +40,7 @@ class ScheduledNotificationPollerTest {
                     id UUID PRIMARY KEY, channel VARCHAR(16) NOT NULL, destination VARCHAR(320) NOT NULL,
                     fire_at TIMESTAMP WITH TIME ZONE NOT NULL, payload_type VARCHAR(32) NOT NULL, payload JSONB,
                     sent BOOLEAN DEFAULT FALSE, sent_at TIMESTAMP WITH TIME ZONE, retry_count INT DEFAULT 0,
-                    lease_token UUID, lease_until TIMESTAMP WITH TIME ZONE,
+                    lease_token UUID, lease_until TIMESTAMP WITH TIME ZONE, quiet_deferred_until TIMESTAMPTZ,
                     next_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
                     failed_at TIMESTAMP WITH TIME ZONE, last_error VARCHAR(255)
                 )

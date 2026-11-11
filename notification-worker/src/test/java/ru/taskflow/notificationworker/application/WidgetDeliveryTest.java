@@ -36,14 +36,15 @@ class WidgetDeliveryTest {
         var ds=new DriverManagerDataSource(postgres.getJdbcUrl(),postgres.getUsername(),postgres.getPassword());
         jdbc=new JdbcTemplate(ds);tx=new TransactionTemplate(new DataSourceTransactionManager(ds));
         jdbc.execute("CREATE TABLE users(id UUID PRIMARY KEY,timezone TEXT)");
+        jdbc.execute("CREATE TABLE reminders(id UUID PRIMARY KEY,task_id UUID,purpose TEXT DEFAULT 'REMINDER',status TEXT DEFAULT 'PENDING',deadline_snapshot TIMESTAMPTZ,fire_at TIMESTAMPTZ)");
         jdbc.execute("CREATE TABLE user_settings(user_id UUID PRIMARY KEY)");
         jdbc.execute("CREATE TABLE user_identities(user_id UUID,provider TEXT,external_id TEXT)");
         jdbc.execute("CREATE TABLE tasks(id UUID PRIMARY KEY,user_id UUID,title TEXT,description TEXT,deadline TIMESTAMPTZ,is_deleted BOOLEAN DEFAULT FALSE,status TEXT DEFAULT 'TODO',started_at TIMESTAMPTZ,planned_date TIMESTAMPTZ,planned_date_set_at TIMESTAMPTZ)");
         jdbc.execute("CREATE TABLE assistant_proposals(id UUID PRIMARY KEY,user_id UUID)");
-        jdbc.execute("CREATE TABLE engagement_prompts(id UUID PRIMARY KEY,user_id UUID,task_id UUID,kind TEXT,deadline_snapshot TIMESTAMPTZ,started_snapshot TIMESTAMPTZ,answer TEXT,cancelled_at TIMESTAMPTZ,expires_at TIMESTAMPTZ,batch_id UUID,batch_position INT)");
+        jdbc.execute("CREATE TABLE engagement_prompts(id UUID PRIMARY KEY,user_id UUID,task_id UUID,kind TEXT,deadline_snapshot TIMESTAMPTZ,started_snapshot TIMESTAMPTZ,answer TEXT,answer_message TEXT,sent_at TIMESTAMPTZ,cancelled_at TIMESTAMPTZ,expires_at TIMESTAMPTZ,batch_id UUID,batch_position INT)");
         jdbc.execute("CREATE TABLE telegram_update_inbox(update_id BIGINT,next_attempt_at TIMESTAMPTZ,status TEXT)");
         jdbc.execute("""
-                CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY,user_id UUID,task_id UUID,engagement_prompt_id UUID,
+                CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY,user_id UUID,task_id UUID,reminder_id UUID,engagement_prompt_id UUID,
                   channel TEXT,destination TEXT,fire_at TIMESTAMPTZ,payload_type TEXT,payload JSONB,sent BOOLEAN DEFAULT FALSE,
                   sent_at TIMESTAMPTZ,retry_count INT DEFAULT 0,next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
                   failed_at TIMESTAMPTZ,lease_token UUID,lease_until TIMESTAMPTZ,last_error TEXT)
@@ -55,7 +56,7 @@ class WidgetDeliveryTest {
         jdbc.execute("ALTER TABLE telegram_widget_contexts ADD CONSTRAINT telegram_widget_contexts_kind_check CHECK (kind IN ('REMINDER','ENGAGEMENT','PROPOSAL','RECEIPT','CHECKINS'))");
     }
     @BeforeEach void setup() {
-        jdbc.execute("TRUNCATE users,tasks,user_settings,user_identities,engagement_prompts,telegram_widget_contexts,scheduled_notifications CASCADE");
+        jdbc.execute("TRUNCATE reminders,users,tasks,user_settings,user_identities,engagement_prompts,telegram_widget_contexts,scheduled_notifications CASCADE");
         store=new WidgetStore(jdbc,mapper,Clock.systemUTC());api=mock(WidgetApi.class);delivery=new WidgetDelivery(jdbc,store,api,mapper,true,"https://munin.test",new CheckinBatchView(jdbc,Clock.systemUTC()));
         owner=UUID.randomUUID();task=UUID.randomUUID();notification=UUID.randomUUID();lease=UUID.randomUUID();
         jdbc.update("INSERT INTO users VALUES (?,'Europe/Moscow')",owner);
@@ -90,6 +91,38 @@ class WidgetDeliveryTest {
         for(int i=0;i<2;i++) jdbc.update("INSERT INTO engagement_prompts(id,user_id,task_id,kind,deadline_snapshot,expires_at,batch_id,batch_position) SELECT ?,user_id,id,'TASK_CHECKIN',deadline,NOW()+INTERVAL '7 days',?,? FROM tasks WHERE id=?",
                 UUID.randomUUID(),root,i,i==0?task:other);
         jdbc.update("UPDATE scheduled_notifications SET task_id=NULL,payload_type='CHECKIN_BATCH',engagement_prompt_id=? WHERE id=?",root,notification);
+    }
+    @Test void outcomeCheckKeepsButtonsInPlainModeAndShowsACompletionQuestion() {
+        UUID reminder=UUID.randomUUID();jdbc.update("INSERT INTO reminders(id,task_id,purpose) VALUES (?,?,'OUTCOME_CHECK')",reminder,task);
+        jdbc.update("UPDATE scheduled_notifications SET reminder_id=? WHERE id=?",reminder,notification);
+        jdbc.update("UPDATE user_settings SET telegram_widgets_enabled=false");when(api.sendText(any(),anyString())).thenReturn(101L);
+        assertThat(delivery.send(claim())).isTrue();var c=context();
+        assertThat(c.state().kind()).isEqualTo("checkin");assertThat(c.transport()).isEqualTo("TEXT");
+        assertThat(WidgetKeyboard.of(c,"https://munin.test").toString()).contains(":done",":working");
+    }
+    @Test void batchStartsAtFirstActionablePageAndKeepsItsPositionInCallbacks() {
+        batch();
+        jdbc.update("UPDATE engagement_prompts SET answer='done' WHERE batch_position=0");
+        assertThat(delivery.send(batchClaim())).isTrue();
+        var c=context();
+        assertThat(c.page()).isEqualTo(1);
+        assertThat(c.state().page()).isEqualTo(1);
+        assertThat(c.state().title()).isEqualTo("Разобрать отчёт");
+    }
+    @Test void deadlineReminderRetainsReschedulingInTextModeWhenWidgetsAreOff() {
+        UUID reminder=UUID.randomUUID();
+        jdbc.update("INSERT INTO reminders(id,task_id,fire_at) SELECT ?,id,deadline FROM tasks WHERE id=?",reminder,task);
+        jdbc.update("UPDATE scheduled_notifications SET reminder_id=?,fire_at=(SELECT deadline FROM tasks WHERE id=?) WHERE id=?",reminder,task,notification);
+        delivery=new WidgetDelivery(jdbc,store,api,mapper,false,"https://munin.test",new CheckinBatchView(jdbc,Clock.systemUTC()));
+        when(api.sendText(any(),anyString())).thenReturn(101L);
+        assertThat(delivery.send(claim())).isTrue();
+        var c=context();
+        assertThat(c.transport()).isEqualTo("TEXT");
+        assertThat(c.taskId()).isEqualTo(task);
+        assertThat(c.state().heading()).isEqualTo("Наступил срок задачи");
+        assertThat(WidgetKeyboard.of(c,"https://munin.test").toString())
+                .contains("Перенести срок","section=deadline",task.toString(),":done",":working");
+        verify(api,never()).send(any(),anyString());
     }
     @Test void reminderCarriesDescriptionFromTheTaskInsteadOfRepeatingItsTitle() {
         jdbc.update("UPDATE tasks SET description=? WHERE id=?","Подготовить слайды и проверить проектор",task);

@@ -33,6 +33,7 @@ public class UserServiceImpl implements UserService {
 
     private static final String DEFAULT_TIMEZONE = "Europe/Moscow";
 
+    private final org.springframework.context.ApplicationEventPublisher events;
     private final UserRepository userRepository;
     private final UserSettingsRepository settingsRepository;
     private final UserIdentityRepository identityRepository;
@@ -121,6 +122,7 @@ public class UserServiceImpl implements UserService {
             validateDisplayName(request.displayName());
         }
 
+        settingsRepository.lockForUpdate(userId);
         var settings = settingsRepository.findByUserId(userId)
                 .orElseGet(() -> createDefaultSettings(userId));
 
@@ -144,7 +146,16 @@ public class UserServiceImpl implements UserService {
             settings.setReturnNudgesEnabled(request.returnNudgesEnabled());
         }
         if (request.telegramWidgetsEnabled() != null) settings.setTelegramWidgetsEnabled(request.telegramWidgetsEnabled());
+        String start=request.quietHoursStart()==null?settings.getQuietHoursStart():request.quietHoursStart();
+        String end=request.quietHoursEnd()==null?settings.getQuietHoursEnd():request.quietHoursEnd();
+        if(!start.matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]") || !end.matches("(?:[01][0-9]|2[0-3]):[0-5][0-9]") || start.equals(end))
+            throw new ValidationException("Укажи разные начало и конец тихих часов в формате ЧЧ:ММ");
+        settings.setQuietHoursStart(start);settings.setQuietHoursEnd(end);
+        if(request.quietHoursEnabled()!=null) settings.setQuietHoursEnabled(request.quietHoursEnabled());
         settingsRepository.save(settings);
+        if(request.quietHoursEnabled()!=null || request.quietHoursStart()!=null || request.quietHoursEnd()!=null || request.timezone()!=null)
+            events.publishEvent(new ru.taskflow.user.api.QuietHoursChanged(userId));
+
 
         if (request.timezone() != null || request.displayName() != null) {
             var user = userRepository.findById(userId)
@@ -264,7 +275,7 @@ public class UserServiceImpl implements UserService {
                 displayName,
                 e.isTaskCheckinsEnabled(),
                 e.isReturnNudgesEnabled(),
-                e.isTelegramWidgetsEnabled()
+                e.isTelegramWidgetsEnabled(),e.isQuietHoursEnabled(),e.getQuietHoursStart(),e.getQuietHoursEnd()
         );
     }
 

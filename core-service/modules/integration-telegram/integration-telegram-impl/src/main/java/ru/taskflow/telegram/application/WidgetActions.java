@@ -79,6 +79,8 @@ public class WidgetActions {
             if(!next.terminal()) next=next.feedback("«"+WidgetTemplate.clip(item.title(),32)+"» — "+switch(Objects.toString(reply.outcome(),"")) {
                 case "done" -> "готово!"; case "working" -> "ещё в работе"; case "later" -> "напомню через час"; default -> "уже изменилось";
             });
+            if(next.terminal() && "later".equals(reply.outcome()))
+                next=next.finish("Вопрос отложен",WidgetTemplate.clip(item.title(),64)+"\n"+clean(reply.text()));
             return save(context,next,page);
         }
         if(context.kind().equals("RECEIPT")) {
@@ -102,7 +104,7 @@ public class WidgetActions {
             if (!reply.terminal()) throw new IllegalArgumentException(clean(reply.text()));
             String heading=switch(java.util.Objects.toString(reply.outcome(),"")) {
                 case "done" -> ru.taskflow.shared.engagement.CompletionFeedback.forOperation(context.referenceId()); case "working" -> "Продолжаем";
-                case "later" -> "Напомню позже"; case "mute" -> "Приглашения выключены";
+                case "later" -> "Напоминание перенесено"; case "mute" -> "Приглашения выключены";
                 case "stale" -> "Задача уже изменилась"; default -> "Ответ принят";
             };
             return save(context,context.state().finish(heading,clean(reply.text())),context.page());
@@ -137,11 +139,13 @@ public class WidgetActions {
                         (rs,row)->rs.getObject(1,UUID.class),context.taskId()).stream().findFirst().orElse(null);
                 if (reminderId!=null) tasks.snoozeReminder(userId,context.taskId(),reminderId,at);
                 else tasks.scheduleReminder(userId,context.taskId(),at);
-                result="Напомню "+WidgetTemplate.time(at,users.getTimezone(userId),clock);
+                result=target.deadline()!=null && at.isAfter(target.deadline())?
+                        "Срок: "+WidgetTemplate.time(target.deadline(),users.getTimezone(userId),clock)+"\nУточню успех "+WidgetTemplate.time(at,users.getTimezone(userId),clock):
+                        "Напомню "+WidgetTemplate.time(at,users.getTimezone(userId),clock);
             }
             default -> throw new IllegalArgumentException("Неизвестное действие");
         }
-        return save(context,context.state().finish(token.action().equals("done")?"Одним делом меньше!":"Готово",result),0);
+        return save(context,context.state().finish(token.action().equals("done")?"Одним делом меньше!":token.action().equals("later")?"Напоминание перенесено":"Задача в работе",result),0);
     }
     private WidgetState proposal(WidgetContext context,String action,java.time.Instant deadline) {
         var p=assistant.findById(context.userId(),context.referenceId());

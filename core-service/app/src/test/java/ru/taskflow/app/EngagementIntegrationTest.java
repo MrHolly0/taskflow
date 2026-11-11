@@ -133,7 +133,7 @@ class EngagementIntegrationTest {
         plan(NOW);
         assertThat(count()).isZero();
         plan(NOW.plusHours(1));
-        assertThat(count()).isEqualTo(1);
+        assertThat(count()).isZero();
     }
 
     @Test
@@ -232,8 +232,9 @@ class EngagementIntegrationTest {
         try (var executor = Executors.newFixedThreadPool(2)) {
             var first = executor.submit(() -> reply(user, prompt, "later"));
             var second = executor.submit(() -> reply(user, prompt, "later"));
-            assertThat(first.get().text()).contains("через час");
-            assertThat(second.get().text()).contains("через час");
+            var original=first.get().text();
+            assertThat(original).contains("Уточню успех");
+            assertThat(second.get().text()).isEqualTo(original);
         }
         assertThat(tasks.getReminders(user, task)).hasSize(before + 1);
         assertThat(tasks.getReminders(user, task)).anyMatch(r -> r.fireAt().isEqual(NOW.plusHours(1)));

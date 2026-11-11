@@ -29,12 +29,13 @@ public class WidgetDelivery {
     }
     public boolean send(PendingNotification notification) {
         boolean batch="CHECKIN_BATCH".equals(notification.payloadType());
-        if ((!enabled && !batch) || !"TELEGRAM".equals(notification.channel()) || Long.parseLong(notification.destination())<=0) return false;
+        if (!"TELEGRAM".equals(notification.channel()) || Long.parseLong(notification.destination())<=0) return false;
         var rows=jdbc.query("""
                 SELECT n.user_id,n.task_id,n.engagement_prompt_id,t.title,t.description,t.deadline,u.timezone,
-                       p.deadline_snapshot,s.telegram_widgets_enabled
+                       p.deadline_snapshot,n.fire_at,s.telegram_widgets_enabled,r.purpose
                 FROM scheduled_notifications n JOIN users u ON u.id=n.user_id
                 JOIN user_settings s ON s.user_id=n.user_id
+                LEFT JOIN reminders r ON r.id=n.reminder_id
                 LEFT JOIN tasks t ON t.id=n.task_id AND t.user_id=n.user_id AND NOT t.is_deleted
                 LEFT JOIN engagement_prompts p ON p.id=n.engagement_prompt_id AND p.user_id=n.user_id
                 WHERE n.id=? AND n.lease_token=? AND n.lease_until>NOW() AND NOT n.sent AND n.failed_at IS NULL
@@ -43,17 +44,22 @@ public class WidgetDelivery {
                     AND i.provider='TELEGRAM' AND i.external_id=n.destination)
                 """,(rs,row)->new Target(rs.getObject("user_id",UUID.class),rs.getObject("task_id",UUID.class),
                 rs.getObject("engagement_prompt_id",UUID.class),rs.getString("title"),rs.getString("description"),rs.getObject("deadline",OffsetDateTime.class),
-                rs.getString("timezone"),rs.getObject("deadline_snapshot",OffsetDateTime.class),rs.getBoolean("telegram_widgets_enabled")),
+                rs.getString("timezone"),rs.getObject("deadline_snapshot",OffsetDateTime.class),rs.getBoolean("telegram_widgets_enabled"),rs.getObject("fire_at",OffsetDateTime.class),rs.getString("purpose")),
                 notification.id(),notification.leaseToken(),notification.destination(),notification.channel(),notification.payloadType());
         if (rows.isEmpty()) return true;
         var target=rows.getFirst();
-        if (!target.cards() && !batch) return false;
+        boolean outcome="OUTCOME_CHECK".equals(target.purpose());
+        boolean deadlineReminder="TASK_REMINDER".equals(notification.payloadType())&&target.deadline()!=null&&target.fireAt()!=null&&target.fireAt().isEqual(target.deadline());
+        if((!enabled || !target.cards()) && !batch && !outcome && !deadlineReminder) return false;
         boolean reminder="TASK_REMINDER".equals(notification.payloadType());
-        if ((reminder || java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(notification.payloadType())) && target.title()==null) return true;
-        String kind=reminder?"reminder":java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(notification.payloadType())?"checkin":"return";
+        if ((reminder || java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN","DEADLINE_CHECKIN").contains(notification.payloadType())) && target.title()==null) return true;
+        boolean afterDeadline=reminder && (outcome || (target.deadline()!=null && target.fireAt().isAfter(target.deadline())));
+        String kind=reminder?(afterDeadline?"checkin":"reminder"):java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN","DEADLINE_CHECKIN").contains(notification.payloadType())?"checkin":"return";
         String title=kind.equals("return")?"Расскажи о новых делах":WidgetTemplate.clip(target.title(),80);
-        var state=batch?batches.render(target.userId(),target.promptId(),0):new WidgetState(kind,title,kind.equals("return")?List.of():
+        var state=batch?batches.render(target.userId(),target.promptId(),batches.next(target.userId(),target.promptId(),-1)):new WidgetState(kind,title,kind.equals("return")?List.of():
                 List.of(List.of("Срок",WidgetTemplate.time(target.deadline(),ZoneId.of(target.timezone()),Clock.systemUTC()))));
+        if(kind.equals("checkin")) state=state.heading("Получилось завершить?");
+        if(deadlineReminder || "DEADLINE_CHECKIN".equals(notification.payloadType())) state=state.heading("Наступил срок задачи");
         if(!batch && !kind.equals("return")) state=WidgetTemplate.withDescription(mapper,state,target.title(),target.description());
         var context=store.reserve(target.userId(),batch?"CHECKINS":reminder?"REMINDER":"ENGAGEMENT",
                 reminder?notification.id():target.promptId(),target.taskId(),
@@ -61,8 +67,8 @@ public class WidgetDelivery {
         if (context.messageId()!=null) return true;
         long messageId;
         String transport="WIDGET";
-        if(batch && (!enabled || !target.cards())) {
-            context=new WidgetContext(context.id(),context.userId(),context.kind(),context.referenceId(),null,null,
+        if((batch || outcome || deadlineReminder) && (!enabled || !target.cards())) {
+            context=new WidgetContext(context.id(),context.userId(),context.kind(),context.referenceId(),context.taskId(),context.deadline(),
                     context.chatId(),null,"TEXT",context.expiresAt(),context.revision(),context.page(),true,context.state());
             messageId=api.sendText(context,appUrl);store.bind(context.id(),messageId,"TEXT");return true;
         }
@@ -109,6 +115,6 @@ public class WidgetDelivery {
         int status=e.getStatusCode().value();
         return new NotificationDeliveryException("TELEGRAM_HTTP_"+status,status>=400&&status<500&&status!=408&&status!=429,delay);
     }
-    private record Target(UUID userId,UUID taskId,UUID promptId,String title,String description,OffsetDateTime deadline,String timezone,OffsetDateTime snapshot,boolean cards) {}
+    private record Target(UUID userId,UUID taskId,UUID promptId,String title,String description,OffsetDateTime deadline,String timezone,OffsetDateTime snapshot,boolean cards,OffsetDateTime fireAt,String purpose) {}
     public record Sync(UUID contextId,long revision,WidgetState state,boolean expanded) {}
 }

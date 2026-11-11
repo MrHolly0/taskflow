@@ -93,7 +93,7 @@ public class TaskReminderService {
 
     /**
      * Б2: напоминание на конкретное время независимо от срока задачи —
-     * deadline задачи здесь не читается и не меняется.
+     * срок задачи при этом не меняется.
      */
     @Transactional
     public void createStandaloneReminder(UUID userId, TaskJpaEntity task, OffsetDateTime fireAt) {
@@ -103,7 +103,7 @@ public class TaskReminderService {
         // TaskService удерживает блокировку задачи: повтор команды и совпадение
         // с напоминанием по умолчанию не должны создавать второе уведомление.
         if (reminderRepository.existsByTaskIdAndStatusAndFireAt(task.getId(), ReminderStatus.PENDING, fireAt)) return;
-        createReminder(userId, task, fireAt, null, chainStartOrNull(task));
+        createReminder(userId, task, fireAt, null, chainStartOrNull(task),true);
     }
 
     private Integer chainStartOrNull(TaskJpaEntity task) {
@@ -141,7 +141,7 @@ public class TaskReminderService {
         notificationService.cancelReminderNotifications(reminderId);
 
         TaskJpaEntity task = reminder.getTask();
-        createReminder(task.getUserId(), task, until, task.getDeadline(), reminder.getChainStep());
+        createReminder(task.getUserId(), task, until, task.getDeadline(), reminder.getChainStep(),true);
     }
 
     /**
@@ -205,13 +205,19 @@ public class TaskReminderService {
             if (step < CHAIN_STEP_GAPS.size()) {
                 OffsetDateTime nextFireAt = reminder.getFireAt().plus(CHAIN_STEP_GAPS.get(step));
                 if (!nextFireAt.isAfter(now)) nextFireAt = now.plus(CHAIN_STEP_GAPS.get(step));
-                createReminder(task.getUserId(), task, nextFireAt, task.getDeadline(), step + 1);
+                createReminder(task.getUserId(), task, nextFireAt, task.getDeadline(), step + 1,"OUTCOME_CHECK".equals(reminder.getPurpose()));
             }
         }
     }
 
     @Transactional
     public void refreshNotificationDetails(UUID userId, TaskJpaEntity task) {
+        for(var reminder:reminderRepository.findByTaskIdAndStatusOrderByFireAtAsc(task.getId(),ReminderStatus.PENDING)) {
+            if("OUTCOME_CHECK".equals(reminder.getPurpose()) && (task.getDeadline()==null || reminder.getDeadlineSnapshot()==null || !task.getDeadline().isEqual(reminder.getDeadlineSnapshot()))) {
+                reminder.setStatus(ReminderStatus.CANCELLED);reminderRepository.save(reminder);
+                notificationService.cancelReminderNotifications(reminder.getId());
+            }
+        }
         notificationService.refreshTaskReminderDetails(userId, task.getId(), task.getTitle(), task.getDeadline());
     }
 
@@ -252,11 +258,19 @@ public class TaskReminderService {
 
     private void createReminder(UUID userId, TaskJpaEntity task, OffsetDateTime fireAt,
                                  OffsetDateTime deadlineForDisplay, Integer chainStep) {
+        createReminder(userId,task,fireAt,deadlineForDisplay,chainStep,false);
+    }
+    private void createReminder(UUID userId,TaskJpaEntity task,OffsetDateTime fireAt,
+                                OffsetDateTime deadlineForDisplay,Integer chainStep,boolean explicit) {
         var reminder = new ReminderJpaEntity();
         reminder.setTask(task);
         reminder.setFireAt(fireAt);
         reminder.setStatus(ReminderStatus.PENDING);
         reminder.setChainStep(chainStep);
+        reminder.setExplicitTiming(explicit);
+        if(explicit && task.getDeadline()!=null && fireAt.isAfter(task.getDeadline())) {
+            reminder.setPurpose("OUTCOME_CHECK");reminder.setDeadlineSnapshot(task.getDeadline());
+        }
         reminderRepository.save(reminder);
         notificationService.scheduleReminder(userId, task.getId(), reminder.getId(), task.getTitle(), fireAt, deadlineForDisplay);
     }

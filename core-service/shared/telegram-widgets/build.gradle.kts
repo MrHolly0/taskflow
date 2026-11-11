@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":core-service:shared:common"))
     implementation("org.springframework:spring-web")
     implementation("org.springframework:spring-jdbc")
     implementation("org.springframework:spring-tx")

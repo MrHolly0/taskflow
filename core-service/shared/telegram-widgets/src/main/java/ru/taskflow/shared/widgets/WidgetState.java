@@ -17,6 +17,10 @@ public record WidgetState(String kind, String key, long revision, String title, 
         return new WidgetState(kind,key,revision,value,rows,terminal,heading,summary,status,note,
                 page,total,selected,accepted,warning,fingerprint,taskId,undoAvailable,description);
     }
+    public WidgetState heading(String value) {
+        return new WidgetState(kind,key,revision,title,rows,terminal,value,summary,status,note,
+                page,total,selected,accepted,warning,fingerprint,taskId,undoAvailable,description);
+    }
     public WidgetState description(String value) {
         return new WidgetState(kind,key,revision,title,rows,terminal,heading,summary,status,note,
                 page,total,selected,accepted,warning,fingerprint,taskId,undoAvailable,value);

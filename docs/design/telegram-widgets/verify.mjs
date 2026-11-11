@@ -87,3 +87,11 @@ for(const theme of ['light','dark']) {
  assert.equal(missing.probes[0],'true');assert.equal(missing.requests.length,0);assert.deepEqual(missing.diags,[]);passed++;
 }
 console.log('TOTAL including task descriptions',passed,'sandbox cases passed');
+for(const theme of ['light','dark']) {
+ const deadline={...samples.reminder,heading:'Наступил срок задачи'};
+ const view=await runWidget(html,{theme,context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(deadline),publicData:null},
+  probes:[`document.getElementById('heading').textContent`,`document.getElementById('actions').textContent`,`document.querySelectorAll('#actions button').length`]});
+ assert.equal(view.probes[0],deadline.heading);assert.match(view.probes[1],/В работе/);assert.match(view.probes[1],/Готово/);
+ assert.doesNotMatch(view.probes[1],/Позже/);assert.equal(view.probes[2],'2');assert.equal(view.requests.length,0);assert.deepEqual(view.diags,[]);passed++;
+}
+console.log('TOTAL including deadline notices',passed,'sandbox cases passed');

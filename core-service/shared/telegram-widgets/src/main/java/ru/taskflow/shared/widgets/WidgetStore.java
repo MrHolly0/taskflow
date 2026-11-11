@@ -25,9 +25,9 @@ public class WidgetStore {
                                  OffsetDateTime deadline, long chatId, WidgetState state) {
         var id = UUID.randomUUID();
         jdbc.update("""
-                INSERT INTO telegram_widget_contexts(id,user_id,kind,reference_id,task_id,deadline_snapshot,chat_id,state,expires_at)
-                VALUES (?,?,?,?,?,?,?,?::jsonb,?) ON CONFLICT (user_id,kind,reference_id,chat_id) DO NOTHING
-                """, id,userId,kind,referenceId,taskId,deadline,chatId,WidgetTemplate.encode(mapper,state.identity(id,0)),OffsetDateTime.now(clock).plusDays(7));
+                INSERT INTO telegram_widget_contexts(id,user_id,kind,reference_id,task_id,deadline_snapshot,chat_id,state,expires_at,page)
+                VALUES (?,?,?,?,?,?,?,?::jsonb,?,?) ON CONFLICT (user_id,kind,reference_id,chat_id) DO NOTHING
+                """, id,userId,kind,referenceId,taskId,deadline,chatId,WidgetTemplate.encode(mapper,state.identity(id,0)),OffsetDateTime.now(clock).plusDays(7),state.page()==null?0:state.page());
         return jdbc.query("SELECT * FROM telegram_widget_contexts WHERE user_id=? AND kind=? AND reference_id=? AND chat_id=?",
                 this::map,userId,kind,referenceId,chatId).getFirst();
     }

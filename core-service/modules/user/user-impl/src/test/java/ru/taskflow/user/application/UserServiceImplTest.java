@@ -492,6 +492,6 @@ class UserServiceImplTest {
     }
 
     private UserServiceImpl newService() {
-        return new UserServiceImpl(userRepository, settingsRepository, identityRepository);
+        return new UserServiceImpl(event -> {}, userRepository, settingsRepository, identityRepository);
     }
 }
