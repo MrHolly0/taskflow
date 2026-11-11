@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { IconCheck, IconChevronDown } from '@tabler/icons-react';
 import {
@@ -74,6 +74,12 @@ export function FocusPage() {
     (t) => t.plannedDateSetAt && isSameZonedDay(t.plannedDateSetAt, new Date(), timezone)
   ).length;
   const next = tasks.find((t) => t.status === 'IN_PROGRESS') || tasks[0];
+  const deadlineSection=search.get('section')==='deadline';
+  useEffect(()=>{
+    if(!deadlineSection||!pinnedId) return;
+    const task=(revealedPage?.content??all).find(item=>item.id===pinnedId);
+    if(task) setSelected(task);
+  },[deadlineSection,pinnedId,revealedPage?.content,all]);
   if (error || timezoneError)
     return (
       <div className="munin-page page-state">
@@ -185,8 +191,9 @@ export function FocusPage() {
       <TaskDetailModal
         task={selected ? all.find((t) => t.id === selected.id) || selected : null}
         open={Boolean(selected)}
-        onClose={() => setSelected(null)}
+        onClose={() => {setSelected(null);if(deadlineSection){const next=new URLSearchParams(search);next.delete('section');setSearch(next,{replace:true});}}}
         showFocusHint={focus.length > 0}
+        initialSection={deadlineSection?'deadline':undefined}
       />
     </div>
   );

@@ -78,6 +78,14 @@ export function SettingsPage() {
     unsubscribe: unsubscribeFromPush,
   } = usePushSubscription();
   const updateSettings = useUpdateSettings();
+  const [quietStart,setQuietStart]=useState('21:00');
+  const [quietEnd,setQuietEnd]=useState('09:00');
+  const [quietFeedback,setQuietFeedback]=useState('');
+  useEffect(()=>{
+    setQuietStart(serverSettings?.quietHoursStart??'21:00');setQuietEnd(serverSettings?.quietHoursEnd??'09:00');
+  },[serverSettings?.quietHoursStart,serverSettings?.quietHoursEnd]);
+  const quietInvalid=!/^([01]\d|2[0-3]):[0-5]\d$/.test(quietStart)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(quietEnd)||quietStart===quietEnd;
+  const quietChanged=quietStart!==(serverSettings?.quietHoursStart??'21:00')||quietEnd!==(serverSettings?.quietHoursEnd??'09:00');
   const clearCompleted = useClearCompleted();
   const [clearResult, setClearResult] = useState<number | null>(null);
 
@@ -348,14 +356,14 @@ export function SettingsPage() {
             <div>
               <h3 className="text-sm font-medium">Мягкая поддержка в Telegram</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                С 9:00 до 21:00 по твоему часовому поясу. Не больше одного такого сообщения в сутки.
+                Дедлайны и выбранные напоминания приходят вовремя. Инициативные сообщения: не чаще раза в сутки.
               </p>
             </div>
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 space-y-1">
                 <Label htmlFor="task-checkins" className="flex min-h-11 items-center">Спрашивать, как продвигается дело</Label>
                 <p id="task-checkins-hint" className="text-xs text-muted-foreground">
-                  Спросим после времени, отведённого на начатое дело. Без оценки длительности — примерно через час. Если дело не начато, ориентируемся на его срок.
+                  Спросим об итоге начатого дела или предложим действия в назначенный срок.
                 </p>
               </div>
               <Switch id="task-checkins" aria-describedby="task-checkins-hint"
@@ -376,6 +384,28 @@ export function SettingsPage() {
                 onCheckedChange={value => updateSettings.mutate({ returnNudgesEnabled: value })}
                 disabled={!serverSettings || !hasTelegram || !notificationsEnabled || !notifyTelegram || updateSettings.isPending}
               />
+            </div>
+            <div className="border-t border-border pt-4 space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1 min-w-0">
+                  <Label htmlFor="quiet-hours" className="flex min-h-11 items-center">Тихие часы</Label>
+                  <p id="quiet-hours-hint" className="text-sm text-muted-foreground">Откладывать инициативные сообщения Мунина. По твоему времени: {serverSettings?.timezone??'Europe/Moscow'}</p>
+                </div>
+                <Switch id="quiet-hours" aria-describedby="quiet-hours-hint" checked={serverSettings?.quietHoursEnabled??true}
+                  onCheckedChange={value=>updateSettings.mutate({quietHoursEnabled:value})} disabled={!serverSettings||updateSettings.isPending}/>
+              </div>
+              {(serverSettings?.quietHoursEnabled??true) && <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 max-w-sm">
+                  <div className="space-y-1"><Label htmlFor="quiet-start">Начало</Label><Input id="quiet-start" type="time" step={60} value={quietStart} disabled={updateSettings.isPending}
+                    onChange={event=>{setQuietStart(event.target.value);setQuietFeedback('');}} className="min-h-11 text-base"/></div>
+                  <div className="space-y-1"><Label htmlFor="quiet-end">Конец</Label><Input id="quiet-end" type="time" step={60} value={quietEnd} disabled={updateSettings.isPending}
+                    onChange={event=>{setQuietEnd(event.target.value);setQuietFeedback('');}} className="min-h-11 text-base"/></div>
+                </div>
+                {quietInvalid && <p role="alert" className="text-sm text-destructive">Укажи разные начало и конец. Чтобы получать сообщения в любое время, выключи тихие часы</p>}
+                <Button variant="outline" disabled={!quietChanged||quietInvalid||updateSettings.isPending} onClick={()=>updateSettings.mutate({quietHoursStart:quietStart,quietHoursEnd:quietEnd},
+                  {onSuccess:()=>setQuietFeedback('Интервал сохранён'),onError:()=>setQuietFeedback('Не удалось сохранить интервал, попробуй ещё раз')})}>Сохранить интервал</Button>
+                {quietFeedback && <p role="status" className="text-sm text-muted-foreground">{quietFeedback}</p>}
+              </div>}
             </div>
             {!hasTelegram && <Link to="/integrations" className="text-xs underline">Подключить Telegram</Link>}
           </div>

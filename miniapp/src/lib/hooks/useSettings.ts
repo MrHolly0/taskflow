@@ -12,6 +12,9 @@ export interface UserSettings {
   taskCheckinsEnabled: boolean;
   returnNudgesEnabled: boolean;
   telegramWidgetsEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursStart: string;
+  quietHoursEnd: string;
   defaultReminderMinutes: number;
   urgentExtraReminder: boolean;
   preferredLlm: string;
@@ -31,6 +34,9 @@ interface UpdateSettingsRequest {
   taskCheckinsEnabled?: boolean;
   returnNudgesEnabled?: boolean;
   telegramWidgetsEnabled?: boolean;
+  quietHoursEnabled?: boolean;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
   defaultReminderMinutes?: number;
   urgentExtraReminder?: boolean;
   preferredLlm?: string;
