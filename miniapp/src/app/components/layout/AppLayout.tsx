@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useUserActivity } from '@/lib/hooks/useUserActivity';
 import { useNotificationViewport } from '@/lib/hooks/useNotificationViewport';
 import { TaskInspector } from '@/app/components/TaskInspector';
 import { Link, useLocation } from 'react-router-dom';
@@ -55,6 +56,7 @@ const navItems: NavItem[] = [
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
+  useUserActivity();
   const location = useLocation();
   const notices = useNotificationViewport(location.pathname);
   const quickInputOpen = useTaskUi(s => s.captureOpen);

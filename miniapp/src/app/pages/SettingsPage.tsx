@@ -330,6 +330,42 @@ export function SettingsPage() {
             )}
           </div>
 
+          <div className="flex flex-col gap-4 rounded-2xl border border-border p-4">
+            <div>
+              <h3 className="text-sm font-medium">Мягкая поддержка в Telegram</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                С 9:00 до 21:00 по твоему часовому поясу. Не больше одного такого сообщения в сутки.
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <Label htmlFor="task-checkins" className="flex min-h-11 items-center">Спрашивать, как продвигается дело</Label>
+                <p id="task-checkins-hint" className="text-xs text-muted-foreground">
+                  Можем спросить один раз, не раньше чем через 30 минут после срока. Только если дело не завершено и его напоминания включены.
+                </p>
+              </div>
+              <Switch id="task-checkins" aria-describedby="task-checkins-hint"
+                checked={serverSettings?.taskCheckinsEnabled ?? false}
+                onCheckedChange={value => updateSettings.mutate({ taskCheckinsEnabled: value })}
+                disabled={!serverSettings || !hasTelegram || !notificationsEnabled || !notifyTelegram || updateSettings.isPending}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 space-y-1">
+                <Label htmlFor="return-nudges" className="flex min-h-11 items-center">Приглашать вернуться после паузы</Label>
+                <p id="return-nudges-hint" className="text-xs text-muted-foreground">
+                  После трёх дней без активности. Не чаще раза в неделю, без требований и упрёков.
+                </p>
+              </div>
+              <Switch id="return-nudges" aria-describedby="return-nudges-hint"
+                checked={serverSettings?.returnNudgesEnabled ?? false}
+                onCheckedChange={value => updateSettings.mutate({ returnNudgesEnabled: value })}
+                disabled={!serverSettings || !hasTelegram || !notificationsEnabled || !notifyTelegram || updateSettings.isPending}
+              />
+            </div>
+            {!hasTelegram && <Link to="/integrations" className="text-xs underline">Подключить Telegram</Link>}
+          </div>
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="reminder-time">Время напоминания</Label>
             <Select
