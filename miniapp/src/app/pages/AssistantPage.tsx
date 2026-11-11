@@ -159,7 +159,7 @@ export function AssistantPage() {
     );
   };
 
-  const changeReminder = (proposal: Proposal, localId: string, ordinal: number, reminderAt: string | null) => {
+  const changeReminder = (proposal: Proposal, localId: string, ordinal: number, reminderAt: string | null | string[]) => {
     if (!proposal.id) return;
     updateActionReminder.mutate(
       { proposalId: proposal.id, ordinal, reminderAt },
@@ -301,7 +301,7 @@ export function AssistantPage() {
                   onPlannedDateChange={(ordinal, plannedDate) => changePlannedDate(entry.proposal, entry.localId, ordinal, plannedDate)}
                   onApply={(persistentOrdinals) => apply(entry.proposal, entry.localId, persistentOrdinals)}
                   onReject={() => reject(entry.proposal, entry.localId)}
-                  applying={applyProposal.isPending}
+                  applying={applyProposal.isPending || updateActionReminder.isPending || updateActionPlannedDate.isPending || setActionAccepted.isPending || selectAlternative.isPending}
                   rejecting={rejectProposal.isPending}
                   className="munin-chat-proposal"
                 />

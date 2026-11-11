@@ -27,8 +27,18 @@ public record CreateTaskRequest(
         // от deadline и не участвует в планировании напоминаний.
         OffsetDateTime plannedDate,
         Boolean skipDefaultReminders,
-        OffsetDateTime reminderAt
+        OffsetDateTime reminderAt,
+        @Size(max=5) List<OffsetDateTime> reminderAts
 ) {
+    public CreateTaskRequest(String title,String description,TaskPriority priority,OffsetDateTime deadline,
+            UUID groupId,String groupName,List<String> tags,Integer estimateMinutes,TaskSource source,
+            RecurrenceRule recurrence,boolean persistentReminder,OffsetDateTime plannedDate,Boolean skipDefaultReminders,OffsetDateTime reminderAt) {
+        this(title,description,priority,deadline,groupId,groupName,tags,estimateMinutes,source,recurrence,persistentReminder,plannedDate,skipDefaultReminders,reminderAt,List.of());
+    }
+    public List<OffsetDateTime> explicitReminders() {
+        return java.util.stream.Stream.concat(java.util.stream.Stream.ofNullable(reminderAt),reminderAts.stream())
+                .map(value->value.withOffsetSameInstant(java.time.ZoneOffset.UTC)).distinct().sorted().toList();
+    }
     public CreateTaskRequest(String title, String description, TaskPriority priority, OffsetDateTime deadline,
             UUID groupId, String groupName, List<String> tags, Integer estimateMinutes, TaskSource source,
             RecurrenceRule recurrence, boolean persistentReminder, OffsetDateTime plannedDate) {
@@ -40,6 +50,7 @@ public record CreateTaskRequest(
         if (priority == null) priority = TaskPriority.MEDIUM;
         if (source == null) source = TaskSource.MANUAL;
         if (tags == null) tags = List.of();
+        reminderAts = reminderAts==null?List.of():List.copyOf(reminderAts);
     }
 
     public CreateTaskRequest(String title, String description, TaskPriority priority, OffsetDateTime deadline,

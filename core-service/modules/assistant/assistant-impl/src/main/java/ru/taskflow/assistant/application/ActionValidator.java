@@ -122,6 +122,19 @@ public class ActionValidator {
                 return ValidationResult.fail("время напоминания уже прошло");
             }
         }
+        if(args.containsKey("reminder_ats")) {
+            if(!(args.get("reminder_ats") instanceof java.util.List<?> values) || values.isEmpty() || values.size()>5)
+                return ValidationResult.fail("reminder_ats должен содержать от одного до пяти времён");
+            var unique=new java.util.HashSet<java.time.Instant>();
+            if(args.get("reminder_at")!=null) unique.add(parseTimeOrNull(args.get("reminder_at")).toInstant());
+            for(var value:values) {
+                var at=parseTimeOrNull(value);
+                if(at==null) return ValidationResult.fail("не удалось разобрать время напоминания: "+value);
+                if(!at.isAfter(OffsetDateTime.now(clock))) return ValidationResult.fail("время напоминания уже прошло");
+                unique.add(at.toInstant());
+            }
+            if(unique.size()>5) return ValidationResult.fail("не больше пяти напоминаний на создание задачи");
+        }
         return ValidationResult.ok(null);
     }
 

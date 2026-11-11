@@ -47,8 +47,12 @@ public class WidgetProposalProjection {
         if (action.type()==AssistantActionType.CREATE || action.type()==AssistantActionType.RESCHEDULE)
             rows.add(List.of("Срок",deadline==null?"Без срока":time(deadline,zone)));
         Object reminder=payload.get("reminder_at");
-        String reminderText=reminder==null?"Без изменения":time(reminder,zone);
-        if (action.type()==AssistantActionType.CREATE && reminder==null) {
+        var reminderList=payload.get("reminder_ats") instanceof List<?> list?list:List.of();
+        var reminderTimes=new ArrayList<OffsetDateTime>();
+        if(reminder!=null) reminderTimes.add(OffsetDateTime.parse(reminder.toString()));
+        for(var value:reminderList) reminderTimes.add(OffsetDateTime.parse(value.toString()));
+        String reminderText=reminderTimes.isEmpty()?"Без изменения":WidgetTemplate.times(reminderTimes,zone,clock);
+        if (action.type()==AssistantActionType.CREATE && reminder==null && reminderList.isEmpty()) {
             reminderText=Boolean.TRUE.equals(payload.get("no_reminder_needed")) || deadline==null?"Не назначено":
                     "По настройкам: за "+users.getSettings(userId).defaultReminderMinutes()+" мин";
 

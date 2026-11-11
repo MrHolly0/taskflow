@@ -137,7 +137,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
     );
   };
 
-  const changeReminder = (ordinal: number, reminderAt: string | null) => {
+  const changeReminder = (ordinal: number, reminderAt: string | null | string[]) => {
     if (!proposal?.id) return;
     updateActionReminder.mutate(
       { proposalId: proposal.id, ordinal, reminderAt },
@@ -326,7 +326,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                   onPlannedDateChange={changePlannedDate}
                   onApply={applyCurrent}
                   onReject={rejectCurrent}
-                  applying={applyProposal.isPending}
+                  applying={applyProposal.isPending || updateActionReminder.isPending || updateActionPlannedDate.isPending || setActionAccepted.isPending || selectAlternative.isPending}
                   rejecting={rejectProposal.isPending}
                   className="w-full"
                 />

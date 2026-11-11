@@ -202,8 +202,9 @@ public class ProposalApplier {
                 null,
                 false,
                 parseDeadline(payload.get("planned_date")),
-                payload.get("reminder_at") != null || Boolean.TRUE.equals(payload.get("no_reminder_needed")),
-                parseDeadline(payload.get("reminder_at"))
+                payload.get("reminder_at") != null || payload.get("reminder_ats") != null || Boolean.TRUE.equals(payload.get("no_reminder_needed")),
+                parseDeadline(payload.get("reminder_at")),
+                payload.get("reminder_ats") instanceof List<?> times?times.stream().map(this::parseDeadline).toList():List.of()
         );
         TaskResponse created = operation==null?taskService.createQuick(userId, request):operations.create(userId,request,operation);
         return created.id();

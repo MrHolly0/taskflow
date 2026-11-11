@@ -50,8 +50,8 @@ public class WidgetReceiptProjection {
             var task=tasks.findById(user,action.taskId());title=task.title();description=task.description();
             if(!completion || undone) rows.add(List.of("Срок",WidgetTemplate.time(task.deadline(),users.getTimezone(user),clock)));
             var reminder=task.reminders().stream().filter(r->r.status().equals("PENDING")&&r.fireAt().isAfter(OffsetDateTime.now(clock)))
-                    .min(java.util.Comparator.comparing(r->r.fireAt()));
-            if(!completion || undone) rows.add(List.of("Напомнить",reminder.map(r->WidgetTemplate.time(r.fireAt(),users.getTimezone(user),clock)).orElse("Не назначено")));
+                    .sorted(java.util.Comparator.comparing(r->r.fireAt())).toList();
+            if(!completion || undone) rows.add(List.of("Напомнить",reminder.isEmpty()?"Не назначено":WidgetTemplate.times(reminder.stream().map(r->r.fireAt()).toList(),users.getTimezone(user),clock)));
             if(task.plannedDate()!=null && !completion) rows.add(List.of("День работы",task.plannedDate().atZoneSameInstant(users.getTimezone(user)).toLocalDate().toString()));
         }
         String heading=undone?"Действие отменено":undo.map(r->r.kind().equals("COMPLETE")?ru.taskflow.shared.engagement.CompletionFeedback.forOperation(r.id()):"Задача создана").orElse("Изменения сохранены");

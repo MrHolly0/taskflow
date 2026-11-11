@@ -138,7 +138,7 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
               <h3>{task.title}</h3>
               <dl className="receipt-facts">
                 <div><IconCalendar aria-hidden="true" /><dt>Срок</dt><dd>{task.deadline ? formatReminderTime(task.deadline, timezone) : 'Без срока'}</dd></div>
-                <div><IconBell aria-hidden="true" /><dt>Напоминание</dt><dd>{reminders.length ? reminders.map(reminder => <span key={reminder.id}>{formatReminderTime(reminder.fireAt, timezone)}{Date.parse(reminder.fireAt) < Date.now() && ' · время прошло'}</span>) : 'Не назначено'}</dd></div>
+                <div><IconBell aria-hidden="true" /><dt>{reminders.length>1?'Напоминания':'Напоминание'}</dt><dd>{reminders.length ? reminders.map(reminder => <span key={reminder.id}>{formatReminderTime(reminder.fireAt, timezone)}{Date.parse(reminder.fireAt) < Date.now() && ' · время прошло'}</span>) : 'Не назначено'}</dd></div>
                 {task.plannedDate && <div><IconCalendar aria-hidden="true" /><dt>День работы</dt><dd>{formatPlannedDate(task.plannedDate, timezone)}</dd></div>}
               </dl>
               {task.status !== 'TODO' && <p className="receipt-group">Статус: {getStatusLabel(task.status as Parameters<typeof getStatusLabel>[0])}</p>}

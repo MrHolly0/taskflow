@@ -54,6 +54,7 @@ public interface AssistantService {
      * действий напоминание не имеет смысла.
      */
     Proposal updateActionReminder(UUID userId, UUID proposalId, int ordinal, OffsetDateTime reminderAt);
+    Proposal updateActionReminders(UUID userId, UUID proposalId, int ordinal, java.util.List<OffsetDateTime> reminderAts);
 
     /**
      * Правка дня исполнения у отдельного create-действия предложения (В2) —

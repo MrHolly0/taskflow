@@ -73,6 +73,18 @@ public final class WidgetTemplate {
                 : at.format(DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("ru")));
         return date + ", " + at.format(DateTimeFormatter.ofPattern("HH:mm"));
     }
+    public static String times(java.util.List<OffsetDateTime> values, ZoneId zone, Clock clock) {
+        var days = new java.util.LinkedHashMap<java.time.LocalDate,java.util.List<String>>();
+        values.stream().map(OffsetDateTime::toInstant).distinct().sorted().forEach(instant -> {
+            var local=instant.atZone(zone);
+            days.computeIfAbsent(local.toLocalDate(),ignored->new java.util.ArrayList<>())
+                    .add(local.format(DateTimeFormatter.ofPattern("HH:mm")));
+        });
+        return days.entrySet().stream().map(day -> {
+            String date=time(day.getKey().atStartOfDay(zone).toOffsetDateTime(),zone,clock).split(", ")[0];
+            return date+", "+String.join(", ",day.getValue());
+        }).collect(java.util.stream.Collectors.joining(" · "));
+    }
     public static String clip(String value, int limit) {
         if (value == null) return "";
         if (value.codePointCount(0, value.length()) <= limit) return value;

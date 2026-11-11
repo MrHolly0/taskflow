@@ -105,6 +105,7 @@ function ReminderLine({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={(e) => { e.stopPropagation(); startEditing(); }}
       className="ml-6 mt-0.5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
     >
@@ -120,6 +121,14 @@ function ReminderLine({
       )}
     </button>
   );
+}
+
+function ReminderSet({action,onChange,disabled}:{action:ProposedAction;onChange:(value:string|null|string[])=>void;disabled:boolean}) {
+  const values=[...new Set([...(typeof action.payload.reminder_at==='string'?[action.payload.reminder_at]:[]),
+    ...(Array.isArray(action.payload.reminder_ats)?action.payload.reminder_ats.filter((value):value is string=>typeof value==='string'):[])])];
+  if(values.length<=1 && !Array.isArray(action.payload.reminder_ats)) return <ReminderLine action={action} onChange={onChange} disabled={disabled}/>;
+  return <div className="space-y-1">{values.map((value,index)=><ReminderLine key={value} action={{...action,payload:{...action.payload,reminder_at:value,reminder_ats:undefined}}}
+    disabled={disabled} onChange={next=>onChange(values.flatMap((at,position)=>position===index?(next?[next]:[]):[at]))}/>)}</div>;
 }
 
 // В2: день исполнения — прямая пара к ReminderLine. planned_date хранит
@@ -180,6 +189,7 @@ function PlannedDateLine({
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={(e) => { e.stopPropagation(); startEditing(); }}
       className="ml-6 mt-0.5 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
     >
@@ -208,7 +218,7 @@ export function ProposalCard({
   proposal: Proposal;
   onToggle: (ordinal: number, accepted: boolean) => void;
   onSelect: (ordinal: number) => void;
-  onReminderChange: (ordinal: number, reminderAt: string | null) => void;
+  onReminderChange: (ordinal: number, reminderAt: string | null | string[]) => void;
   onPlannedDateChange: (ordinal: number, plannedDate: string | null) => void;
   onApply: (persistentOrdinals: number[]) => void;
   onReject: () => void;
@@ -228,7 +238,7 @@ export function ProposalCard({
     });
   };
   const allowsPersistent = (action: ProposedAction) => action.payload.no_reminder_needed !== true
-    && Boolean(action.payload.reminder_at || action.payload.deadline);
+    && Boolean(action.payload.reminder_at || (Array.isArray(action.payload.reminder_ats)&&action.payload.reminder_ats.length) || action.payload.deadline);
   const applyWithPersistent = () => onApply(Array.from(persistentOrdinals).filter(ordinal =>
     proposal.actions.some(action => action.ordinal === ordinal && action.accepted && allowsPersistent(action))));
   const isDegraded = proposal.status === 'FAILED' && !proposal.id;
@@ -279,6 +289,7 @@ export function ProposalCard({
                 type="radio"
                 name={`proposal-${proposal.id}-alternatives`}
                 checked={action.accepted}
+                disabled={applying || rejecting}
                 onChange={() => onSelect(action.ordinal)}
                 className="mt-0.5 flex-shrink-0"
               />
@@ -311,6 +322,7 @@ export function ProposalCard({
               <input
                 type="checkbox"
                 checked={action.accepted}
+                disabled={applying || rejecting}
                 onChange={(e) => onToggle(action.ordinal, e.target.checked)}
                 className="mt-0.5 flex-shrink-0"
               />
@@ -322,7 +334,7 @@ export function ProposalCard({
             {action.payload.deadline_time_inferred === true && <p className="ml-6 mt-1 text-sm text-muted-foreground">Срок до конца дня: точное время не указано.</p>}
             {action.type === 'CREATE' && action.accepted && (
               <>
-                <ReminderLine
+                <ReminderSet
                   action={action}
                   onChange={(reminderAt) => onReminderChange(action.ordinal, reminderAt)}
                   disabled={applying || rejecting}

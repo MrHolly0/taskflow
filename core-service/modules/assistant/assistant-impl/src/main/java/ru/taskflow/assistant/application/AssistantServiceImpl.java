@@ -269,6 +269,8 @@ public class AssistantServiceImpl implements AssistantService {
             throw new ValidationException("время напоминания уже прошло");
         }
 
+        if(readPayload(action.getPayload()).containsKey("reminder_ats"))
+            throw new ValidationException("У задачи несколько напоминаний, измени нужное время в списке");
         action.setPayload(withReminderAt(action.getPayload(), reminderAt));
 
         ProposalJpaEntity saved = proposalRepository.save(entity);
@@ -280,6 +282,28 @@ public class AssistantServiceImpl implements AssistantService {
      * что и у модели (Г1): снятие напоминания в карточке подтверждения —
      * тоже осознанный выбор, не молчание.
      */
+    @Override @Transactional
+    public Proposal updateActionReminders(UUID userId,UUID proposalId,int ordinal,List<OffsetDateTime> reminderAts) {
+        var entity=proposalRepository.findForUpdate(proposalId,userId).orElseThrow(()->new ProposalNotFoundException(proposalId));
+        requireEditable(entity,proposalId);
+        var action=entity.getActions().stream().filter(a->a.getOrdinal()==ordinal).findFirst()
+                .orElseThrow(()->new ValidationException("Действие не найдено"));
+        if(!action.getType().equals("CREATE")) throw new ValidationException("Список напоминаний относится к созданию задачи");
+        if(reminderAts==null || reminderAts.size()>5 || reminderAts.stream().anyMatch(java.util.Objects::isNull))
+            throw new ValidationException("Нужно не больше пяти времён напоминаний");
+        var now=OffsetDateTime.now(clock);
+        if(reminderAts.stream().anyMatch(at->!at.isAfter(now))) throw new ValidationException("Время напоминания уже прошло");
+        var values=reminderAts.stream().map(at->at.toInstant()).distinct().sorted().map(at->at.atOffset(java.time.ZoneOffset.UTC).toString()).toList();
+        Map<String,Object> payload=new LinkedHashMap<>(readPayload(action.getPayload()));
+        payload.remove("reminder_at");payload.remove("reminder_ats");payload.remove("no_reminder_needed");
+        if(values.isEmpty()) payload.put("no_reminder_needed",true);
+        else if(values.size()==1) payload.put("reminder_at",values.getFirst());
+        else payload.put("reminder_ats",values);
+        try { action.setPayload(objectMapper.writeValueAsString(payload)); }
+        catch(com.fasterxml.jackson.core.JsonProcessingException e) {throw new ValidationException("Не удалось сохранить напоминания");}
+        return proposalMapper.toDto(proposalRepository.save(entity));
+    }
+
     private String withReminderAt(String payloadJson, OffsetDateTime reminderAt) {
         Map<String, Object> payload = new LinkedHashMap<>(readPayload(payloadJson));
         if (reminderAt == null) {

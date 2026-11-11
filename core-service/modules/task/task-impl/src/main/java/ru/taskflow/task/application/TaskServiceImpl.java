@@ -133,8 +133,8 @@ public class TaskServiceImpl implements TaskService {
         TaskJpaEntity savedTask = taskRepository.save(task);
         auditService.record(userId, savedTask.getId(), AuditEventType.CREATED, null);
 
-        if (request.reminderAt() != null) {
-            taskReminderService.createStandaloneReminder(userId, savedTask, request.reminderAt());
+        if (!request.explicitReminders().isEmpty()) {
+            for(var at:request.explicitReminders()) taskReminderService.createStandaloneReminder(userId,savedTask,at);
         } else if (!Boolean.TRUE.equals(request.skipDefaultReminders())) {
             taskReminderService.planForDeadline(userId, savedTask);
         }
@@ -998,8 +998,8 @@ public class TaskServiceImpl implements TaskService {
 
         TaskJpaEntity savedTask = taskRepository.save(task);
 
-        if (request.reminderAt() != null) {
-            taskReminderService.createStandaloneReminder(userId, savedTask, request.reminderAt());
+        if (!request.explicitReminders().isEmpty()) {
+            for(var at:request.explicitReminders()) taskReminderService.createStandaloneReminder(userId,savedTask,at);
         } else if (!Boolean.TRUE.equals(request.skipDefaultReminders())) {
             taskReminderService.planForDeadline(userId, savedTask);
         }
@@ -1012,7 +1012,10 @@ public class TaskServiceImpl implements TaskService {
     }
 
     private void validateCreateReminder(CreateTaskRequest request) {
-        if (request.reminderAt() != null && !request.reminderAt().isAfter(OffsetDateTime.now(clock)))
+        if(request.reminderAts().size()>5 || request.explicitReminders().size()>5)
+            throw new ValidationException("За одно создание можно назначить не больше пяти напоминаний");
+        var now=OffsetDateTime.now(clock);
+        if(request.explicitReminders().stream().anyMatch(at->!at.isAfter(now)))
             throw new ValidationException("Время напоминания уже прошло");
     }
 

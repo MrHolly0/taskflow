@@ -79,6 +79,8 @@ public class ToolRegistry {
                                                                 + "задачи. Если названное время уже прошло — не "
                                                                 + "заполняй это поле и не создавай задачу вместо "
                                                                 + "него: вызови no_action с reason=past.")),
+                                                Map.entry("reminder_ats",Map.of("type","array","minItems",1,"maxItems",5,
+                                                        "items",Map.of("type","string"),"description","Несколько явно запрошенных напоминаний новой задачи в ISO8601. Один create, все времена в списке")),
                                                 Map.entry("ambiguous_reason", stringParam(
                                                         "Заполняй, только если это действие — одно из "
                                                                 + "взаимоисключающих прочтений одной и той же фразы "

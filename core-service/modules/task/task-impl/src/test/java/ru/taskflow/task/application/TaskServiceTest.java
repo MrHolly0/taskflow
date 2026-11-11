@@ -377,7 +377,7 @@ class TaskServiceTest {
         when(taskRepository.save(any())).thenReturn(entity);
         when(taskMapper.toResponse(entity)).thenReturn(mockResponse(taskId, entity.getTitle()));
         taskService.createQuick(userId, request);
-        verify(taskReminderService).createStandaloneReminder(userId, entity, time);
+        verify(taskReminderService).createStandaloneReminder(eq(userId), eq(entity), argThat(at->at.isEqual(time)));
         verify(taskReminderService, never()).planForDeadline(any(), any());
     }
 

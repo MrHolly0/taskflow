@@ -38,15 +38,15 @@ export function AssistantResultCard({result,proposal,className,onDismiss}:{resul
       const reverted=outcome.undone || Boolean(outcome.undoId && undone.includes(outcome.undoId));
       const task=details[index]?.data;
       const title=task?.title ?? (typeof action?.payload.title==='string'?action.payload.title:outcome.summary);
-      const reminder=task?.reminders?.filter(item=>item.status==='PENDING' && Date.parse(item.fireAt)>Date.now())
-        .sort((a,b)=>Date.parse(a.fireAt)-Date.parse(b.fireAt))[0];
+      const reminders=task?.reminders?.filter(item=>item.status==='PENDING' && Date.parse(item.fireAt)>Date.now())
+        .sort((a,b)=>Date.parse(a.fireAt)-Date.parse(b.fireAt))??[];
       const canUndo=outcome.undoId && !reverted && (!outcome.undoExpiresAt || Date.parse(outcome.undoExpiresAt)>Date.now());
       return <section key={outcome.ordinal}>
         <h3>{title}</h3>
         {reverted?<p role="status">{action?.type==='CREATE'?'Создание отменено':'Предыдущий статус возвращён'}</p>
           :action?.type==='CREATE' && task && isReady?<dl>
             <div><dt>Срок</dt><dd>{task.deadline?formatReminderTime(task.deadline,timezone):'Без срока'}</dd></div>
-            <div><dt>Напомнить</dt><dd>{reminder?formatReminderTime(reminder.fireAt,timezone):'Не назначено'}</dd></div>
+            <div><dt>{reminders.length>1?'Напоминания':'Напомнить'}</dt><dd>{reminders.length?reminders.map(reminder=><span className="block" key={reminder.id}>{formatReminderTime(reminder.fireAt,timezone)}</span>):'Не назначено'}</dd></div>
           </dl>:null}
         <div className="assistant-result-actions">
           {outcome.taskId && !(reverted&&action?.type==='CREATE') && <Button variant="outline" disabled={undo.isPending} onClick={()=>inspect(outcome.taskId!)}><IconPencil aria-hidden="true" />Изменить</Button>}

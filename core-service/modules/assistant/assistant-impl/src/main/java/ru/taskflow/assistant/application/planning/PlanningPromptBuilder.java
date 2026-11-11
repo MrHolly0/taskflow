@@ -85,6 +85,7 @@ public class PlanningPromptBuilder {
                 - Срок deadline и напоминание reminder_at различаются. remind меняет только напоминание.
                   Напоминание в прошлом — decline past, без создания задачи вместо напоминания.
                   Если «напомни сделать X» задаёт новое дело, используй create с title и reminder_at.
+                  У нового дела может быть несколько явных напоминаний: один create с reminder_ats (до пяти времён ISO8601), не remind на несуществующий ref.
                   remind допустим только для существующей задачи и всегда требует task_ref.
                   Если время названо без слова «напомни», это deadline, не reminder_at.
                   Даты ISO8601 со смещением зоны пользователя. Краткое «перенеси на 18» без месяца или слова «число»
@@ -98,7 +99,7 @@ public class PlanningPromptBuilder {
                   Меняй title только при явном упоминании текущего названия.
                   Description заполняй только дополнительными деталями, не повтором title.
                 - type: create/complete/cancel/reschedule/update/remind. priority: LOW/MEDIUM/HIGH/URGENT.
-                  Поля действий: title,description,priority,deadline,new_deadline,group,tags,note,reason,reminder_at,ambiguous_reason.
+                  Поля действий: title,description,priority,deadline,new_deadline,group,tags,note,reason,reminder_at,reminder_ats,ambiguous_reason.
                   Неиспользуемые поля пропускай. Максимум 20 действий.
                 - Выборка: ref одного кандидата ИЛИ query (буквальная подстрока названия/описания),
                   group (точное имя), status, priority, overdue, deadlineFrom, deadlineBefore, all.
@@ -192,7 +193,7 @@ public class PlanningPromptBuilder {
                 Изменение без новых значений и перенос без нового срока — clarification, не пустое действие.
 
                 Поля action по типу:
-                create: title обязательно; description,priority,deadline,planned_date,group,tags,reminder_at при необходимости.
+                create: title обязательно; description,priority,deadline,planned_date,group,tags,reminder_at,reminder_ats,reminder_after_minutes,reminder_before_deadline_minutes при необходимости.
                 complete/cancel: без полей изменений. reschedule: new_deadline либо new_deadline_time обязательно.
                 update: только реально изменённые title,description,priority,group.
                 remind: reminder_at ИЛИ reminder_before_deadline_minutes. Не добавляй другие изменения.
@@ -203,14 +204,21 @@ public class PlanningPromptBuilder {
 
                 Напоминания:
                 - Явное время «напомни завтра в 12» -> reminder_at в ISO8601. Сам deadline не меняй.
-                - «Через N минут/часов» отсчитывается от СЕЙЧАС, не требует deadline. Если это новое дело, create с reminder_at.
-                  Пример: «напомни через час проверить почту» при пустом списке — create «Проверить почту», время сейчас+60 минут.
+                - «Через N минут/часов» отсчитывается от СЕЙЧАС, не требует deadline. Для нового дела передай create с reminder_after_minutes:N (часы переведи в минуты).
+                  Пример: «напомни через час проверить почту» — create «Проверить почту», reminder_after_minutes:60.
+                  В «напомни через N минут, что в 23:00 надо сделать X» название X уже задано. Не спрашивай его повторно.
+                  Если нет явной ссылки на существующую задачу, это один create с названием X, deadline в 23:00 и reminder_after_minutes:N.
                 - «за N минут/часов/дней до срока/начала», «напомни за час» -> reminder_before_deadline_minutes,
                   целое число: минуты=N, часы=N*60, дни=N*1440. НЕ вычисляй reminder_at сам, НЕ отсчитывай от сейчас.
                   Пример: «напомни о договоре за полчаса» ->
                   {"steps":[{"select":{"query":"договор"},"action":{"type":"remind","reminder_before_deadline_minutes":30}}]}.
                   Это работает и для невидимого срока: сервер возьмёт deadline найденной задачи. Если его нет — уточнит.
-                - Новое дело с напоминанием — один create с title и reminder_at; без отдельного remind и без выдуманного deadline.
+                - Новое дело с одним или несколькими напоминаниями — ОДИН create с title, без отдельных remind для ещё не созданной задачи.
+                  create может совместить reminder_after_minutes и reminder_before_deadline_minutes: это два разных уведомления, не конфликт.
+                  «Напомни через 10 минут, что в 23:00 надо полить цветы; дополнительно за 10 минут до 23:00»:
+                  create «Полить цветы», deadline в 23:00, reminder_after_minutes:10, reminder_before_deadline_minutes:10.
+                  Для нескольких явно названных абсолютных времён используй reminder_ats — список ISO8601, максимум пять.
+                  Не теряй дополнительное напоминание и не создавай ради него ещё одну задачу.
                   При «встреча завтра в 15, напомни за час» — create с deadline и reminder_before_deadline_minutes:60.
                   У reschedule относительный отступ считается от нового срока, если напоминание явно запрошено.
                 - Время уведомления не названо («как-нибудь», «попозже», «напомни про X») — clarification, не угадывай.

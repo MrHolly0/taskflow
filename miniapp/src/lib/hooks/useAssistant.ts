@@ -119,10 +119,10 @@ export const useSetActionAccepted = () => {
 
 export const useUpdateActionReminder = () => {
   return useMutation({
-    mutationFn: async ({ proposalId, ordinal, reminderAt }: { proposalId: string; ordinal: number; reminderAt: string | null }) => {
+    mutationFn: async ({ proposalId, ordinal, reminderAt }: { proposalId: string; ordinal: number; reminderAt: string | null | string[] }) => {
       const response = await getClient().patch<Proposal>(
-        `/assistant/proposals/${proposalId}/actions/${ordinal}/reminder`,
-        { reminderAt }
+        `/assistant/proposals/${proposalId}/actions/${ordinal}/${Array.isArray(reminderAt)?'reminders':'reminder'}`,
+        Array.isArray(reminderAt)?{reminderAts:reminderAt}:{reminderAt}
       );
       return response.data;
     },

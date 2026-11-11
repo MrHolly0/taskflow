@@ -36,6 +36,7 @@ import ru.taskflow.shared.security.AuthenticatedUser;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.time.OffsetDateTime;
 
 /**
  * Точки входа ассистента. NotFoundException ловится здесь же, локальным
@@ -157,6 +158,13 @@ public class AssistantController {
             @AuthenticationPrincipal AuthenticatedUser user
     ) {
         return assistantService.updateActionReminder(user.userId(), id, ordinal, request.reminderAt());
+    }
+
+    public record UpdateRemindersRequest(@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=5) java.util.List<OffsetDateTime> reminderAts) {}
+    @PatchMapping("/proposals/{id}/actions/{ordinal}/reminders")
+    public Proposal updateActionReminders(@PathVariable UUID id,@PathVariable int ordinal,
+            @Valid @RequestBody UpdateRemindersRequest request,@AuthenticationPrincipal AuthenticatedUser user) {
+        return assistantService.updateActionReminders(user.userId(),id,ordinal,request.reminderAts());
     }
 
     @PatchMapping("/proposals/{id}/actions/{ordinal}/planned-date")

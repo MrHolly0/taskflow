@@ -15,12 +15,13 @@ import java.util.*;
 
 public class PlanningSession {
     private static final Set<String> SELECTOR_FIELDS = Set.of("ref", "query", "group", "status", "priority", "overdue", "deadlineFrom", "deadlineBefore", "all");
-    private static final Set<String> ACTION_FIELDS = Set.of("type", "task_ref", "title", "description", "priority", "deadline", "planned_date", "new_deadline", "group", "tags", "note", "reason", "reminder_at", "ambiguous_reason");
+    private static final Set<String> ACTION_FIELDS = Set.of("type", "task_ref", "title", "description", "priority", "deadline", "planned_date", "new_deadline", "group", "tags", "note", "reason", "reminder_at", "reminder_ats", "ambiguous_reason");
     private static final String DEADLINE_TIME = "new_deadline_time";
+    private static final String AFTER_NOW = "reminder_after_minutes";
     private static final String BEFORE_DEADLINE = "reminder_before_deadline_minutes";
     private static final Set<String> JSON_ACTION_FIELDS;
     static {
-        var fields = new HashSet<>(ACTION_FIELDS);fields.add(BEFORE_DEADLINE);fields.add(DEADLINE_TIME);
+        var fields = new HashSet<>(ACTION_FIELDS);fields.add(BEFORE_DEADLINE);fields.add(DEADLINE_TIME);fields.add(AFTER_NOW);
         JSON_ACTION_FIELDS = Set.copyOf(fields);
     }
     private final TaskService tasks;
@@ -202,9 +203,17 @@ public class PlanningSession {
             }
             if (actions.size() > 20) throw new PlanningException("ACTION_LIMIT");
         }
+        var reminderVerb=java.util.regex.Pattern.compile("(?U)\\bнапомн\\p{L}*\\b").matcher(sourceWithoutQuotes());
+        int reminderVerbs=0;while(reminderVerb.find()) reminderVerbs++;
+        if(reminderVerbs>=2 && sourceWithoutQuotes().matches("(?sU).*(дополнительно|также|ещ[её])\\s+напомн.*")) {
+            int supplied=0;
+            for(var action:actions) supplied+=(action.hasNonNull("reminder_at")?1:0)+(action.hasNonNull(AFTER_NOW)?1:0)
+                    +(action.hasNonNull(BEFORE_DEADLINE)?1:0)+action.path("reminder_ats").size();
+            if(supplied<2) throw new PlanningException("INVALID_ACTION","В реплике запрошено дополнительное напоминание. Сохрани оба времени в одном create, не теряй второе.");
+        }
         actions = compileSchedule(actions);
         if (!requestsReminder()) for (JsonNode action : actions)
-            if (action.hasNonNull("reminder_at")) throw new PlanningException("INVALID_ACTION",
+            if (action.hasNonNull("reminder_at") || action.hasNonNull("reminder_ats")) throw new PlanningException("INVALID_ACTION",
                     "Пользователь не просил уведомление. Время без просьбы напомнить относится к deadline, не reminder_at. Сохрани все действия.");
         if (actions.size() == 1 && "create".equals(actions.get(0).path("type").asText())
                 && !actions.get(0).hasNonNull("deadline") && !actions.get(0).hasNonNull("planned_date") && !requestsReminder()
@@ -318,7 +327,7 @@ public class PlanningSession {
         fields(action, JSON_ACTION_FIELDS);
         String type = action.path("type").asText();
         Set<String> mutable = switch (type) {
-            case "create" -> Set.of("title", "description", "priority", "deadline", "planned_date", "group", "tags", "reminder_at", BEFORE_DEADLINE);
+            case "create" -> Set.of("title", "description", "priority", "deadline", "planned_date", "group", "tags", "reminder_at", "reminder_ats", BEFORE_DEADLINE, AFTER_NOW);
             case "update" -> Set.of("title", "description", "priority", "group");
             case "reschedule" -> Set.of("new_deadline", DEADLINE_TIME, "reminder_at", BEFORE_DEADLINE);
             case "remind" -> Set.of("reminder_at", BEFORE_DEADLINE);
@@ -340,11 +349,18 @@ public class PlanningSession {
                     .contains(source.strip().toLowerCase(Locale.ROOT))
                     || source.strip().toLowerCase(Locale.ROOT).matches("(добавь|создай|запиши)\\s+(мне\\s+)?(задачу|дело)[.!?]?")))
             throw new PlanningException("INVALID_ACTION", "В исходной реплике только глагол без объекта. Нельзя создавать пустое дело или придумывать объект. Верни decline unclear или clarification.");
+        if(action.has(AFTER_NOW)) {
+            var offset=action.get(AFTER_NOW);
+            if(!offset.isIntegralNumber() || !offset.canConvertToInt() || offset.intValue()<1 || offset.intValue()>525600)
+                throw new PlanningException("INVALID_ACTION","reminder_after_minutes — целое число от 1 до 525600.");
+        }
+        if(action.has("reminder_ats") && (!action.get("reminder_ats").isArray() || action.get("reminder_ats").isEmpty()
+                || action.get("reminder_ats").size()>5)) throw new PlanningException("INVALID_ACTION","reminder_ats — от одного до пяти времён ISO8601.");
         if (action.has(BEFORE_DEADLINE)) {
             JsonNode offset = action.get(BEFORE_DEADLINE);
             if (!offset.isIntegralNumber() || !offset.canConvertToInt() || offset.intValue() < 0 || offset.intValue() > 525600)
                 throw new PlanningException("INVALID_ACTION", "reminder_before_deadline_minutes — целое число от 0 до 525600.");
-            if (action.has("reminder_at")) throw new PlanningException("INVALID_ACTION",
+            if (action.has("reminder_at") && !"create".equals(type)) throw new PlanningException("INVALID_ACTION",
                     "Укажи только один способ напоминания: reminder_at ИЛИ reminder_before_deadline_minutes.");
         }
     }
@@ -418,6 +434,29 @@ public class PlanningSession {
             String type = action.path("type").asText(),ref = action.path("task_ref").asText();
             if (("remind".equals(type) || "reschedule".equals(type)) && terminal.containsKey(ref))
                 throw new PlanningException("CONFLICTING_ACTIONS","Нельзя одновременно закрыть задачу и назначить ей новый срок или напоминание. Уточни команду.");
+            boolean compiledReminders=false;
+            if("create".equals(type) && (action.has(AFTER_NOW) || action.has("reminder_ats")
+                    || (action.has("reminder_at") && action.has(BEFORE_DEADLINE)))) {
+                compiledReminders=true;
+                var times=new java.util.TreeSet<java.time.Instant>();
+                try {
+                    if(action.has("reminder_at")) times.add(OffsetDateTime.parse(action.get("reminder_at").asText()).toInstant());
+                    if(action.has("reminder_ats")) for(var at:action.get("reminder_ats")) {
+                        if(!at.isTextual()) throw new IllegalArgumentException();
+                        times.add(OffsetDateTime.parse(at.asText()).toInstant());
+                    }
+                    if(action.has(AFTER_NOW)) times.add(now.plusMinutes(action.get(AFTER_NOW).intValue()).toInstant());
+                    if(action.has(BEFORE_DEADLINE)) {
+                        if(!action.hasNonNull("deadline")) throw new PlanningException("DEADLINE_REQUIRED","Для отступа от срока новой задачи нужен deadline.");
+                        times.add(OffsetDateTime.parse(action.get("deadline").asText()).minusMinutes(action.get(BEFORE_DEADLINE).intValue()).toInstant());
+                    }
+                } catch(java.time.format.DateTimeParseException invalid) { throw new PlanningException("INVALID_ACTION","Времена напоминаний должны содержать дату и смещение UTC."); }
+                catch(IllegalArgumentException invalid) { throw new PlanningException("INVALID_ACTION","reminder_ats содержит только времена ISO8601."); }
+                if(times.isEmpty() || times.size()>5) throw new PlanningException("INVALID_ACTION","Нужно от одного до пяти разных напоминаний.");
+                action.remove(List.of("reminder_at","reminder_ats",AFTER_NOW,BEFORE_DEADLINE));
+                if(times.size()==1) action.put("reminder_at",times.first().atZone(zone).toOffsetDateTime().toString());
+                else {var values=json.createArrayNode();times.forEach(at->values.add(at.atZone(zone).toOffsetDateTime().toString()));action.set("reminder_ats",values);}
+            }
             if (action.has(BEFORE_DEADLINE)) {
                 Object basis = "create".equals(type) ? action.path("deadline").asText(null)
                         : "reschedule".equals(type) ? action.path("new_deadline").asText(null)
@@ -430,7 +469,7 @@ public class PlanningSession {
                     throw new PlanningException("INVALID_ACTION","Для вычисления напоминания нужен полный срок ISO8601 со смещением зоны.");
                 }
             }
-            if (absoluteReminders == 1) normalizeFloatingReminder(action);
+            if (absoluteReminders == 1 && !compiledReminders) normalizeFloatingReminder(action);
             result.add(action);
             if ("reschedule".equals(type) && action.has("reminder_at")) {
                 var reminder = json.createObjectNode().put("type","remind").put("task_ref",ref);

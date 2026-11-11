@@ -132,6 +132,8 @@ public class ExperimentalAgentLoop {
             actionProperties.put("type", Map.of("type", "string", "enum", List.of("create","complete","cancel","reschedule","update","remind")));
             for (String field : List.of("title","description","deadline","planned_date","new_deadline","new_deadline_time","group","note","reason","reminder_at","ambiguous_reason"))
                 actionProperties.put(field, Map.of("type", "string"));
+            actionProperties.put("reminder_ats",Map.of("type","array","minItems",1,"maxItems",5,"items",Map.of("type","string")));
+            actionProperties.put("reminder_after_minutes",Map.of("type","integer","minimum",1,"maximum",525600));
             actionProperties.put("reminder_before_deadline_minutes", Map.of("type", "integer", "minimum", 0, "maximum", 525600));
             actionProperties.put("priority", Map.of("type", "string", "enum", List.of("LOW","MEDIUM","HIGH","URGENT")));
             actionProperties.put("tags", Map.of("type", "array", "items", Map.of("type", "string")));

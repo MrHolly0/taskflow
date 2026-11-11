@@ -22,6 +22,13 @@ class WidgetApiTest {
                 transport,OffsetDateTime.now().plusDays(7),2,0,expanded,
                 new WidgetState("reminder","<b>Задача & данные</b>",List.of(List.of("Срок","Сегодня, 14:20"))).identity(id,2));
     }
+    @Test void reminderTimesAreSortedDeduplicatedAndGroupedInTheUserTimezone() {
+        var now=OffsetDateTime.parse("2030-11-11T21:11:31+03:00");
+        var values=List.of(now.withHour(22).withMinute(50).withSecond(0),now.withMinute(21).withSecond(0),
+                now.withMinute(21).withSecond(0).withOffsetSameInstant(java.time.ZoneOffset.UTC),now.plusDays(1).withHour(9).withMinute(0).withSecond(0));
+        assertThat(WidgetTemplate.times(values,java.time.ZoneId.of("Europe/Moscow"),java.time.Clock.fixed(now.toInstant(),java.time.ZoneOffset.UTC)))
+                .isEqualTo("Сегодня, 21:21, 22:50 · Завтра, 09:00");
+    }
     @Test void sendCarriesPrivateStateWithoutDuplicatingTheTitleBelowTheWidget() {
         var builder=RestClient.builder().baseUrl("https://example.test/botTOKEN");
         var server=MockRestServiceServer.bindTo(builder).build();
