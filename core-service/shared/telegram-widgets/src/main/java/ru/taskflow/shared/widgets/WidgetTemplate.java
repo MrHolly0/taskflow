@@ -1,0 +1,67 @@
+package ru.taskflow.shared.widgets;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.zip.Deflater;
+
+public final class WidgetTemplate {
+    private static final String HTML = load();
+    private WidgetTemplate() {}
+
+    public static String html() { return HTML; }
+
+    public static String encode(ObjectMapper mapper, WidgetState state) {
+        try {
+            String json = mapper.writeValueAsString(state);
+            // В answerWidgetQuery к состоянию добавляется обёртка результата.
+            if (json.getBytes(StandardCharsets.UTF_8).length > 960) throw new IllegalArgumentException("WIDGET_STATE_TOO_LARGE");
+            return json;
+        } catch (JsonProcessingException e) { throw new IllegalArgumentException("INVALID_WIDGET_STATE", e); }
+    }
+    public static String caption(WidgetState state) {
+        StringBuilder text = new StringBuilder();
+        if (state.terminal() && state.heading()!=null) text.append("✓ ").append(state.heading()).append("\n");
+        if (state.total()!=null) text.append("Действие ").append(state.page()+1).append(" из ").append(state.total())
+                .append(" · выбрано ").append(state.selected()).append("\n");
+        text.append(state.title());
+        for (var row : state.rows()) text.append('\n').append(row.get(0)).append(": ").append(row.get(1));
+        if (state.warning()!=null) text.append("\n").append(state.warning());
+        if (state.status() != null) text.append("\n\n").append(state.status());
+        return clip(text.toString(), 950);
+    }
+    public static String time(OffsetDateTime value, ZoneId zone, Clock clock) {
+        if (value == null) return "Без срока";
+        var at = value.atZoneSameInstant(zone);
+        var today = clock.instant().atZone(zone).toLocalDate();
+        String date = at.toLocalDate().equals(today) ? "Сегодня" : at.toLocalDate().equals(today.plusDays(1)) ? "Завтра"
+                : at.format(DateTimeFormatter.ofPattern("d MMM", Locale.forLanguageTag("ru")));
+        return date + ", " + at.format(DateTimeFormatter.ofPattern("HH:mm"));
+    }
+    public static String clip(String value, int limit) {
+        if (value == null) return "";
+        if (value.codePointCount(0, value.length()) <= limit) return value;
+        return value.substring(0, value.offsetByCodePoints(0, limit - 1)) + "…";
+    }
+    private static String load() {
+        try (var input = WidgetTemplate.class.getResourceAsStream("/telegram/munin-widget.html")) {
+            if (input == null) throw new IllegalStateException("Missing widget template");
+            byte[] html = input.readAllBytes();
+            var deflater = new Deflater(9);
+            try {
+                deflater.setInput(html); deflater.finish();
+                byte[] compressed = new byte[4097];
+                int size = deflater.deflate(compressed);
+                if (html.length > 32768 || !deflater.finished() || size > 4096)
+                    throw new IllegalStateException("Widget template exceeds Telegram limits");
+            } finally { deflater.end(); }
+            return new String(html, StandardCharsets.UTF_8);
+        } catch (IOException e) { throw new IllegalStateException("Cannot read widget template", e); }
+    }
+}

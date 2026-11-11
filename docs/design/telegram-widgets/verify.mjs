@@ -29,3 +29,21 @@ const adversarial={...samples.checkin,title:'<img src="https://example.invalid/a
 const escaped=await runWidget(html,{context:{canQuery:true},data:{chatData:JSON.stringify(adversarial),publicData:null},probes:[`document.querySelectorAll('img').length`,`document.getElementById('title').textContent`]});
 assert.equal(escaped.probes[0],'0');assert.equal(escaped.probes[1],adversarial.title);assert.equal(escaped.requests.length,0);passed++;
 console.log('TOTAL',passed,'sandbox cases passed');
+const paged={...samples.proposal,key:'w:12345678-1234-1234-1234-123456789012:0',revision:0,
+ page:0,total:3,selected:2,accepted:true,fingerprint:'0123456789abcdef'};
+const loaded=await runWidget(html,{context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(paged),publicData:null},
+ probes:[`document.getElementById('paging').textContent`,`document.getElementById('actions').textContent`]});
+assert.match(loaded.probes[0],/1 из 3/);assert.match(loaded.probes[1],/Применить: 2/);assert.equal(loaded.requests.length,0);passed++;
+const nextButton=loaded.renderOps.filter(op=>op.op==='el'&&op.tag==='button')[2].id;
+const nextState={...paged,page:1,revision:1,key:paged.key.replace(':0',':1'),title:'Вторая задача'};
+const paginated=await runWidget(html,{context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(paged),publicData:null},
+ events:[{type:'click',targetId:nextButton,gesture:1}],onRequest:()=>({result:JSON.stringify({ok:true,state:nextState})}),
+ probes:[`document.getElementById('title').textContent`,`document.getElementById('paging').textContent`]});
+assert.equal(paginated.requests.length,1);assert.equal(paginated.probes[0],'Вторая задача');assert.match(paginated.probes[1],/2 из 3/);assert.deepEqual(paginated.diags,[]);passed++;
+const none=await runWidget(html,{context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify({...paged,selected:0,accepted:false}),publicData:null},
+ probes:[`document.querySelector('#actions button').disabled`]});
+assert.equal(none.probes[0],'true');assert.equal(none.requests.length,0);passed++;
+const returning=await runWidget(html,{context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify({kind:'return',key:paged.key,revision:0,title:'Расскажи о новых делах',rows:[]}),publicData:null},
+ probes:[`document.querySelectorAll('button').length`,`document.getElementById('note').textContent`]});
+assert.equal(returning.probes[0],'1');assert.equal(returning.probes[1],'');assert.equal(returning.requests.length,0);assert.deepEqual(returning.diags,[]);passed++;
+console.log('TOTAL including production states',passed,'sandbox cases passed');

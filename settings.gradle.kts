@@ -23,3 +23,5 @@ include("core-service:modules:assistant:assistant-impl")
 include("nlp-worker")
 include("notification-worker")
 include("core-service:shared:resource-control")
+
+include("core-service:shared:telegram-widgets")
