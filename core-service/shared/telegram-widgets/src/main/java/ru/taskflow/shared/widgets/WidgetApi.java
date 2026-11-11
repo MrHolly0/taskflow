@@ -44,7 +44,7 @@ public final class WidgetApi {
         }
     }
     private String caption(WidgetContext context) {
-        return context.expanded()?WidgetTemplate.caption(context.state()):context.state().title();
+        return context.expanded()?WidgetTemplate.caption(context.state()):"";
     }
     public void answer(String queryId, WidgetState state) {
         String data = "{\"ok\":true,\"state\":" + WidgetTemplate.encode(mapper,state) + "}";

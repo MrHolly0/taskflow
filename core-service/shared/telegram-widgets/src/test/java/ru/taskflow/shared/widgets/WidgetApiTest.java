@@ -22,14 +22,14 @@ class WidgetApiTest {
                 transport,OffsetDateTime.now().plusDays(7),2,0,expanded,
                 new WidgetState("reminder","<b>Задача & данные</b>",List.of(List.of("Срок","Сегодня, 14:20"))).identity(id,2));
     }
-    @Test void sendCarriesPrivateStateAndFallbackCaption() {
+    @Test void sendCarriesPrivateStateWithoutDuplicatingTheTitleBelowTheWidget() {
         var builder=RestClient.builder().baseUrl("https://example.test/botTOKEN");
         var server=MockRestServiceServer.bindTo(builder).build();
         var api=new WidgetApi(builder.build(),mapper);
         var c=context(false,"WIDGET");
         server.expect(requestTo("https://example.test/botTOKEN/sendWidget"))
                 .andExpect(jsonPath("$.allow_queries").value(true)).andExpect(jsonPath("$.public_data").doesNotExist())
-                .andExpect(jsonPath("$.caption").value("<b>Задача & данные</b>"))
+                .andExpect(jsonPath("$.caption").value(""))
                 .andExpect(jsonPath("$.parse_mode").doesNotExist())
                 .andExpect(jsonPath("$.reply_markup.inline_keyboard[0][0].text").value("Подробнее"))
                 .andRespond(withSuccess("{\"ok\":true,\"result\":{\"message_id\":567}}",MediaType.APPLICATION_JSON));
@@ -43,7 +43,19 @@ class WidgetApiTest {
         server.expect(requestTo("https://example.test/editMessageWidgetData")).andExpect(jsonPath("$.message_id").value(456))
                 .andRespond(withBadRequest().body("{\"description\":\"Bad Request: message is not modified\"}"));
         server.expect(requestTo("https://example.test/editMessageCaption")).andExpect(jsonPath("$.message_id").value(456))
+                .andExpect(jsonPath("$.caption").value(WidgetTemplate.caption(c.state())))
                 .andExpect(jsonPath("$.reply_markup.inline_keyboard[0][0].callback_data").value(c.state().key()+":done"))
+                .andRespond(withSuccess("{\"ok\":true}",MediaType.APPLICATION_JSON));
+        api.sync(c,"https://app.test");server.verify();
+    }
+    @Test void syncingAnUnexpandedWidgetClearsAnOldCaption() {
+        var builder=RestClient.builder().baseUrl("https://example.test");
+        var server=MockRestServiceServer.bindTo(builder).build();
+        var api=new WidgetApi(builder.build(),mapper);var c=context(false,"WIDGET");
+        server.expect(requestTo("https://example.test/editMessageWidgetData"))
+                .andRespond(withSuccess("{\"ok\":true}",MediaType.APPLICATION_JSON));
+        server.expect(requestTo("https://example.test/editMessageCaption"))
+                .andExpect(jsonPath("$.caption").value(""))
                 .andRespond(withSuccess("{\"ok\":true}",MediaType.APPLICATION_JSON));
         api.sync(c,"https://app.test");server.verify();
     }
