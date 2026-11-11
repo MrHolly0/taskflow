@@ -19,11 +19,11 @@ function paint(reset=true){
 }
 function outcome(action){
  const next={...current,revision:current.revision+1,terminal:true};
- if(action==='done'){next.heading='Одним делом меньше.';next.status='Задача завершена.';next.summary='Можно выдохнуть — это дело уже позади.';next.rows=[['Статус','Готово']];next.note='Спасибо, что рассказал об итоге.'}
- else if(action==='working'){next.heading='Оставил в работе.';next.status='Статус сохранён.';next.summary='Можно сосредоточиться на этом деле.';next.note='Срок задачи не менялся.'}
- else if(action==='later'){next.heading='Напомню через час.';next.status='Напоминание сохранено.';next.summary='Срок задачи остался прежним.';next.rows=[['Напомнить','Сегодня, 16:20'],['Срок','Сегодня, 14:20']];next.note='Перенесено напоминание, а не срок задачи.'}
- else if(action==='a'){next.heading='Задача записана.';next.status='Срок и напоминание сохранены.';next.summary='Начать собираться — в 13:00. Пара — в 14:20.';next.note='В настоящем боте здесь будут сохранённые данные задачи.'}
- else if(action==='r'){next.heading='Не добавлял задачу.';next.status='Предложение отклонено.';next.summary='Можно уточнить мысль новым сообщением.';next.note='Ничего не изменено.'}
+ if(action==='done'){next.heading='Одним делом меньше!';next.status='Задача завершена';next.summary='Можно выдохнуть — это дело уже позади';next.rows=[['Статус','Готово']];next.note=''}
+ else if(action==='working'){next.heading='Оставил в работе';next.status='Статус сохранён';next.summary='Можно сосредоточиться на этом деле';next.note=''}
+ else if(action==='later'){next.heading='Напомню через час';next.status='Напоминание сохранено';next.summary='Срок задачи остался прежним';next.rows=[['Напомнить','Сегодня, 16:20'],['Срок','Сегодня, 14:20']];next.note=''}
+ else if(action==='a'){next.heading='Задача записана';next.status='Срок и напоминание сохранены';next.summary='Начать собираться — в 13:00, пара — в 14:20';next.note=''}
+ else if(action==='r'){next.heading='Не добавлял задачу';next.status='Предложение отклонено';next.summary='Можно уточнить мысль новым сообщением';next.note=''}
  return next;
 }
 window.addEventListener('message',async event=>{
