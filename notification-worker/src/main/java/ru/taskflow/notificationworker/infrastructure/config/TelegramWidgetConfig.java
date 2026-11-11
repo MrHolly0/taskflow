@@ -12,6 +12,10 @@ import java.time.Clock;
 @Configuration
 public class TelegramWidgetConfig {
     @Bean
+    public ru.taskflow.shared.widgets.CheckinBatchView checkinBatchView(JdbcTemplate jdbc) {
+        return new ru.taskflow.shared.widgets.CheckinBatchView(jdbc,Clock.systemUTC());
+    }
+    @Bean
     public WidgetStore telegramWidgetStore(JdbcTemplate jdbc,ObjectMapper mapper) {
         return new WidgetStore(jdbc,mapper,Clock.systemUTC());
     }

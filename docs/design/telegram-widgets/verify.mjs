@@ -63,3 +63,18 @@ for(const theme of ['light','dark']) {
  assert.equal(changed.probes[0],'Действие отменено');assert.doesNotMatch(changed.probes[1],/Отменить/);assert.deepEqual(changed.diags,[]);passed++;
 }
 console.log('TOTAL including receipts',passed,'sandbox cases passed');
+const checkins={kind:'checkins',key:paged.key,revision:0,title:'Провести пару в вузе',rows:[['Срок','10 нояб, 14:20']],page:0,total:3};
+for(const theme of ['light','dark']) {
+ const opts={theme,context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(checkins),publicData:null}};
+ const initial=await runWidget(html,{...opts,probes:[`document.getElementById('paging').textContent`,`document.querySelectorAll('#actions button').length`]});
+ assert.match(initial.probes[0],/1 из 3/);assert.equal(initial.probes[1],'3');assert.equal(initial.requests.length,0);passed++;
+ const done=initial.renderOps.filter(op=>op.op==='el'&&op.tag==='button')[3].id;
+ const next={...checkins,key:checkins.key.replace(':0',':1'),revision:1,page:1,title:'Отправить документы'};
+ const changed=await runWidget(html,{...opts,events:[{type:'click',targetId:done,gesture:1}],onRequest:()=>({result:JSON.stringify({ok:true,state:next})}),
+  script:[{data:{chatData:JSON.stringify(checkins),publicData:null}}],probes:[`document.getElementById('title').textContent`,`document.getElementById('paging').textContent`]});
+ assert.equal(changed.requests.length,1);assert.equal(changed.requests[0].verdict,'foreground');assert.equal(changed.probes[0],next.title);assert.match(changed.probes[1],/2 из 3/);assert.deepEqual(changed.diags,[]);passed++;
+ const answered=await runWidget(html,{...opts,data:{chatData:JSON.stringify({...checkins,status:'Ещё в работе'}),publicData:null},
+  probes:[`document.querySelectorAll('#actions button').length`,`document.querySelectorAll('#paging button').length`,`document.getElementById('result').textContent`]});
+ assert.equal(answered.probes[0],'0');assert.equal(answered.probes[1],'3');assert.equal(answered.probes[2],'Ещё в работе');assert.equal(answered.requests.length,0);passed++;
+}
+console.log('TOTAL including grouped checkins',passed,'sandbox cases passed');

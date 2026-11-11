@@ -39,8 +39,8 @@ class EngagementGateTest {
                 CREATE TABLE reminders(task_id UUID, status TEXT DEFAULT 'PENDING', fire_at TIMESTAMPTZ);
                 CREATE TABLE engagement_prompts(id UUID PRIMARY KEY, user_id UUID, task_id UUID, kind TEXT,
                   deadline_snapshot TIMESTAMPTZ,started_snapshot TIMESTAMPTZ,estimate_snapshot INT,due_at TIMESTAMPTZ, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
-                  sent_at TIMESTAMPTZ, answered_at TIMESTAMPTZ, cancelled_at TIMESTAMPTZ);
-                CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY, user_id UUID, engagement_prompt_id UUID,
+                  sent_at TIMESTAMPTZ, answered_at TIMESTAMPTZ, answer TEXT, cancelled_at TIMESTAMPTZ,batch_id UUID);
+                CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY, user_id UUID, task_id UUID, engagement_prompt_id UUID,
                   channel TEXT, destination TEXT, payload_type TEXT, payload JSONB, fire_at TIMESTAMPTZ,
                   sent BOOLEAN DEFAULT false, sent_at TIMESTAMPTZ, retry_count INT DEFAULT 0,
                   failed_at TIMESTAMPTZ, lease_token UUID, lease_until TIMESTAMPTZ, last_error TEXT,
@@ -61,6 +61,51 @@ class EngagementGateTest {
                 prompt, user, task, now.minusHours(1), now.minusMinutes(1), now.plusDays(7));
         jdbc.update("INSERT INTO scheduled_notifications(id, user_id, engagement_prompt_id, channel, destination, payload_type, payload, fire_at) VALUES (?, ?, ?, 'TELEGRAM', '12345', 'TASK_CHECKIN', '{}'::jsonb, ?)",
                 notification, user, prompt, now.minusMinutes(1));
+    }
+
+    @Test void oldRemindersWaitForOneDeliveredCheckinInsteadOfFloodingTheChat() {
+        jdbc.update("UPDATE scheduled_notifications SET task_id=?,engagement_prompt_id=NULL,payload_type='TASK_REMINDER',fire_at=NOW()-INTERVAL '2 days'",task);
+        var first=claim();assertThat(poller.coalesceOverdueReminder(first)).isTrue();
+        assertThat(poller.claimPending(10)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT retry_count FROM scheduled_notifications",Integer.class)).isZero();
+        jdbc.update("UPDATE engagement_prompts SET sent_at=NOW()");
+        jdbc.update("UPDATE scheduled_notifications SET next_attempt_at=NOW()");
+        var next=claim();assertThat(poller.coalesceOverdueReminder(next)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications",Integer.class)).isZero();
+    }
+    @Test void aNewReminderAfterAnAnsweredQuestionIsNeverSwallowedByThatQuestion() {
+        jdbc.update("UPDATE engagement_prompts SET sent_at=NOW()-INTERVAL '4 hours',answer='later',answered_at=NOW()-INTERVAL '4 hours'");
+        jdbc.update("UPDATE scheduled_notifications SET task_id=?,engagement_prompt_id=NULL,payload_type='TASK_REMINDER',fire_at=NOW()-INTERVAL '2 hours'",task);
+        var reminder=claim();assertThat(poller.coalesceOverdueReminder(reminder)).isFalse();
+        assertThat(poller.isClaimActive(reminder)).isTrue();
+    }
+
+    @Test void freshExplicitReminderAndOptedOutUserKeepTheirNormalDelivery() {
+        jdbc.update("UPDATE scheduled_notifications SET task_id=?,engagement_prompt_id=NULL,payload_type='TASK_REMINDER',fire_at=NOW()",task);
+        var fresh=claim();assertThat(poller.coalesceOverdueReminder(fresh)).isFalse();
+        jdbc.update("UPDATE scheduled_notifications SET fire_at=NOW()-INTERVAL '2 days'");
+        jdbc.update("UPDATE user_settings SET task_checkins_enabled=false");
+        assertThat(poller.coalesceOverdueReminder(fresh)).isFalse();
+    }
+
+    @Test void deliveryRecoversADelayedDeadlineAfterSeveralDays() {
+        jdbc.update("UPDATE tasks SET deadline=NOW()-INTERVAL '6 days'");
+        jdbc.update("UPDATE engagement_prompts SET deadline_snapshot=NOW()-INTERVAL '6 days'");
+        jdbc.update("UPDATE tasks SET deadline=(SELECT deadline_snapshot FROM engagement_prompts)");
+        jdbc.update("UPDATE user_settings SET task_checkins_enabled_at=NOW()");
+        assertThat(poller.checkEngagement(claim(),prompt).valid()).isTrue();
+    }
+
+    @Test void batchDeliveryIsOneClaimAndAcknowledgesItsChildren() {
+        UUID child=UUID.randomUUID();
+        jdbc.update("UPDATE engagement_prompts SET kind='CHECKIN_BATCH',task_id=NULL,deadline_snapshot=NULL");
+        jdbc.update("INSERT INTO engagement_prompts(id,user_id,task_id,kind,deadline_snapshot,due_at,created_at,expires_at,batch_id) VALUES (?,?,?,'TASK_CHECKIN',?,?,?, ?,?)",
+                child,user,task,now.minusHours(1),now.minusMinutes(30),now,now.plusDays(7),prompt);
+        jdbc.update("UPDATE scheduled_notifications SET payload_type='CHECKIN_BATCH'");
+        var claim=claim();assertThat(poller.checkEngagement(claim,prompt).valid()).isTrue();
+        poller.markAsSent(claim);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE sent_at IS NOT NULL",Integer.class)).isEqualTo(2);
+        assertThat(poller.claimPending(10)).isEmpty();
     }
 
     @Test
@@ -115,7 +160,7 @@ class EngagementGateTest {
     }
 
     @Test
-    void optOutIdentityChangesAndReminderCancellationMakeDeliveryObsolete() {
+    void optOutAndIdentityChangesBlockDeliveryButConsumedRemindersDoNotLoseTheCheckin() {
         var claim = claim();
         jdbc.update("UPDATE user_settings SET task_checkins_enabled = false");
         assertThat(poller.checkEngagement(claim, prompt).valid()).isFalse();
@@ -126,7 +171,7 @@ class EngagementGateTest {
         assertThat(poller.checkEngagement(claim, prompt).valid()).isFalse();
         jdbc.update("UPDATE user_identities SET external_id = '12345'");
         jdbc.update("UPDATE reminders SET status = 'CANCELLED'");
-        assertThat(poller.checkEngagement(claim, prompt).valid()).isFalse();
+        assertThat(poller.checkEngagement(claim, prompt).valid()).isTrue();
     }
 
     @Test

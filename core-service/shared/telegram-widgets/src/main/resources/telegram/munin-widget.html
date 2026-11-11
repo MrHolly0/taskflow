@@ -23,6 +23,7 @@ var modes={
  return:{kind:'Как твои дела?',heading:'Разберём новые дела?',intro:'Можно рассказать словами — текстом или голосом',buttons:[['Не напоминать об этом','mute',0]],note:''},
  proposal:{kind:'Разбор запроса',heading:'Вот что я услышал',intro:'Проверь, всё ли верно',buttons:[['Добавить задачу','a',1],['Не добавлять','r',0]],note:''}
 };
+modes.checkins=modes.checkin;
 function el(id){return document.getElementById(id)}
 function text(id,value){el(id).textContent=value||''}
 function show(message,error){el('status').className='status show'+(error?' error':'');text('mark',error?'!':'✓');text('result',message)}
@@ -33,8 +34,9 @@ function render(next){
  el('rows').textContent='';(Array.isArray(d.rows)?d.rows:[]).slice(0,3).forEach(function(pair){var row=document.createElement('div'),label=document.createElement('span'),value=document.createElement('strong');row.className='row';label.textContent=pair[0];value.textContent=pair[1];row.appendChild(label);row.appendChild(value);el('rows').appendChild(row)});
  el('actions').textContent='';el('status').className='status';
  if(d.terminal){show(d.status||'Готово');return}
- if(d.kind==='receipt'&&d.total>1){nav('←','pg'+(d.page-1),d.page<=0);nav((d.page+1)+' из '+d.total,'noop',true);nav('→','pg'+(d.page+1),d.page>=d.total-1)}
+ if((d.kind==='receipt'||d.kind==='checkins')&&d.total>1){nav('←','pg'+(d.page-1),d.page<=0);nav((d.page+1)+' из '+d.total,'noop',true);nav('→','pg'+(d.page+1),d.page>=d.total-1)}
  if(d.kind==='proposal'&&d.total){if(d.total>1)nav('←','pg'+(d.page-1),d.page<=0);nav((d.accepted?'✓ ':'')+(d.page+1)+' из '+d.total,d.accepted?'sel0':'sel1',false);if(d.total>1)nav('→','pg'+(d.page+1),d.page>=d.total-1)}
+ if(d.kind==='checkins'&&d.status){show(d.status);return}
  m.buttons.forEach(function(action){if(d.kind==='receipt'&&!d.undoAvailable)return;var b=document.createElement('button');b.textContent=d.kind==='proposal'&&d.total&&action[1]==='a'?'Применить: '+d.selected:d.kind==='proposal'&&d.total&&action[1]==='r'?'Отклонить':action[0];b.className=(action[2]?'primary':'')+(action[3]?' wide':'');b.disabled=busy||!d.key||(d.kind==='proposal'&&action[1]==='a'&&d.selected===0);b.addEventListener('click',function(){act(d.key+':'+action[1])});el('actions').appendChild(b)});
  if(d.kind==='receipt'&&d.status)show(d.status,false);
 }

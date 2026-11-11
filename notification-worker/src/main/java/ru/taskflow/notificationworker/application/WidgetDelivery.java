@@ -16,6 +16,7 @@ import java.util.UUID;
 @Service
 public class WidgetDelivery {
     private final JdbcTemplate jdbc;
+    private final CheckinBatchView batches;
     private final WidgetStore store;
     private final WidgetApi api;
     private final ObjectMapper mapper;
@@ -23,11 +24,12 @@ public class WidgetDelivery {
     private final String appUrl;
     public WidgetDelivery(JdbcTemplate jdbc,WidgetStore store,WidgetApi api,ObjectMapper mapper,
             @Value("${app.telegram.widgets-enabled:false}") boolean enabled,
-            @Value("${app.public-base-url:}") String appUrl) {
-        this.jdbc=jdbc;this.store=store;this.api=api;this.mapper=mapper;this.enabled=enabled;this.appUrl=appUrl;
+            @Value("${app.public-base-url:}") String appUrl,CheckinBatchView batches) {
+        this.batches=batches;this.jdbc=jdbc;this.store=store;this.api=api;this.mapper=mapper;this.enabled=enabled;this.appUrl=appUrl;
     }
     public boolean send(PendingNotification notification) {
-        if (!enabled || !"TELEGRAM".equals(notification.channel()) || Long.parseLong(notification.destination())<=0) return false;
+        boolean batch="CHECKIN_BATCH".equals(notification.payloadType());
+        if ((!enabled && !batch) || !"TELEGRAM".equals(notification.channel()) || Long.parseLong(notification.destination())<=0) return false;
         var rows=jdbc.query("""
                 SELECT n.user_id,n.task_id,n.engagement_prompt_id,t.title,t.deadline,u.timezone,
                        p.deadline_snapshot,s.telegram_widgets_enabled
@@ -45,19 +47,24 @@ public class WidgetDelivery {
                 notification.id(),notification.leaseToken(),notification.destination(),notification.channel(),notification.payloadType());
         if (rows.isEmpty()) return true;
         var target=rows.getFirst();
-        if (!target.cards()) return false;
+        if (!target.cards() && !batch) return false;
         boolean reminder="TASK_REMINDER".equals(notification.payloadType());
         if ((reminder || java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(notification.payloadType())) && target.title()==null) return true;
         String kind=reminder?"reminder":java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(notification.payloadType())?"checkin":"return";
         String title=kind.equals("return")?"Расскажи о новых делах":WidgetTemplate.clip(target.title(),80);
-        var state=new WidgetState(kind,title,kind.equals("return")?List.of():
+        var state=batch?batches.render(target.userId(),target.promptId(),0):new WidgetState(kind,title,kind.equals("return")?List.of():
                 List.of(List.of("Срок",WidgetTemplate.time(target.deadline(),ZoneId.of(target.timezone()),Clock.systemUTC()))));
-        var context=store.reserve(target.userId(),reminder?"REMINDER":"ENGAGEMENT",
+        var context=store.reserve(target.userId(),batch?"CHECKINS":reminder?"REMINDER":"ENGAGEMENT",
                 reminder?notification.id():target.promptId(),target.taskId(),
                 reminder?target.deadline():target.snapshot(),Long.parseLong(notification.destination()),state);
         if (context.messageId()!=null) return true;
         long messageId;
         String transport="WIDGET";
+        if(batch && (!enabled || !target.cards())) {
+            context=new WidgetContext(context.id(),context.userId(),context.kind(),context.referenceId(),null,null,
+                    context.chatId(),null,"TEXT",context.expiresAt(),context.revision(),context.page(),true,context.state());
+            messageId=api.sendText(context,appUrl);store.bind(context.id(),messageId,"TEXT");return true;
+        }
         try { messageId=api.send(context,appUrl); }
         catch (RestClientResponseException e) {
             if (!WidgetApi.unsupported(e)) throw deliveryError(e);

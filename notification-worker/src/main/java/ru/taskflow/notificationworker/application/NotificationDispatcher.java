@@ -91,12 +91,13 @@ public class NotificationDispatcher {
                     .sendWidgetSync(notification);
             return true;
         }
-        if ("WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
+        if ("CHECKIN_BATCH".equals(notification.payloadType()) || "WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
             return dispatchEngagement(notification);
         }
         if (!"TASK_REMINDER".equals(notification.payloadType())) {
             throw new NotificationDeliveryException("UNKNOWN_PAYLOAD_TYPE", true, null);
         }
+        if(poller.coalesceOverdueReminder(notification)) return false;
         NotificationSender sender = senders.stream()
                 .filter(candidate -> candidate.supports(notification.channel()))
                 .findFirst()
@@ -137,7 +138,7 @@ public class NotificationDispatcher {
                 gate.timezone(), payload.appUrl());
         var sender=senders.stream().filter(candidate -> candidate.supports("TELEGRAM")).findFirst()
                 .orElseThrow(() -> new NotificationDeliveryException("UNSUPPORTED_CHANNEL",true,null));
-        if (widgetsEnabled) sender.sendEngagement(notification,current);
+        if (widgetsEnabled || "CHECKIN_BATCH".equals(notification.payloadType())) sender.sendEngagement(notification,current);
         else sender.sendEngagement(notification.destination(),notification.payloadType(),current);
         return true;
     }

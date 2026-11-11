@@ -30,6 +30,16 @@ public final class WidgetKeyboard {
                     if(!navigation.isEmpty()) rows.add(navigation);
                     if(Boolean.TRUE.equals(state.undoAvailable())) rows.add(List.of(button("Отменить",key+"undo")));
                 }
+                case "checkins" -> {
+                    var navigation=new ArrayList<Map<String,Object>>();
+                    if(state.page()>0) navigation.add(button("←",key+"pg"+(state.page()-1)));
+                    if(state.page()+1<state.total()) navigation.add(button("Следующее дело →",key+"pg"+(state.page()+1)));
+                    if(!navigation.isEmpty()) rows.add(navigation);
+                    if(state.status()==null) {
+                        rows.add(List.of(button("Готово",key+"done"),button("Ещё в работе",key+"working")));
+                        rows.add(List.of(button("Напомнить через час",key+"later")));
+                    }
+                }
                 case "reminder", "checkin" -> {
                     rows.add(List.of(button("Готово",key+"done"),button("Ещё в работе",key+"working")));
                     rows.add(List.of(button("Напомнить через час",key+"later")));

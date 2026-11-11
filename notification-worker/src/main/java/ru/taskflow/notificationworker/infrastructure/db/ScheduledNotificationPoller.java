@@ -65,6 +65,40 @@ public class ScheduledNotificationPoller {
     }
 
     @Transactional
+    public boolean coalesceOverdueReminder(PendingNotification notification) {
+        if(!"TELEGRAM".equals(notification.channel()) || !"TASK_REMINDER".equals(notification.payloadType())) return false;
+        var rows=jdbcTemplate.query("""
+                SELECT n.user_id, EXISTS(SELECT 1 FROM engagement_prompts p WHERE p.user_id=n.user_id AND p.task_id=t.id
+                  AND p.kind IN ('TASK_CHECKIN','WORK_CHECKIN') AND p.deadline_snapshot IS NOT DISTINCT FROM t.deadline
+                  AND p.cancelled_at IS NULL AND p.sent_at>=n.fire_at) AS covered
+                FROM scheduled_notifications n JOIN tasks t ON t.id=n.task_id AND t.user_id=n.user_id
+                JOIN user_settings s ON s.user_id=n.user_id
+                WHERE n.id=? AND n.lease_token=? AND n.lease_until>NOW() AND NOT n.sent AND n.failed_at IS NULL
+                  AND n.channel=? AND n.destination=? AND n.payload_type='TASK_REMINDER'
+                  AND n.fire_at<=NOW()-INTERVAL '30 minutes' AND t.deadline<=NOW()-INTERVAL '30 minutes'
+                  AND NOT t.is_deleted AND t.status IN ('TODO','IN_PROGRESS')
+                  AND s.notifications_enabled AND s.notify_telegram AND s.task_checkins_enabled
+                  AND NOT EXISTS(SELECT 1 FROM engagement_prompts prior WHERE prior.user_id=n.user_id AND prior.task_id=t.id
+                    AND prior.kind IN ('TASK_CHECKIN','WORK_CHECKIN') AND prior.deadline_snapshot IS NOT DISTINCT FROM t.deadline
+                    AND prior.cancelled_at IS NULL AND prior.sent_at<n.fire_at)
+                """,(rs,row)->new OverdueReminder(rs.getObject("user_id",UUID.class),rs.getBoolean("covered")),
+                notification.id(),notification.leaseToken(),notification.channel(),notification.destination());
+        if(rows.isEmpty()) return false;
+        var reminder=rows.getFirst();
+        if(reminder.covered()) jdbcTemplate.update("""
+                DELETE FROM scheduled_notifications WHERE id=? AND user_id=? AND lease_token=? AND lease_until>NOW()
+                  AND NOT sent AND failed_at IS NULL AND channel=? AND destination=?
+                """,notification.id(),reminder.user(),notification.leaseToken(),notification.channel(),notification.destination());
+        else jdbcTemplate.update("""
+                UPDATE scheduled_notifications SET next_attempt_at=NOW()+INTERVAL '90 seconds',lease_token=NULL,lease_until=NULL,
+                  retry_count=GREATEST(0,retry_count-1)
+                WHERE id=? AND user_id=? AND lease_token=? AND lease_until>NOW() AND NOT sent AND failed_at IS NULL AND channel=? AND destination=?
+                """,notification.id(),reminder.user(),notification.leaseToken(),notification.channel(),notification.destination());
+        return true;
+    }
+    private record OverdueReminder(UUID user,boolean covered) {}
+
+    @Transactional
     public void markAsSent(PendingNotification notification) {
         if ("WIDGET_SYNC".equals(notification.payloadType())) {
             jdbcTemplate.update("""
@@ -95,12 +129,13 @@ public class ScheduledNotificationPoller {
             jdbcTemplate.update("""
                     UPDATE engagement_prompts SET sent_at = NOW()
                     WHERE id = (SELECT engagement_prompt_id FROM scheduled_notifications WHERE id = ?)
-                    """, notification.id());
+                       OR batch_id = (SELECT engagement_prompt_id FROM scheduled_notifications WHERE id = ?)
+                    """, notification.id(), notification.id());
         }
     }
 
     private boolean isEngagement(PendingNotification notification) {
-        return "WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType());
+        return "CHECKIN_BATCH".equals(notification.payloadType()) || "WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType());
     }
 
     @Transactional(readOnly = true)
@@ -115,22 +150,32 @@ public class ScheduledNotificationPoller {
                     AND CASE WHEN p.kind = 'TASK_CHECKIN' THEN
                       s.task_checkins_enabled AND t.user_id = p.user_id AND NOT t.is_deleted
                       AND (t.status='TODO' OR (t.status='IN_PROGRESS' AND t.started_at IS NULL)) AND t.deadline = p.deadline_snapshot
-                      AND t.deadline >= s.task_checkins_enabled_at
-                      AND t.deadline BETWEEN NOW() - INTERVAL '24 hours' AND NOW() - INTERVAL '30 minutes'
+                      AND t.deadline <= NOW() - INTERVAL '30 minutes'
                       AND (t.planned_date IS NULL OR t.planned_date <= NOW())
-                      AND EXISTS (SELECT 1 FROM reminders r WHERE r.task_id = t.id AND r.status = 'PENDING')
                       AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id = t.id AND r.status = 'PENDING'
                         AND r.fire_at BETWEEN NOW() - INTERVAL '30 minutes' AND NOW() + INTERVAL '30 minutes')
                     WHEN p.kind = 'WORK_CHECKIN' THEN
                       s.task_checkins_enabled AND t.user_id=p.user_id AND NOT t.is_deleted
                       AND t.status='IN_PROGRESS' AND t.started_at=p.started_snapshot
-                      AND t.started_at>=s.task_checkins_enabled_at AND t.started_at>=NOW()-INTERVAL '24 hours'
                       AND t.deadline IS NOT DISTINCT FROM p.deadline_snapshot
                       AND t.estimate_minutes IS NOT DISTINCT FROM p.estimate_snapshot
                       AND p.due_at<=NOW() AND (t.planned_date IS NULL OR t.planned_date<=NOW()
                         OR t.planned_date_set_at IS NULL OR t.planned_date_set_at<=t.started_at)
                       AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id=t.id AND r.status='PENDING'
                         AND r.fire_at BETWEEN NOW()-INTERVAL '30 minutes' AND NOW()+INTERVAL '30 minutes')
+                    WHEN p.kind = 'CHECKIN_BATCH' THEN
+                      s.task_checkins_enabled AND EXISTS (
+                        SELECT 1 FROM engagement_prompts child JOIN tasks item ON item.id=child.task_id AND item.user_id=child.user_id
+                        WHERE child.batch_id=p.id AND child.user_id=p.user_id AND child.cancelled_at IS NULL AND child.answer IS NULL
+                          AND NOT item.is_deleted AND item.status IN ('TODO','IN_PROGRESS')
+                          AND item.deadline IS NOT DISTINCT FROM child.deadline_snapshot AND child.due_at<=NOW()
+                          AND (item.planned_date IS NULL OR item.planned_date<=NOW() OR (child.kind='WORK_CHECKIN'
+                            AND (item.planned_date_set_at IS NULL OR item.planned_date_set_at<=item.started_at)))
+                          AND ((child.kind='TASK_CHECKIN' AND (item.status='TODO' OR item.started_at IS NULL))
+                            OR (child.kind='WORK_CHECKIN' AND item.status='IN_PROGRESS' AND item.started_at=child.started_snapshot
+                              AND item.estimate_minutes IS NOT DISTINCT FROM child.estimate_snapshot))
+                          AND NOT EXISTS(SELECT 1 FROM reminders r WHERE r.task_id=item.id AND r.status='PENDING'
+                            AND r.fire_at BETWEEN NOW()-INTERVAL '30 minutes' AND NOW()+INTERVAL '30 minutes'))
                     WHEN p.kind = 'RETURN_NUDGE' THEN
                       s.return_nudges_enabled AND GREATEST(u.last_active_at, s.return_nudges_enabled_at)
                         <= p.created_at - INTERVAL '3 days'
@@ -160,7 +205,9 @@ public class ScheduledNotificationPoller {
                 UPDATE engagement_prompts SET cancelled_at = NOW()
                 WHERE id IN (SELECT engagement_prompt_id FROM scheduled_notifications
                   WHERE id = ? AND lease_token = ? AND NOT sent)
-                """, notification.id(), notification.leaseToken());
+                   OR batch_id IN (SELECT engagement_prompt_id FROM scheduled_notifications
+                  WHERE id = ? AND lease_token = ? AND NOT sent)
+                """, notification.id(), notification.leaseToken(), notification.id(), notification.leaseToken());
         jdbcTemplate.update("DELETE FROM scheduled_notifications WHERE id = ? AND lease_token = ? AND NOT sent",
                 notification.id(), notification.leaseToken());
     }

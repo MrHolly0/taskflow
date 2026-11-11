@@ -95,19 +95,19 @@ class EngagementIntegrationTest {
     }
 
     @Test
-    void doesNotAskBeforeThirtyMinutesOrAboutOldBacklog() {
+    void oldBacklogIsRecoveredWithoutSendingTheNextQuestionImmediately() {
         UUID user = user(true, false);
         task(user, NOW.minusMinutes(29));
         task(user, NOW.minusDays(2));
         plan(NOW);
-        assertThat(count()).isZero();
+        assertThat(count()).isEqualTo(1);
         plan(NOW.plusMinutes(1));
         assertThat(count()).isEqualTo(1);
     }
 
     @Test
     void excludesClosedMutedDeletedRescheduledAndRetrospectiveTasks() {
-        for (String change : List.of("done", "cancelled", "deleted", "muted", "future-plan", "retrospective", "channel-off", "global-off")) {
+        for (String change : List.of("done", "cancelled", "deleted", "future-plan", "retrospective", "channel-off", "global-off")) {
             UUID user = user(true, false);
             UUID task = task(user, NOW.minusHours(1));
             switch (change) {
@@ -137,13 +137,13 @@ class EngagementIntegrationTest {
     }
 
     @Test
-    void enablingDoesNotBringBackOldDeadlines() {
+    void enablingRecoversUnfinishedDeadlinesInOneGentleCheckin() {
         UUID user = user(false, false);
         task(user, NOW.minusHours(1));
         enable(user, true, false);
         jdbc.update("UPDATE user_settings SET task_checkins_enabled_at = ? WHERE user_id = ?", NOW, user);
         plan(NOW);
-        assertThat(count()).isZero();
+        assertThat(count()).isEqualTo(1);
     }
 
     @Test

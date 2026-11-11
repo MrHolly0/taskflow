@@ -19,6 +19,9 @@ import java.time.ZoneId;
 import java.time.DateTimeException;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -59,57 +62,49 @@ public class EngagementServiceImpl implements EngagementService {
         var now = OffsetDateTime.now(clock);
         jdbc.update("""
                 UPDATE engagement_prompts p SET cancelled_at = ?
-                WHERE p.sent_at IS NULL AND p.cancelled_at IS NULL
+                WHERE p.batch_id IS NULL AND p.sent_at IS NULL AND p.cancelled_at IS NULL
                   AND (p.expires_at <= ? OR NOT EXISTS (
                     SELECT 1 FROM scheduled_notifications n WHERE n.engagement_prompt_id = p.id))
                 """, now, now);
 
         String offsets = timezoneOffsets(now);
         if ("{}".equals(offsets)) return;
-        String workDue=ru.taskflow.shared.engagement.WorkCheckinSchedule.dueSql("candidate");
-        var work=jdbc.query("SELECT u.id AS user_id,i.external_id,u.timezone,t.id AS task_id,t.title,t.deadline,t.started_at,t.estimate_minutes,t.due_at "
-                +USERS+"""
-                JOIN LATERAL (SELECT candidate.id,candidate.title,candidate.deadline,candidate.started_at,candidate.estimate_minutes,
-                """+workDue+" AS due_at FROM tasks candidate WHERE candidate.user_id=u.id AND NOT candidate.is_deleted "
-                +"AND candidate.status='IN_PROGRESS' AND candidate.started_at>=s.task_checkins_enabled_at "
-                +"AND candidate.started_at>=? - INTERVAL '24 hours' AND (candidate.planned_date IS NULL OR candidate.planned_date<=? OR candidate.planned_date_set_at IS NULL OR candidate.planned_date_set_at<=candidate.started_at) "
-                +"AND "+workDue+"<=? AND NOT EXISTS (SELECT 1 FROM engagement_prompts p WHERE p.task_id=candidate.id "
-                +"AND p.kind='WORK_CHECKIN' AND p.started_snapshot=candidate.started_at AND p.cancelled_at IS NULL) "
-                +"AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id=candidate.id AND r.status='PENDING' "
-                +"AND r.fire_at BETWEEN ? - INTERVAL '30 minutes' AND ? + INTERVAL '30 minutes') "
-                +"ORDER BY due_at,candidate.id LIMIT 1) t ON true "+AUDIENCE
-                +" AND s.task_checkins_enabled ORDER BY t.due_at,u.id LIMIT 100",
+        jdbc.update("""
+                UPDATE engagement_prompts child SET cancelled_at=parent.cancelled_at
+                FROM engagement_prompts parent WHERE child.batch_id=parent.id
+                  AND parent.cancelled_at IS NOT NULL AND child.sent_at IS NULL AND child.cancelled_at IS NULL
+                """);
+        String workDue = ru.taskflow.shared.engagement.WorkCheckinSchedule.dueSql("candidate");
+        String due = "CASE WHEN candidate.status='IN_PROGRESS' AND candidate.started_at IS NOT NULL THEN "
+                + workDue + " ELSE GREATEST(candidate.deadline + INTERVAL '30 minutes', candidate.created_at + INTERVAL '30 minutes') END";
+        var candidates = jdbc.query("SELECT u.id AS user_id,i.external_id,u.timezone,t.* " + USERS + """
+                JOIN LATERAL (SELECT candidate.id AS task_id,candidate.title,candidate.deadline,CASE WHEN candidate.status='IN_PROGRESS' THEN candidate.started_at END AS started_at,candidate.estimate_minutes,
+                """ + due + " AS due_at FROM tasks candidate WHERE candidate.user_id=u.id AND NOT candidate.is_deleted "
+                + "AND candidate.status IN ('TODO','IN_PROGRESS') "
+                + "AND ((candidate.status='IN_PROGRESS' AND candidate.started_at IS NOT NULL) OR candidate.deadline IS NOT NULL) "
+                + "AND " + due + "<=? " + """
+                  AND (candidate.planned_date IS NULL OR candidate.planned_date<=?
+                    OR (candidate.status='IN_PROGRESS' AND candidate.started_at IS NOT NULL
+                      AND (candidate.planned_date_set_at IS NULL OR candidate.planned_date_set_at<=candidate.started_at)))
+                  AND NOT EXISTS (SELECT 1 FROM engagement_prompts p WHERE p.task_id=candidate.id AND p.cancelled_at IS NULL
+                    AND ((candidate.status='IN_PROGRESS' AND candidate.started_at IS NOT NULL
+                        AND p.kind='WORK_CHECKIN' AND p.started_snapshot=candidate.started_at)
+                      OR ((candidate.status='TODO' OR candidate.started_at IS NULL) AND p.kind='TASK_CHECKIN'
+                        AND p.deadline_snapshot=candidate.deadline)))
+                  AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id=candidate.id AND r.status='PENDING'
+                    AND r.fire_at BETWEEN ? - INTERVAL '30 minutes' AND ? + INTERVAL '30 minutes')
+                  ORDER BY due_at,candidate.id LIMIT 50) t ON true
+                """ + AUDIENCE + " AND s.task_checkins_enabled ORDER BY t.due_at,u.id LIMIT 5000",
                 (rs,row)->new Candidate(rs.getObject("user_id",UUID.class),rs.getString("external_id"),rs.getString("timezone"),
                         rs.getObject("task_id",UUID.class),rs.getString("title"),rs.getObject("deadline",OffsetDateTime.class),
                         rs.getObject("started_at",OffsetDateTime.class),rs.getObject("estimate_minutes",Integer.class),rs.getObject("due_at",OffsetDateTime.class)),
-                offsets,now,now,now,now,now,now,now,now);
-        for(var candidate:work) enqueue(candidate,"WORK_CHECKIN",now);
-
-        var checkins = jdbc.query("""
-                SELECT u.id AS user_id, i.external_id, u.timezone, t.id AS task_id, t.title, t.deadline
-                """ + USERS + """
-                JOIN LATERAL (SELECT candidate.id, candidate.title, candidate.deadline FROM tasks candidate
-                  WHERE candidate.user_id = u.id AND NOT candidate.is_deleted
-                    AND (candidate.status='TODO' OR (candidate.status='IN_PROGRESS' AND candidate.started_at IS NULL))
-                    AND candidate.deadline >= s.task_checkins_enabled_at
-                    AND candidate.deadline >= ? - INTERVAL '24 hours'
-                    AND candidate.deadline <= ? - INTERVAL '30 minutes'
-                    AND candidate.created_at <= candidate.deadline
-                    AND (candidate.planned_date IS NULL OR candidate.planned_date <= ?)
-                    AND EXISTS (SELECT 1 FROM reminders r WHERE r.task_id = candidate.id AND r.status = 'PENDING')
-                    AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id = candidate.id AND r.status = 'PENDING'
-                      AND r.fire_at BETWEEN ? - INTERVAL '30 minutes' AND ? + INTERVAL '30 minutes')
-                    AND NOT EXISTS (SELECT 1 FROM engagement_prompts p WHERE p.task_id = candidate.id
-                      AND p.deadline_snapshot = candidate.deadline AND p.kind = 'TASK_CHECKIN')
-                  ORDER BY candidate.deadline, candidate.id LIMIT 1) t ON true
-                """ + AUDIENCE + """
-                  AND s.task_checkins_enabled
-                  ORDER BY t.deadline, u.id LIMIT 100
-                """,
-                (rs, row) -> new Candidate(rs.getObject("user_id", UUID.class), rs.getString("external_id"),
-                        rs.getString("timezone"), rs.getObject("task_id", UUID.class), rs.getString("title"),
-                        rs.getObject("deadline", OffsetDateTime.class)), offsets, now, now, now, now, now, now, now, now);
-        for (var candidate : checkins) enqueue(candidate, "TASK_CHECKIN", now);
+                offsets,now,now,now,now,now,now,now);
+        Map<UUID,List<Candidate>> grouped = new LinkedHashMap<>();
+        for (var candidate : candidates) grouped.computeIfAbsent(candidate.userId(), ignored -> new ArrayList<>()).add(candidate);
+        for (var items : grouped.values()) {
+            if (items.size()==1) enqueue(items.getFirst(),items.getFirst().kind(),now);
+            else enqueueBatch(items,now);
+        }
 
         var returns = jdbc.query("SELECT u.id AS user_id, i.external_id, u.timezone " + USERS + AUDIENCE + """
                   AND s.return_nudges_enabled
@@ -170,6 +165,30 @@ public class EngagementServiceImpl implements EngagementService {
         } catch (JsonProcessingException failure) {
             throw new IllegalStateException("Cannot serialize notification", failure);
         }
+    }
+
+    private void enqueueBatch(List<Candidate> items, OffsetDateTime now) {
+        var first=items.getFirst();UUID batch=UUID.randomUUID();
+        int inserted=jdbc.update("""
+                INSERT INTO engagement_prompts(id,user_id,kind,created_at,expires_at)
+                SELECT ?,?,'CHECKIN_BATCH',?,? WHERE NOT EXISTS (SELECT 1 FROM engagement_prompts
+                  WHERE user_id=? AND cancelled_at IS NULL AND COALESCE(sent_at,created_at)>?-INTERVAL '24 hours')
+                """,batch,first.userId(),now,now.plusDays(7),first.userId(),now);
+        if(inserted==0) return;
+        for(int position=0;position<items.size();position++) {
+            var item=items.get(position);
+            jdbc.update("""
+                    INSERT INTO engagement_prompts(id,user_id,task_id,kind,deadline_snapshot,started_snapshot,estimate_snapshot,due_at,
+                      created_at,expires_at,batch_id,batch_position) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,UUID.randomUUID(),item.userId(),item.taskId(),item.kind(),item.deadline(),item.started(),item.estimate(),item.due(),now,now.plusDays(7),batch,position);
+        }
+        try {
+            var payload=mapper.writeValueAsString(Map.of("promptId",batch.toString(),"timezone",first.timezone(),"appUrl",appUrl));
+            jdbc.update("""
+                    INSERT INTO scheduled_notifications(id,user_id,channel,destination,fire_at,payload_type,payload,sent,retry_count,engagement_prompt_id)
+                    VALUES (?,?,'TELEGRAM',?,?,'CHECKIN_BATCH',?::jsonb,false,0,?)
+                    """,UUID.randomUUID(),first.userId(),first.destination(),now,payload,batch);
+        } catch(JsonProcessingException e) { throw new IllegalStateException("Cannot serialize notification",e); }
     }
 
     @Override
@@ -238,6 +257,7 @@ public class EngagementServiceImpl implements EngagementService {
 
     private record Candidate(UUID userId, String destination, String timezone, UUID taskId, String title,
                              OffsetDateTime deadline,OffsetDateTime started,Integer estimate,OffsetDateTime due) {
+        String kind() { return started==null?"TASK_CHECKIN":"WORK_CHECKIN"; }
         Candidate(UUID userId,String destination,String timezone,UUID taskId,String title,OffsetDateTime deadline) {
             this(userId,destination,timezone,taskId,title,deadline,null,null,null);
         }

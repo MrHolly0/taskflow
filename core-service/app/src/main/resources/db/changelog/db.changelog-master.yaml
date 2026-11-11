@@ -99,3 +99,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/049-reversible-task-actions.yaml
+
+  - include:
+      file: db/changelog/050-checkin-batches.yaml

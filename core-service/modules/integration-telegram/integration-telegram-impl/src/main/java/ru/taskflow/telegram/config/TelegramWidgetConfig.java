@@ -12,6 +12,10 @@ import java.time.Clock;
 @Configuration
 public class TelegramWidgetConfig {
     @Bean
+    public ru.taskflow.shared.widgets.CheckinBatchView checkinBatchView(JdbcTemplate jdbc) {
+        return new ru.taskflow.shared.widgets.CheckinBatchView(jdbc,Clock.systemUTC());
+    }
+    @Bean
     public WidgetApi telegramWidgetApi(@Value("${app.telegram.api-base-url:https://api.telegram.org}") String base,
             @Value("${app.telegram.bot-token:}") String token, ObjectMapper mapper) {
         return new WidgetApi(base,token,mapper);

@@ -30,6 +30,9 @@ class StartedTaskCheckinIntegrationTest {
     @DynamicPropertySource static void db(DynamicPropertyRegistry p) {p.add("spring.datasource.url",postgres::getJdbcUrl);p.add("spring.datasource.username",postgres::getUsername);p.add("spring.datasource.password",postgres::getPassword);}
     @Autowired JdbcTemplate jdbc;@Autowired UserService users;@Autowired TaskService tasks;@Autowired ObjectMapper mapper;
     @Autowired PlatformTransactionManager transactions;
+    @Autowired ru.taskflow.shared.widgets.WidgetStore widgets;
+    @Autowired ru.taskflow.shared.widgets.CheckinBatchView batches;
+    @Autowired ru.taskflow.telegram.application.WidgetActions widgetActions;
     final OffsetDateTime now=OffsetDateTime.parse("2031-01-15T12:00:00+03:00");UUID owner;
     @BeforeEach void clean() {
         jdbc.execute("TRUNCATE users CASCADE");owner=users.findOrCreateByTelegram(456789,"started_test","Тест",null).id();
@@ -80,6 +83,72 @@ class StartedTaskCheckinIntegrationTest {
     @Test void quietHoursDeferUntilMorningWithoutLosingWork() {
         var evening=now.withHour(22);started(30,evening.minusMinutes(45));
         plan(evening);assertThat(count()).isZero();plan(evening.plusDays(1).withHour(9));assertThat(count()).isEqualTo(1);
+    }
+    @Test void severalMissedDeadlinesAndAbandonedWorkCreateOneMessageAfterDowntime() {
+        for(int i=0;i<4;i++) overdue(now.minusDays(3+i));
+        UUID work=started(null,now.minusDays(5));
+        jdbc.update("UPDATE user_settings SET task_checkins_enabled_at=? WHERE user_id=?",now,owner);
+        plan(now);plan(now.plusMinutes(1));
+        UUID root=batch();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE batch_id=?",Integer.class,root)).isEqualTo(5);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications WHERE payload_type='CHECKIN_BATCH'",Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications WHERE payload_type IN ('TASK_CHECKIN','WORK_CHECKIN')",Integer.class)).isZero();
+    }
+    @Test void unsentExpiredBatchCanBeRecoveredWithoutLosingItsTasks() {
+        overdue(now.minusDays(3));overdue(now.minusDays(4));plan(now);
+        UUID old=batch();plan(now.plusDays(8));
+        assertThat(jdbc.queryForObject("SELECT cancelled_at IS NOT NULL FROM engagement_prompts WHERE id=?",Boolean.class,old)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE batch_id IS NOT NULL AND cancelled_at IS NULL",Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE kind='CHECKIN_BATCH' AND cancelled_at IS NULL",Integer.class)).isEqualTo(1);
+    }
+    @Test void batchPagingAnswersOnlyTheCurrentTaskAndStaleTapsDoNotCloseTheNextOne() {
+        overdue(now.minusDays(3));overdue(now.minusDays(4));plan(now);UUID root=batch();
+        jdbc.update("UPDATE engagement_prompts SET sent_at=?",now);
+        var c=widgets.reserve(owner,"CHECKINS",root,null,null,456789,batches.render(owner,root,0));
+        widgets.bind(c.id(),100,"WIDGET");c=widgets.find(c.id(),owner).orElseThrow();
+        var current=batches.item(owner,root,0);String key=c.state().key()+":done";
+        var next=widgetActions.act(owner,456789,100,key);
+        assertThat(tasks.findById(owner,current.taskId()).status()).isEqualTo(TaskStatus.DONE);
+        assertThat(next.terminal()).isFalse();assertThat(next.page()).isEqualTo(1);
+        assertThat(widgetActions.act(owner,456789,100,key)).isEqualTo(next);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE status='DONE'",Integer.class)).isEqualTo(1);
+        var finalState=widgetActions.act(owner,456789,100,next.key()+":working");
+        assertThat(finalState.terminal()).isTrue();assertThat(finalState.heading()).isEqualTo("Всё разобрали!");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE batch_id=? AND answer IS NOT NULL",Integer.class,root)).isEqualTo(2);
+    }
+    @Test void aChangedTaskInTheBatchCannotBeCompletedThroughTheOldQuestion() {
+        overdue(now.minusDays(3));overdue(now.minusDays(4));plan(now);UUID root=batch();
+        jdbc.update("UPDATE engagement_prompts SET sent_at=?",now);
+        var c=widgets.reserve(owner,"CHECKINS",root,null,null,456789,batches.render(owner,root,0));
+        widgets.bind(c.id(),100,"WIDGET");c=widgets.find(c.id(),owner).orElseThrow();
+        var item=batches.item(owner,root,0);jdbc.update("UPDATE tasks SET deadline=? WHERE id=?",now.plusDays(1),item.taskId());
+        var state=widgetActions.act(owner,456789,100,c.state().key()+":done");
+        assertThat(state.status()).isEqualTo("Дело уже изменилось");
+        assertThat(tasks.findById(owner,item.taskId()).status()).isEqualTo(TaskStatus.TODO);
+        assertThatThrownBy(()->widgetActions.act(owner,999,100,state.key()+":done")).hasMessageContaining("недоступна");
+    }
+    @Test void anUnstartedTaskWithoutDeadlineDoesNotBreakTheBacklogScan() {
+        var loose=tasks.createQuick(owner,new CreateTaskRequest("Без срока",null,TaskPriority.MEDIUM,null,null,null,List.of(),null,TaskSource.MANUAL));
+        jdbc.update("UPDATE tasks SET created_at=? WHERE id=?",now.minusDays(3),loose.id());
+        UUID due=overdue(now.minusDays(2));plan(now);
+        assertThat(count()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT task_id FROM engagement_prompts",UUID.class)).isEqualTo(due);
+    }
+    @Test void largeBacklogIsBoundedAndTheRemainderIsKeptForTheNextDay() {
+        for(int i=0;i<60;i++) overdue(now.minusDays(2+i));
+        plan(now);UUID first=batch();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE batch_id=?",Integer.class,first)).isEqualTo(50);
+        jdbc.update("UPDATE engagement_prompts SET sent_at=?",now);
+        jdbc.update("UPDATE scheduled_notifications SET sent=true WHERE engagement_prompt_id=?",first);
+        plan(now.plusHours(1));assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM engagement_prompts WHERE kind='CHECKIN_BATCH'",Integer.class)).isEqualTo(1);
+        plan(now.plusDays(1));
+        assertThat(jdbc.queryForObject("SELECT COUNT(DISTINCT task_id) FROM engagement_prompts WHERE batch_id IS NOT NULL",Integer.class)).isEqualTo(60);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM scheduled_notifications WHERE payload_type='CHECKIN_BATCH'",Integer.class)).isEqualTo(2);
+    }
+    private UUID batch() { return jdbc.queryForObject("SELECT id FROM engagement_prompts WHERE kind='CHECKIN_BATCH' AND cancelled_at IS NULL",UUID.class); }
+    private UUID overdue(OffsetDateTime deadline) {
+        var task=tasks.createQuick(owner,new CreateTaskRequest("Провести пару",null,TaskPriority.MEDIUM,null,null,null,List.of(),null,TaskSource.MANUAL));
+        jdbc.update("UPDATE tasks SET deadline=?,created_at=? WHERE id=?",deadline,deadline.minusDays(1),task.id());return task.id();
     }
     private UUID started(Integer estimate,OffsetDateTime at) {
         var task=tasks.createQuick(owner,new CreateTaskRequest("Подготовить пару",null,TaskPriority.MEDIUM,null,null,null,List.of(),estimate,TaskSource.MANUAL));

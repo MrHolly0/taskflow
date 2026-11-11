@@ -1,0 +1,27 @@
+databaseChangeLog:
+  - changeSet:
+      id: 050-checkin-batches
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE engagement_prompts ADD COLUMN batch_id UUID REFERENCES engagement_prompts(id) ON DELETE CASCADE;
+              ALTER TABLE engagement_prompts ADD COLUMN batch_position INT;
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_batch_position_check
+                CHECK ((batch_id IS NULL AND batch_position IS NULL) OR (batch_id IS NOT NULL AND batch_position >= 0));
+              CREATE UNIQUE INDEX idx_engagement_batch_position ON engagement_prompts(batch_id,batch_position) WHERE batch_id IS NOT NULL;
+              ALTER TABLE engagement_prompts DROP CONSTRAINT engagement_kind_check;
+              ALTER TABLE engagement_prompts DROP CONSTRAINT engagement_subject_check;
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_kind_check CHECK (kind IN ('TASK_CHECKIN','WORK_CHECKIN','RETURN_NUDGE','CHECKIN_BATCH'));
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_subject_check CHECK (
+                (kind='TASK_CHECKIN' AND task_id IS NOT NULL AND deadline_snapshot IS NOT NULL)
+                OR (kind='WORK_CHECKIN' AND task_id IS NOT NULL AND started_snapshot IS NOT NULL AND due_at IS NOT NULL)
+                OR (kind IN ('RETURN_NUDGE','CHECKIN_BATCH') AND task_id IS NULL));
+              DROP INDEX idx_checkin_task_deadline;
+              CREATE UNIQUE INDEX idx_checkin_task_deadline ON engagement_prompts(task_id,deadline_snapshot)
+                WHERE kind='TASK_CHECKIN' AND cancelled_at IS NULL;
+              ALTER TABLE telegram_widget_contexts DROP CONSTRAINT telegram_widget_kind_check;
+              ALTER TABLE telegram_widget_contexts ADD CONSTRAINT telegram_widget_kind_check
+                CHECK (kind IN ('REMINDER','ENGAGEMENT','PROPOSAL','RECEIPT','CHECKINS'));
+              CREATE INDEX idx_engagement_task_delivery ON engagement_prompts(task_id,deadline_snapshot,sent_at)
+                WHERE cancelled_at IS NULL AND kind IN ('TASK_CHECKIN','WORK_CHECKIN');

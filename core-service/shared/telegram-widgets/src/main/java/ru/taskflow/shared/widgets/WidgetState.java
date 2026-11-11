@@ -11,6 +11,12 @@ public record WidgetState(String kind, String key, long revision, String title, 
     public WidgetState(String kind, String title, List<List<String>> rows) {
         this(kind, null, 0, title, rows, false, null, null, null, null, null, null, null, null, null, null,null,null);
     }
+    public WidgetState feedback(String message) {
+        return new WidgetState(kind,key,revision,title,rows,terminal,heading,summary,status,note,page,total,selected,accepted,message,fingerprint,taskId,undoAvailable);
+    }
+    public WidgetState checkins(int page,int total,String taskId,String status) {
+        return new WidgetState(kind,key,revision,title,rows,false,null,null,status,"",page,total,null,null,null,null,taskId,null);
+    }
     public WidgetState receipt(int page,int total,boolean available,String taskId,String heading,String status) {
         return new WidgetState(kind,key,revision,title,rows,false,heading,null,status,"",page,total,null,null,null,null,taskId,available);
     }

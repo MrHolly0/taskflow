@@ -19,6 +19,7 @@ import java.util.UUID;
 @Service
 public class WidgetActions {
     private final WidgetStore store;
+    private final CheckinBatchView batches;
     private final JdbcTemplate jdbc;
     private final TaskService tasks;
     private final AssistantService assistant;
@@ -30,8 +31,8 @@ public class WidgetActions {
     private final ru.taskflow.task.api.TaskOperationService operations;
     public WidgetActions(WidgetStore store,JdbcTemplate jdbc,TaskService tasks,AssistantService assistant,
             EngagementService engagement,WidgetProposalProjection projection,UserService users,Clock clock,WidgetReceiptProjection receipts,
-            ru.taskflow.task.api.TaskOperationService operations) {
-        this.store=store;this.jdbc=jdbc;this.tasks=tasks;this.assistant=assistant;
+            ru.taskflow.task.api.TaskOperationService operations,CheckinBatchView batches) {
+        this.batches=batches;this.store=store;this.jdbc=jdbc;this.tasks=tasks;this.assistant=assistant;
         this.engagement=engagement;this.projection=projection;this.users=users;this.clock=clock;this.receipts=receipts;this.operations=operations;
     }
     @Transactional(timeout=10)
@@ -47,7 +48,7 @@ public class WidgetActions {
         if (preview.chatId()!=chatId || !Objects.equals(preview.messageId(),messageId))
             throw new IllegalArgumentException("Карточка недоступна");
         // Порядок совпадает с изменением задачи и ответом на проверку результата.
-        UUID lockedTask=preview.kind().equals("RECEIPT")?receipts.taskId(userId,preview.referenceId(),preview.page()):preview.taskId();
+        UUID lockedTask=preview.kind().equals("CHECKINS")?(preview.state().taskId()==null?null:UUID.fromString(preview.state().taskId())):preview.kind().equals("RECEIPT")?receipts.taskId(userId,preview.referenceId(),preview.page()):preview.taskId();
         if (lockedTask!=null) jdbc.query("SELECT id FROM tasks WHERE id=? AND user_id=? FOR UPDATE",
                 (rs,row)->rs.getObject(1,UUID.class),lockedTask,userId);
         var context=store.lock(token.id(),userId).orElseThrow();
@@ -57,6 +58,27 @@ public class WidgetActions {
         requireDeadline(deadline);
         if (context.revision()!=token.revision()) { store.enqueueSync(context); return context.state(); }
         if (token.action().equals("details")) return store.save(context,context.state(),context.page(),true).state();
+        if(context.kind().equals("CHECKINS")) {
+            int page=context.page();
+            var fresh=batches.render(userId,context.referenceId(),page);
+            if(fresh.terminal() || !Objects.equals(fresh.fingerprint(),context.state().fingerprint())) return save(context,fresh,page);
+            if(token.action().matches("pg[0-9]{1,4}")) {
+                page=Integer.parseInt(token.action().substring(2));batches.item(userId,context.referenceId(),page);
+                return save(context,batches.render(userId,context.referenceId(),page),page);
+            }
+            if(!List.of("done","working","later").contains(token.action())) throw new IllegalArgumentException("Неизвестное действие");
+            var item=batches.item(userId,context.referenceId(),page);
+            if(!item.pending()) return save(context,fresh,page);
+            requireDeadline(deadline);
+            var reply=engagement.reply(userId,item.id(),token.action());
+            if(!reply.terminal()) throw new IllegalArgumentException(clean(reply.text()));
+            page=batches.next(userId,context.referenceId(),page);
+            var next=batches.render(userId,context.referenceId(),page);
+            if(!next.terminal()) next=next.feedback("«"+WidgetTemplate.clip(item.title(),32)+"» — "+switch(Objects.toString(reply.outcome(),"")) {
+                case "done" -> "готово!"; case "working" -> "ещё в работе"; case "later" -> "напомню через час"; default -> "уже изменилось";
+            });
+            return save(context,next,page);
+        }
         if(context.kind().equals("RECEIPT")) {
             int page=context.page();
             if(token.action().matches("pg[0-9]{1,4}")) {
