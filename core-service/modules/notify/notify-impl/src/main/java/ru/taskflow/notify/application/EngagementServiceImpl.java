@@ -207,11 +207,11 @@ public class EngagementServiceImpl implements EngagementService {
 
     private String answerText(String action) {
         return switch (action) {
-            case "done" -> "✅ Задача завершена.";
-            case "working" -> "⏳ Задача в работе. Больше не спрашиваю об этом сроке.";
-            case "later" -> "🔔 Напомню через час. Срок задачи не изменён.";
-            case "mute" -> "Приглашения вернуться выключены. Напоминания о задачах остались как были.";
-            default -> "Ответ уже сохранён.";
+            case "done" -> "✅ Задача завершена";
+            case "working" -> "⏳ Задача в работе";
+            case "later" -> "🔔 Напомню через час\nСрок задачи не изменён";
+            case "mute" -> "Приглашения вернуться выключены\nНапоминания о задачах не менялись";
+            default -> "Ответ уже сохранён";
         };
     }
 
