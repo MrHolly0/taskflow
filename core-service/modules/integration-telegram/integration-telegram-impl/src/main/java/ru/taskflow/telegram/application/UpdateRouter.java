@@ -39,6 +39,7 @@ public class UpdateRouter {
         TelegramCallbackQuery callback = update.callbackQuery();
         if (callback != null) {
             UUID userId = resolveUser(callback.from()).id();
+            userService.recordActivity(userId);
             callbackHandler.handle(callback, userId);
             return;
         }
@@ -47,6 +48,7 @@ public class UpdateRouter {
         if (message == null || message.from() == null) return;
 
         UUID userId = resolveUser(message.from()).id();
+        userService.recordActivity(userId);
 
         if (message.voice() != null) {
             voiceHandler.handle(message, userId);

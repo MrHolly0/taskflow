@@ -33,4 +33,10 @@ public class SettingsController {
         userService.updateSettings(user.userId(), request);
         return userService.getSettings(user.userId());
     }
+
+    @PostMapping("/activity")
+    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+    public void activity(@AuthenticationPrincipal AuthenticatedUser user) {
+        userService.recordActivity(user.userId());
+    }
 }

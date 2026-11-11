@@ -21,6 +21,8 @@ public interface UserService {
 
     UserSettingsDto getSettings(UUID userId);
 
+    void recordActivity(UUID userId);
+
     void updateSettings(UUID userId, UpdateSettingsRequest request);
 
     ZoneId getTimezone(UUID userId);

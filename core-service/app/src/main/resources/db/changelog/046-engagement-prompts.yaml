@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: 046-engagement-prompts
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE users ADD COLUMN last_active_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+              ALTER TABLE user_settings ADD COLUMN task_checkins_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+              ALTER TABLE user_settings ADD COLUMN return_nudges_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+              ALTER TABLE user_settings ADD COLUMN task_checkins_enabled_at TIMESTAMPTZ;
+              ALTER TABLE user_settings ADD COLUMN return_nudges_enabled_at TIMESTAMPTZ;
+              ALTER TABLE scheduled_notifications ALTER COLUMN task_id DROP NOT NULL;
+              CREATE TABLE engagement_prompts (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id),
+                task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+                kind VARCHAR(24) NOT NULL CHECK (kind IN ('TASK_CHECKIN', 'RETURN_NUDGE')),
+                deadline_snapshot TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL,
+                expires_at TIMESTAMPTZ NOT NULL,
+                sent_at TIMESTAMPTZ,
+                answered_at TIMESTAMPTZ,
+                answer VARCHAR(24),
+                cancelled_at TIMESTAMPTZ,
+                CHECK ((kind = 'TASK_CHECKIN' AND task_id IS NOT NULL AND deadline_snapshot IS NOT NULL)
+                  OR (kind = 'RETURN_NUDGE' AND task_id IS NULL))
+              );
+              CREATE UNIQUE INDEX idx_checkin_task_deadline ON engagement_prompts(task_id, deadline_snapshot)
+                WHERE kind = 'TASK_CHECKIN';
+              CREATE INDEX idx_engagement_user_recent ON engagement_prompts(user_id, created_at DESC);
+              CREATE INDEX idx_tasks_checkin_due ON tasks(deadline, user_id)
+                WHERE is_deleted = false AND status IN ('TODO', 'IN_PROGRESS') AND deadline IS NOT NULL;
+              ALTER TABLE scheduled_notifications ADD COLUMN engagement_prompt_id UUID REFERENCES engagement_prompts(id) ON DELETE CASCADE;
+              CREATE UNIQUE INDEX idx_notification_engagement ON scheduled_notifications(engagement_prompt_id)
+                WHERE engagement_prompt_id IS NOT NULL;

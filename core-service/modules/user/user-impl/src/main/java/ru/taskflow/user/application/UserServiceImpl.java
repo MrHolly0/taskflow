@@ -97,6 +97,12 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
+    public void recordActivity(UUID userId) {
+        userRepository.recordActivity(userId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public ZoneId getTimezone(UUID userId) {
         return userRepository.findById(userId)
@@ -128,6 +134,14 @@ public class UserServiceImpl implements UserService {
         if (request.voiceInputModeDesktop() != null) settings.setVoiceInputModeDesktop(request.voiceInputModeDesktop());
         if (request.voiceInputModeMobile() != null) settings.setVoiceInputModeMobile(request.voiceInputModeMobile());
 
+        if (request.taskCheckinsEnabled() != null) {
+            if (request.taskCheckinsEnabled() && !settings.isTaskCheckinsEnabled()) settings.setTaskCheckinsEnabledAt(OffsetDateTime.now());
+            settings.setTaskCheckinsEnabled(request.taskCheckinsEnabled());
+        }
+        if (request.returnNudgesEnabled() != null) {
+            if (request.returnNudgesEnabled() && !settings.isReturnNudgesEnabled()) settings.setReturnNudgesEnabledAt(OffsetDateTime.now());
+            settings.setReturnNudgesEnabled(request.returnNudgesEnabled());
+        }
         settingsRepository.save(settings);
 
         if (request.timezone() != null || request.displayName() != null) {
@@ -245,7 +259,9 @@ public class UserServiceImpl implements UserService {
                 e.getVoiceInputModeDesktop(),
                 e.getVoiceInputModeMobile(),
                 timezone,
-                displayName
+                displayName,
+                e.isTaskCheckinsEnabled(),
+                e.isReturnNudgesEnabled()
         );
     }
 

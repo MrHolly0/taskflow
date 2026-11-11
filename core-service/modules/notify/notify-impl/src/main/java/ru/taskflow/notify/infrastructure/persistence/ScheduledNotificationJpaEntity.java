@@ -25,7 +25,7 @@ public class ScheduledNotificationJpaEntity {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    @Column(name = "task_id", nullable = false)
+    @Column(name = "task_id")
     private UUID taskId;
 
     // Nullable: строки, созданные до введения этого столбца, его не несут —

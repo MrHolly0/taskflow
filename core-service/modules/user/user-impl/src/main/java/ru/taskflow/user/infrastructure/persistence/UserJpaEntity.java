@@ -38,9 +38,13 @@ public class UserJpaEntity {
     @Column(name = "updated_at")
     private OffsetDateTime updatedAt;
 
+    @Column(name = "last_active_at", nullable = false, updatable = false)
+    private OffsetDateTime lastActiveAt;
+
     @PrePersist
     void prePersist() {
         var now = OffsetDateTime.now();
+        if (lastActiveAt == null) lastActiveAt = now;
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
     }
