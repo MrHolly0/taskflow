@@ -52,12 +52,14 @@ public class WidgetActions {
         if (lockedTask!=null) jdbc.query("SELECT id FROM tasks WHERE id=? AND user_id=? FOR UPDATE",
                 (rs,row)->rs.getObject(1,UUID.class),lockedTask,userId);
         var context=store.lock(token.id(),userId).orElseThrow();
-        if (context.state().terminal()) return context.state();
         if (context.expiresAt().isBefore(OffsetDateTime.now(clock)))
             return save(context,context.state().finish("Карточка устарела","Открой актуальную задачу в Мунине"),context.page());
         requireDeadline(deadline);
         if (context.revision()!=token.revision()) { store.enqueueSync(context); return context.state(); }
-        if (token.action().equals("details")) return store.save(context,context.state(),context.page(),true).state();
+        if (token.action().equals("hide") && "WIDGET".equals(context.transport()))
+            return store.save(context,context.state(),context.page(),false).state();
+        if (token.action().equals("details")) return store.save(context,detailState(context),context.page(),true).state();
+        if (context.state().terminal()) return context.state();
         if(context.kind().equals("CHECKINS")) {
             int page=context.page();
             var fresh=batches.render(userId,context.referenceId(),page);
@@ -167,6 +169,16 @@ public class WidgetActions {
         } else if (action.equals("r")) assistant.reject(context.userId(),p.id());
         else throw new IllegalArgumentException("Неизвестное действие");
         return save(context,projection.render(context.userId(),assistant.findById(context.userId(),p.id()),page),page);
+    }
+    private WidgetState detailState(WidgetContext context) {
+        if(context.kind().equals("RECEIPT")) return receipts.render(context.userId(),context.referenceId(),context.page());
+        if(context.kind().equals("CHECKINS")) return batches.render(context.userId(),context.referenceId(),context.page());
+        if(context.kind().equals("PROPOSAL")) return projection.render(context.userId(),assistant.findById(context.userId(),context.referenceId()),context.page());
+        if(context.taskId()==null) return context.state();
+        try {
+            var task=tasks.findById(context.userId(),context.taskId());
+            return WidgetTemplate.withDescription(context.state().title(WidgetTemplate.clip(task.title(),80)),task.title(),task.description());
+        } catch(ru.taskflow.shared.exception.NotFoundException removed) { return context.state().description(null); }
     }
     private void requireDeadline(java.time.Instant deadline) {
         if (deadline!=null && !clock.instant().isBefore(deadline)) throw new IllegalArgumentException("Время ответа истекло — нажми ещё раз");

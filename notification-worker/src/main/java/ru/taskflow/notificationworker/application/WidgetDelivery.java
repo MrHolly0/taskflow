@@ -31,7 +31,7 @@ public class WidgetDelivery {
         boolean batch="CHECKIN_BATCH".equals(notification.payloadType());
         if ((!enabled && !batch) || !"TELEGRAM".equals(notification.channel()) || Long.parseLong(notification.destination())<=0) return false;
         var rows=jdbc.query("""
-                SELECT n.user_id,n.task_id,n.engagement_prompt_id,t.title,t.deadline,u.timezone,
+                SELECT n.user_id,n.task_id,n.engagement_prompt_id,t.title,t.description,t.deadline,u.timezone,
                        p.deadline_snapshot,s.telegram_widgets_enabled
                 FROM scheduled_notifications n JOIN users u ON u.id=n.user_id
                 JOIN user_settings s ON s.user_id=n.user_id
@@ -42,7 +42,7 @@ public class WidgetDelivery {
                   AND EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id=n.user_id
                     AND i.provider='TELEGRAM' AND i.external_id=n.destination)
                 """,(rs,row)->new Target(rs.getObject("user_id",UUID.class),rs.getObject("task_id",UUID.class),
-                rs.getObject("engagement_prompt_id",UUID.class),rs.getString("title"),rs.getObject("deadline",OffsetDateTime.class),
+                rs.getObject("engagement_prompt_id",UUID.class),rs.getString("title"),rs.getString("description"),rs.getObject("deadline",OffsetDateTime.class),
                 rs.getString("timezone"),rs.getObject("deadline_snapshot",OffsetDateTime.class),rs.getBoolean("telegram_widgets_enabled")),
                 notification.id(),notification.leaseToken(),notification.destination(),notification.channel(),notification.payloadType());
         if (rows.isEmpty()) return true;
@@ -54,6 +54,7 @@ public class WidgetDelivery {
         String title=kind.equals("return")?"Расскажи о новых делах":WidgetTemplate.clip(target.title(),80);
         var state=batch?batches.render(target.userId(),target.promptId(),0):new WidgetState(kind,title,kind.equals("return")?List.of():
                 List.of(List.of("Срок",WidgetTemplate.time(target.deadline(),ZoneId.of(target.timezone()),Clock.systemUTC()))));
+        if(!batch && !kind.equals("return")) state=WidgetTemplate.withDescription(mapper,state,target.title(),target.description());
         var context=store.reserve(target.userId(),batch?"CHECKINS":reminder?"REMINDER":"ENGAGEMENT",
                 reminder?notification.id():target.promptId(),target.taskId(),
                 reminder?target.deadline():target.snapshot(),Long.parseLong(notification.destination()),state);
@@ -108,6 +109,6 @@ public class WidgetDelivery {
         int status=e.getStatusCode().value();
         return new NotificationDeliveryException("TELEGRAM_HTTP_"+status,status>=400&&status<500&&status!=408&&status!=429,delay);
     }
-    private record Target(UUID userId,UUID taskId,UUID promptId,String title,OffsetDateTime deadline,String timezone,OffsetDateTime snapshot,boolean cards) {}
+    private record Target(UUID userId,UUID taskId,UUID promptId,String title,String description,OffsetDateTime deadline,String timezone,OffsetDateTime snapshot,boolean cards) {}
     public record Sync(UUID contextId,long revision,WidgetState state,boolean expanded) {}
 }

@@ -78,3 +78,12 @@ for(const theme of ['light','dark']) {
  assert.equal(answered.probes[0],'0');assert.equal(answered.probes[1],'3');assert.equal(answered.probes[2],'Ещё в работе');assert.equal(answered.requests.length,0);passed++;
 }
 console.log('TOTAL including grouped checkins',passed,'sandbox cases passed');
+for(const theme of ['light','dark']) {
+ const described={...checkins,description:'Подготовить слайды <img src=x onerror=alert(1)> и проверить проектор'};
+ const view=await runWidget(html,{theme,context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(described),publicData:null},
+  probes:[`document.getElementById('description').hidden`,`document.querySelector('#description summary').textContent`,`document.getElementById('description-text').textContent`,`document.querySelectorAll('img').length`]});
+ assert.equal(view.probes[0],'false');assert.equal(view.probes[1],'Описание');assert.equal(view.probes[2],described.description);assert.equal(view.probes[3],'0');assert.equal(view.requests.length,0);assert.deepEqual(view.diags,[]);passed++;
+ const missing=await runWidget(html,{theme,context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(checkins),publicData:null},probes:[`document.getElementById('description').hidden`]});
+ assert.equal(missing.probes[0],'true');assert.equal(missing.requests.length,0);assert.deepEqual(missing.diags,[]);passed++;
+}
+console.log('TOTAL including task descriptions',passed,'sandbox cases passed');

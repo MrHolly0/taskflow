@@ -47,7 +47,8 @@ public final class WidgetKeyboard {
                 case "return" -> rows.add(List.of(button("Не напоминать об этом",key+"mute")));
                 default -> { }
             }
-        } else if (!state.terminal()) rows.add(List.of(button("Подробнее",key+"details")));
+        } else if (!context.expanded()) rows.add(List.of(button("Показать текст",key+"details")));
+        if(context.expanded() && "WIDGET".equals(context.transport())) rows.add(List.of(button("Скрыть текст",key+"hide")));
         String task=state.taskId()!=null?state.taskId():context.taskId()==null?null:context.taskId().toString();
         if(appUrl!=null && !appUrl.isBlank()) rows.add(List.of(Map.of("text",task==null?"Открыть Мунин":state.kind().equals("receipt")?"Изменить":"Открыть задачу",
                 "web_app",Map.of("url",appUrl.replaceAll("/+$", "")+(task==null?"":"/?task="+task)))));

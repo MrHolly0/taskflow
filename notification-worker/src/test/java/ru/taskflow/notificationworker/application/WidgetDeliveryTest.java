@@ -38,7 +38,7 @@ class WidgetDeliveryTest {
         jdbc.execute("CREATE TABLE users(id UUID PRIMARY KEY,timezone TEXT)");
         jdbc.execute("CREATE TABLE user_settings(user_id UUID PRIMARY KEY)");
         jdbc.execute("CREATE TABLE user_identities(user_id UUID,provider TEXT,external_id TEXT)");
-        jdbc.execute("CREATE TABLE tasks(id UUID PRIMARY KEY,user_id UUID,title TEXT,deadline TIMESTAMPTZ,is_deleted BOOLEAN DEFAULT FALSE,status TEXT DEFAULT 'TODO',started_at TIMESTAMPTZ,planned_date TIMESTAMPTZ,planned_date_set_at TIMESTAMPTZ)");
+        jdbc.execute("CREATE TABLE tasks(id UUID PRIMARY KEY,user_id UUID,title TEXT,description TEXT,deadline TIMESTAMPTZ,is_deleted BOOLEAN DEFAULT FALSE,status TEXT DEFAULT 'TODO',started_at TIMESTAMPTZ,planned_date TIMESTAMPTZ,planned_date_set_at TIMESTAMPTZ)");
         jdbc.execute("CREATE TABLE assistant_proposals(id UUID PRIMARY KEY,user_id UUID)");
         jdbc.execute("CREATE TABLE engagement_prompts(id UUID PRIMARY KEY,user_id UUID,task_id UUID,kind TEXT,deadline_snapshot TIMESTAMPTZ,started_snapshot TIMESTAMPTZ,answer TEXT,cancelled_at TIMESTAMPTZ,expires_at TIMESTAMPTZ,batch_id UUID,batch_position INT)");
         jdbc.execute("CREATE TABLE telegram_update_inbox(update_id BIGINT,next_attempt_at TIMESTAMPTZ,status TEXT)");
@@ -72,7 +72,7 @@ class WidgetDeliveryTest {
         batch();assertThat(delivery.send(batchClaim())).isTrue();assertThat(delivery.send(batchClaim())).isTrue();
         verify(api,times(1)).send(any(),anyString());
         var c=context();assertThat(c.kind()).isEqualTo("CHECKINS");assertThat(c.state().total()).isEqualTo(2);
-        assertThat(WidgetKeyboard.of(c,"https://munin.test").toString()).contains("Подробнее");
+        assertThat(WidgetKeyboard.of(c,"https://munin.test").toString()).contains("Показать текст");
     }
     @Test void batchKeepsOneTextMessageWithPagingWhenWidgetsAreDisabled() {
         batch();delivery=new WidgetDelivery(jdbc,store,api,mapper,false,"https://munin.test",new CheckinBatchView(jdbc,Clock.systemUTC()));
@@ -90,6 +90,11 @@ class WidgetDeliveryTest {
         for(int i=0;i<2;i++) jdbc.update("INSERT INTO engagement_prompts(id,user_id,task_id,kind,deadline_snapshot,expires_at,batch_id,batch_position) SELECT ?,user_id,id,'TASK_CHECKIN',deadline,NOW()+INTERVAL '7 days',?,? FROM tasks WHERE id=?",
                 UUID.randomUUID(),root,i,i==0?task:other);
         jdbc.update("UPDATE scheduled_notifications SET task_id=NULL,payload_type='CHECKIN_BATCH',engagement_prompt_id=? WHERE id=?",root,notification);
+    }
+    @Test void reminderCarriesDescriptionFromTheTaskInsteadOfRepeatingItsTitle() {
+        jdbc.update("UPDATE tasks SET description=? WHERE id=?","Подготовить слайды и проверить проектор",task);
+        assertThat(delivery.send(claim())).isTrue();
+        assertThat(context().state().description()).isEqualTo("Подготовить слайды и проверить проектор");
     }
     @Test void reminderUsesCurrentOwnedTaskAndBindsOneMessage() {
         assertThat(delivery.send(claim())).isTrue();assertThat(delivery.send(claim())).isTrue();

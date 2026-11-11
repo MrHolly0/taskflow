@@ -31,7 +31,7 @@ class WidgetApiTest {
                 .andExpect(jsonPath("$.allow_queries").value(true)).andExpect(jsonPath("$.public_data").doesNotExist())
                 .andExpect(jsonPath("$.caption").value(""))
                 .andExpect(jsonPath("$.parse_mode").doesNotExist())
-                .andExpect(jsonPath("$.reply_markup.inline_keyboard[0][0].text").value("Подробнее"))
+                .andExpect(jsonPath("$.reply_markup.inline_keyboard[0][0].text").value("Показать текст"))
                 .andRespond(withSuccess("{\"ok\":true,\"result\":{\"message_id\":567}}",MediaType.APPLICATION_JSON));
         assertThat(api.send(c,"https://app.test")).isEqualTo(567);
         server.verify();
@@ -58,6 +58,34 @@ class WidgetApiTest {
                 .andExpect(jsonPath("$.caption").value(""))
                 .andRespond(withSuccess("{\"ok\":true}",MediaType.APPLICATION_JSON));
         api.sync(c,"https://app.test");server.verify();
+    }
+    @Test void realDescriptionIsLabeledAndDuplicateOrMissingDescriptionIsOmitted() throws Exception {
+        var base=context(false,"WIDGET").state();
+        var described=WidgetTemplate.withDescription(mapper,base,base.title(),"Подготовить материалы и проверить аудиторию");
+        assertThat(WidgetTemplate.caption(described)).contains("Задача: "+base.title(),"Описание: Подготовить материалы");
+        assertThat(described.identity(UUID.randomUUID(),9).finish("Готово","Завершено").description()).isEqualTo(described.description());
+        assertThat(WidgetTemplate.withDescription(mapper,base,"Подготовить пару","  подготовить   пару. ").description()).isNull();
+        assertThat(WidgetTemplate.withDescription(mapper,base,base.title(),null).description()).isNull();
+        assertThat(WidgetTemplate.caption(base)).doesNotContain("Описание:");
+        String old=WidgetTemplate.encode(mapper,base);
+        assertThat(mapper.readValue(old,WidgetState.class).description()).isNull();
+    }
+    @Test void descriptionsWithEmojiAndEscapedCharactersFitTheRealMessageBudget() {
+        var base=context(false,"WIDGET").state();
+        for(String value:List.of("🐦".repeat(1000),"\"\n".repeat(1000),"Описание ".repeat(1000))) {
+            var state=WidgetTemplate.withDescription(mapper,base,base.title(),value).identity(UUID.randomUUID(),999999999);
+            assertThat(state.description()).isNotBlank();
+            assertThat(WidgetTemplate.encode(mapper,state).getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(960);
+        }
+    }
+    @Test void actionFeedbackCanShrinkDescriptionWithoutLosingTheActionResult() throws Exception {
+        var base=context(false,"WIDGET").state().checkins(0,50,UUID.randomUUID().toString(),null);
+        var described=WidgetTemplate.withDescription(mapper,base,base.title(),"🐦".repeat(1000));
+        var finished=described.feedback("«"+"Длинное название ".repeat(5)+"» — готово!").finish("Действие завершено","Ответ сохранён");
+        var saved=mapper.readValue(WidgetTemplate.encode(mapper,finished),WidgetState.class);
+        assertThat(saved.heading()).isEqualTo("Действие завершено");assertThat(saved.status()).isEqualTo("Ответ сохранён");
+        assertThat(saved.warning()).isEqualTo(finished.warning());assertThat(saved.key()).isEqualTo(base.key());
+        assertThat(WidgetTemplate.encode(mapper,saved).getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(960);
     }
     @Test void answersFitTelegramBudgetAndTemplateIsCompressedWithinLimit() throws Exception {
         var c=context(false,"WIDGET");

@@ -225,6 +225,28 @@ class TelegramWidgetsIntegrationTest {
         store.bind(context.id(),100,"WIDGET");return store.find(context.id(),owner).orElseThrow();
     }
 
+    @Test void textDetailsLoadSavedDescriptionAndCanBeHiddenAgain() {
+        var c=reminder();
+        jdbc.update("UPDATE tasks SET title=?,description=? WHERE id=?","Провести новую пару","Подготовить слайды и проверить проектор",c.taskId());
+        var detailed=actions.act(owner,12345,100,key(c,"details"));
+        assertThat(detailed.title()).isEqualTo("Провести новую пару");
+        assertThat(detailed.description()).isEqualTo("Подготовить слайды и проверить проектор");
+        assertThat(WidgetTemplate.caption(detailed)).contains("Задача:","Описание: Подготовить слайды");
+        var expanded=store.find(c.id(),owner).orElseThrow();assertThat(expanded.expanded()).isTrue();
+        actions.act(owner,12345,100,detailed.key()+":hide");
+        assertThat(store.find(c.id(),owner).orElseThrow().expanded()).isFalse();
+    }
+    @Test void terminalTextCanBeHiddenAndShownAgainWithoutChangingTheTask() {
+        var c=reminder();var done=actions.act(owner,12345,100,key(c,"done"));
+        var text=actions.act(owner,12345,100,done.key()+":details");
+        assertThat(store.find(c.id(),owner).orElseThrow().expanded()).isTrue();
+        var hidden=actions.act(owner,12345,100,text.key()+":hide");
+        var compact=store.find(c.id(),owner).orElseThrow();assertThat(compact.expanded()).isFalse();
+        assertThat(WidgetKeyboard.of(compact,"https://munin.test").toString()).contains("Показать текст");
+        actions.act(owner,12345,100,hidden.key()+":details");
+        assertThat(store.find(c.id(),owner).orElseThrow().expanded()).isTrue();
+        assertThat(tasks.findById(owner,c.taskId()).status()).isEqualTo(TaskStatus.DONE);
+    }
     private WidgetContext reminder() {
         var deadline=OffsetDateTime.now().plusDays(2);
         var task=tasks.createQuick(owner,new CreateTaskRequest("Проверить карточку",null,TaskPriority.MEDIUM,deadline,null,null,List.of(),30,TaskSource.MANUAL));

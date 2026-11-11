@@ -43,11 +43,11 @@ public class WidgetReceiptProjection {
         boolean undone=undo.map(r->r.undone()).orElse(false);
         boolean available=undo.filter(r->!r.undone()&&r.expiresAt().isAfter(OffsetDateTime.now(clock))).isPresent();
         boolean completion=undo.map(r->r.kind().equals("COMPLETE")).orElse(false);
-        String title=action.summary();var rows=new ArrayList<List<String>>();
+        String title=action.summary();String description=null;var rows=new ArrayList<List<String>>();
         String taskId=action.taskId()==null?null:action.taskId().toString();
         if(undone && undo.get().kind().equals("CREATE")) taskId=null;
         else if(action.taskId()!=null) {
-            var task=tasks.findById(user,action.taskId());title=task.title();
+            var task=tasks.findById(user,action.taskId());title=task.title();description=task.description();
             if(!completion || undone) rows.add(List.of("Срок",WidgetTemplate.time(task.deadline(),users.getTimezone(user),clock)));
             var reminder=task.reminders().stream().filter(r->r.status().equals("PENDING")&&r.fireAt().isAfter(OffsetDateTime.now(clock)))
                     .min(java.util.Comparator.comparing(r->r.fireAt()));
@@ -58,6 +58,6 @@ public class WidgetReceiptProjection {
         if(!undone && result.appliedCount()<result.totalCount()) heading="Сохранено частично";
         String status=result.appliedCount()<result.totalCount()?"Сохранено: "+result.appliedCount()+" из "+result.totalCount():null;
         if(undone) status=undo.get().kind().equals("CREATE")?"Создание отменено":"Предыдущий статус возвращён";
-        return new WidgetState("receipt",WidgetTemplate.clip(title,64),rows).receipt(page,all.size(),available,taskId,heading,status);
+        return WidgetTemplate.withDescription(new WidgetState("receipt",WidgetTemplate.clip(title,64),rows).receipt(page,all.size(),available,taskId,heading,status),title,description);
     }
 }

@@ -14,7 +14,7 @@ public class CheckinBatchView {
 
     public List<Item> items(UUID user,UUID batch) {
         return jdbc.query("""
-                SELECT p.id,p.task_id,p.answer,t.title,p.deadline_snapshot,u.timezone,
+                SELECT p.id,p.task_id,p.answer,t.title,t.description,p.deadline_snapshot,u.timezone,
                   (parent.cancelled_at IS NULL AND parent.expires_at>? AND NOT t.is_deleted
                     AND t.status IN ('TODO','IN_PROGRESS') AND t.deadline IS NOT DISTINCT FROM p.deadline_snapshot
                     AND (t.planned_date IS NULL OR t.planned_date<=? OR (p.kind='WORK_CHECKIN'
@@ -24,7 +24,7 @@ public class CheckinBatchView {
                 JOIN tasks t ON t.id=p.task_id AND t.user_id=p.user_id JOIN users u ON u.id=parent.user_id
                 WHERE parent.id=? AND parent.user_id=? AND parent.kind='CHECKIN_BATCH'
                 ORDER BY p.batch_position,p.id
-                """,(rs,row)->new Item(rs.getObject("id",UUID.class),rs.getObject("task_id",UUID.class),rs.getString("title"),
+                """,(rs,row)->new Item(rs.getObject("id",UUID.class),rs.getObject("task_id",UUID.class),rs.getString("title"),rs.getString("description"),
                         rs.getObject("deadline_snapshot",OffsetDateTime.class),ZoneId.of(rs.getString("timezone")),
                         rs.getString("answer"),rs.getBoolean("current")),OffsetDateTime.now(clock),OffsetDateTime.now(clock),batch,user);
     }
@@ -43,8 +43,9 @@ public class CheckinBatchView {
         int page=Math.clamp(requested,0,all.size()-1);var item=all.get(page);
         String answer=item.answer()!=null?item.answer():item.current()?null:"stale";
         var rows=item.deadline()==null?List.<List<String>>of():List.of(List.of("Срок",WidgetTemplate.time(item.deadline(),item.zone(),clock)));
-        return new WidgetState("checkins",WidgetTemplate.clip(item.title(),80),rows)
-                .checkins(page,all.size(),item.taskId().toString(),answer==null?null:answerText(answer)).fingerprint(item.id().toString());
+        return WidgetTemplate.withDescription(new WidgetState("checkins",WidgetTemplate.clip(item.title(),80),rows)
+                    .checkins(page,all.size(),item.taskId().toString(),answer==null?null:answerText(answer)).fingerprint(item.id().toString()),
+                item.title(),item.description());
     }
     public int next(UUID user,UUID batch,int page) {
         var all=items(user,batch);
@@ -61,7 +62,7 @@ public class CheckinBatchView {
             default -> "Дело уже изменилось";
         };
     }
-    public record Item(UUID id,UUID taskId,String title,OffsetDateTime deadline,ZoneId zone,String answer,boolean current) {
+    public record Item(UUID id,UUID taskId,String title,String description,OffsetDateTime deadline,ZoneId zone,String answer,boolean current) {
         public boolean pending() { return answer==null&&current; }
     }
 }

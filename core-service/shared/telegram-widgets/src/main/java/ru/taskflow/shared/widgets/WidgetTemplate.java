@@ -13,6 +13,7 @@ import java.util.zip.Deflater;
 
 public final class WidgetTemplate {
     private static final String HTML = load();
+    private static final ObjectMapper DESCRIPTION_MAPPER = new ObjectMapper();
     private WidgetTemplate() {}
 
     public static String html() { return HTML; }
@@ -20,17 +21,45 @@ public final class WidgetTemplate {
     public static String encode(ObjectMapper mapper, WidgetState state) {
         try {
             String json = mapper.writeValueAsString(state);
+            if(json.getBytes(StandardCharsets.UTF_8).length>960 && state.description()!=null) {
+                String description=state.description();
+                for(int limit=Math.min(180,description.codePointCount(0,description.length()))-16;limit>=16;limit-=16) {
+                    json=mapper.writeValueAsString(state.description(clip(description,limit)));
+                    if(json.getBytes(StandardCharsets.UTF_8).length<=960) return json;
+                }
+                json=mapper.writeValueAsString(state.description(null));
+            }
             // В answerWidgetQuery к состоянию добавляется обёртка результата.
             if (json.getBytes(StandardCharsets.UTF_8).length > 960) throw new IllegalArgumentException("WIDGET_STATE_TOO_LARGE");
             return json;
         } catch (JsonProcessingException e) { throw new IllegalArgumentException("INVALID_WIDGET_STATE", e); }
+    }
+    public static WidgetState withDescription(WidgetState state,String title,String description) {
+        return withDescription(DESCRIPTION_MAPPER,state,title,description);
+    }
+    public static WidgetState withDescription(ObjectMapper mapper,WidgetState state,String title,String description) {
+        if(description==null || description.isBlank() || normalized(description).equals(normalized(title))) return state.description(null);
+        for(int limit=180;limit>=16;limit-=16) {
+            var candidate=state.description(clip(description.strip(),limit));
+            try {
+                // Резервируем место под ключ и будущую ревизию, даже до сохранения контекста.
+                if(mapper.writeValueAsBytes(candidate.identity(new java.util.UUID(0,0),999999999)).length<=960) return candidate;
+            } catch(JsonProcessingException invalid) { throw new IllegalArgumentException("INVALID_WIDGET_STATE",invalid); }
+        }
+        return state.description(null);
+    }
+    private static String normalized(String value) {
+        return value==null?"":value.strip().replaceAll("(?U)\\s+"," ").replaceAll("[.!?…]+$", "").strip().toLowerCase(Locale.ROOT);
     }
     public static String caption(WidgetState state) {
         StringBuilder text = new StringBuilder();
         if (state.heading()!=null) text.append("✓ ").append(state.heading()).append("\n");
         if (state.total()!=null) text.append(state.kind().equals("checkins")?"Дело ":"Действие ").append(state.page()+1).append(" из ").append(state.total())
                  .append(state.selected()==null?"":" · выбрано "+state.selected()).append("\n");
+        if(!state.kind().equals("return") && !(state.kind().equals("checkins")&&state.terminal()))
+            text.append(state.kind().equals("proposal")?"Предложение: ":"Задача: ");
         text.append(state.title());
+        if(state.description()!=null && !state.description().isBlank()) text.append("\nОписание: ").append(state.description());
         for (var row : state.rows()) text.append('\n').append(row.get(0)).append(": ").append(row.get(1));
         if (state.warning()!=null) text.append("\n").append(state.warning());
         if (state.status() != null) text.append("\n\n").append(state.status());

@@ -66,6 +66,8 @@ public class WidgetProposalProjection {
         var state=new WidgetState("proposal",WidgetTemplate.clip(title,64),rows)
                 .proposal(page,proposal.actions().size(),(int)proposal.actions().stream().filter(a->a.accepted()).count(),action.accepted(),warning)
                 .fingerprint(fingerprint(proposal));
+        if(action.type()==AssistantActionType.CREATE && payload.get("description") instanceof String description)
+            state=WidgetTemplate.withDescription(mapper,state,title,description);
         if (proposal.status()!=ProposalStatus.PENDING) {
             return state.finish(switch(proposal.status()) {
                 case APPLIED -> "Изменения сохранены"; case PARTIALLY_APPLIED -> "Сохранено частично";
