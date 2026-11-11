@@ -12,7 +12,7 @@ import java.util.UUID;
 public interface ScheduledNotificationRepository extends JpaRepository<ScheduledNotificationJpaEntity, UUID> {
 
     @Modifying
-    @Query("UPDATE ScheduledNotificationJpaEntity s SET s.payload = :payload WHERE s.userId = :userId AND s.taskId = :taskId AND s.sent = false")
+    @Query("UPDATE ScheduledNotificationJpaEntity s SET s.payload = :payload WHERE s.userId = :userId AND s.taskId = :taskId AND s.sent = false AND s.payloadType = 'TASK_REMINDER'")
     int updateUnsentPayload(@Param("userId") UUID userId, @Param("taskId") UUID taskId, @Param("payload") String payload);
 
     @Modifying
@@ -24,6 +24,14 @@ public interface ScheduledNotificationRepository extends JpaRepository<Scheduled
     @Modifying
     @Query("DELETE FROM ScheduledNotificationJpaEntity s WHERE s.reminderId = :reminderId AND s.sent = false")
     void deleteUnsentByReminderId(@Param("reminderId") UUID reminderId);
+
+    @Modifying
+    @Query(value = "UPDATE engagement_prompts SET cancelled_at = NOW() WHERE user_id = :userId AND cancelled_at IS NULL", nativeQuery = true)
+    int cancelEngagementOwner(@Param("userId") UUID userId);
+
+    @Modifying
+    @Query(value = "DELETE FROM scheduled_notifications WHERE user_id = :userId AND engagement_prompt_id IS NOT NULL AND sent = false", nativeQuery = true)
+    int deleteUnsentEngagementOwner(@Param("userId") UUID userId);
 
     // userId и destination в одном UPDATE: если делать это двумя отдельными
     // запросами, после первого перенесённые строки станут неотличимы (по

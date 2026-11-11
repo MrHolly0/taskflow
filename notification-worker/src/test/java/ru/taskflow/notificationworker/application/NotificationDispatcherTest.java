@@ -127,6 +127,43 @@ class NotificationDispatcherTest {
         verify(poller, never()).recordFailure(any(), anyBoolean(), any(), any());
     }
 
+    @Test
+    void obsoleteEngagementIsCancelledWithoutSending() {
+        UUID prompt = UUID.randomUUID();
+        var row = pending("TELEGRAM", "12345", "TASK_CHECKIN", "{\"promptId\":\"" + prompt + "\"}");
+        when(poller.claimPending(4)).thenReturn(List.of(row));
+        when(poller.checkEngagement(row, prompt)).thenReturn(new ScheduledNotificationPoller.EngagementGate(false, null, null, null));
+        dispatcher.processNotifications();
+        verify(poller).cancelEngagement(row);
+        verify(sender, never()).sendEngagement(any(), any(), any());
+        verify(poller, never()).markAsSent(row);
+    }
+
+    @Test
+    void quietHoursDeferWithoutUsingDeliveryRetry() {
+        UUID prompt = UUID.randomUUID();
+        var row = pending("TELEGRAM", "12345", "RETURN_NUDGE", "{\"promptId\":\"" + prompt + "\"}");
+        var morning = java.time.OffsetDateTime.now().plusHours(8);
+        when(poller.claimPending(4)).thenReturn(List.of(row));
+        when(poller.checkEngagement(row, prompt)).thenReturn(new ScheduledNotificationPoller.EngagementGate(true, morning, null, "Europe/Moscow"));
+        dispatcher.processNotifications();
+        verify(poller).deferEngagement(row, morning);
+        verify(sender, never()).sendEngagement(any(), any(), any());
+        verify(poller, never()).recordFailure(any(), anyBoolean(), any(), any());
+    }
+
+    @Test
+    void eligibleQuestionUsesCurrentTaskTitle() {
+        UUID prompt = UUID.randomUUID();
+        var row = pending("TELEGRAM", "12345", "TASK_CHECKIN", "{\"promptId\":\"" + prompt + "\",\"taskTitle\":\"Старое\"}");
+        when(poller.claimPending(4)).thenReturn(List.of(row));
+        when(poller.checkEngagement(row, prompt)).thenReturn(new ScheduledNotificationPoller.EngagementGate(true, null, "Новое", "Asia/Yekaterinburg"));
+        dispatcher.processNotifications();
+        verify(sender).sendEngagement(eq("12345"), eq("TASK_CHECKIN"),
+                org.mockito.ArgumentMatchers.argThat(payload -> "Новое".equals(payload.taskTitle()) && "Asia/Yekaterinburg".equals(payload.timezone())));
+        verify(poller).markAsSent(row);
+    }
+
     private PendingNotification pending(String channel, String destination, String type, String payload) {
         return new PendingNotification(UUID.randomUUID(), channel, destination, type, payload, UUID.randomUUID(), 1);
     }

@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -61,11 +62,40 @@ public class TelegramNotificationSender implements NotificationSender {
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
+    @Override
+    public void sendEngagement(String destination, String kind, EngagementPayload payload) {
+        String prefix = "eng:" + payload.promptId() + ":";
+        var rows = new java.util.ArrayList<List<Map<String, String>>>();
+        String text;
+        if ("TASK_CHECKIN".equals(kind)) {
+            text = "Как продвигается дело?\n\n<b>" + escape(payload.taskTitle())
+                    + "</b>" + deadlineLine(payload.deadline(), payload.timezone()) + "\n\nПолучилось завершить?";
+            rows.add(List.of(Map.of("text", "✅ Готово", "callback_data", prefix + "done"),
+                    Map.of("text", "⏳ Ещё в работе", "callback_data", prefix + "working")));
+            rows.add(List.of(Map.of("text", "🔔 Напомнить через час", "callback_data", prefix + "later")));
+        } else {
+            text = "Как твои дела? Если появилось новое, можно рассказать Мунину — текстом или голосом. Разберём вместе.";
+        }
+        if (payload.appUrl() != null && !payload.appUrl().isBlank()) {
+            String url = payload.appUrl().replaceAll("/+$", "");
+            if (payload.taskId() != null) url += "/?task=" + payload.taskId();
+            rows.add(List.of(Map.of("text", "Открыть Мунин", "url", url)));
+        }
+        if ("RETURN_NUDGE".equals(kind)) rows.add(List.of(
+                Map.of("text", "Не напоминать об этом", "callback_data", prefix + "mute")));
+        sendMessage(Long.parseLong(destination), text, Map.of("inline_keyboard", rows));
+    }
+
     private void sendMessage(Long chatId, String text) {
+        sendMessage(chatId, text, null);
+    }
+
+    private void sendMessage(Long chatId, String text, Map<String, Object> keyboard) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("chat_id", chatId);
         payload.put("text", text);
         payload.put("parse_mode", "HTML");
+        if (keyboard != null) payload.put("reply_markup", keyboard);
 
         String url = apiBaseUrl + "/bot" + botToken + "/sendMessage";
 

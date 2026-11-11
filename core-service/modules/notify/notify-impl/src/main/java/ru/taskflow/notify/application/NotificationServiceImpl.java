@@ -148,6 +148,8 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public int transferOwnership(UUID from, UUID to) {
+        scheduledNotificationRepository.cancelEngagementOwner(from);
+        scheduledNotificationRepository.deleteUnsentEngagementOwner(from);
         String telegramDestination = userService.findExternalId(to, IdentityProvider.TELEGRAM).orElse(null);
         String emailDestination = userService.findExternalId(to, IdentityProvider.EMAIL).orElse(null);
         return scheduledNotificationRepository.reassignOwner(from, to, telegramDestination, emailDestination);

@@ -8,6 +8,7 @@ import ru.taskflow.assistant.api.dto.Proposal;
 import ru.taskflow.assistant.api.dto.ProposedAction;
 import ru.taskflow.assistant.api.exception.ProposalNotFoundException;
 import ru.taskflow.task.api.TaskService;
+import ru.taskflow.notify.api.EngagementService;
 import ru.taskflow.telegram.infrastructure.client.TelegramMessageSender;
 import ru.taskflow.telegram.infrastructure.client.dto.TelegramCallbackQuery;
 
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class CallbackHandler {
 
     private final TaskService taskService;
+    private final EngagementService engagement;
     private final AssistantService assistantService;
     private final ProposalMessageRenderer renderer;
     private final TelegramMessageSender sender;
@@ -52,12 +54,30 @@ public class CallbackHandler {
                 sender.answerCallback(callback.id(), "🗑 Удалено");
             }
             case "p" -> handleProposal(callback, userId, payload);
+            case "eng" -> handleEngagement(callback, userId, payload);
             case "edit" -> {
                 sender.answerCallback(callback.id(), "✏️ Редактирование");
                 sender.sendMessage(callback.message().chat().id(),
                     "Для редактирования задачи используйте кнопку в её карточке или команду /update");
             }
             default -> sender.answerCallback(callback.id(), "Неизвестная команда");
+        }
+    }
+
+    private void handleEngagement(TelegramCallbackQuery callback, UUID userId, String payload) {
+        String[] parts = payload.split(":", -1);
+        UUID promptId;
+        try {
+            if (parts.length != 2) throw new IllegalArgumentException();
+            promptId = UUID.fromString(parts[0]);
+        } catch (IllegalArgumentException invalid) {
+            sender.answerCallback(callback.id(), "Неизвестная команда");
+            return;
+        }
+        var result = engagement.reply(userId, promptId, parts[1]);
+        sender.answerCallback(callback.id(), result.text());
+        if (result.terminal() && callback.message() != null) {
+            sender.editMessage(callback.message().chat().id(), callback.message().messageId(), result.text());
         }
     }
 

@@ -14,17 +14,17 @@ public interface UserIdentityRepository extends JpaRepository<UserIdentityJpaEnt
 
     Optional<UserIdentityJpaEntity> findByProviderAndExternalId(IdentityProvider provider, String externalId);
 
-    Optional<UserIdentityJpaEntity> findByUser_IdAndProvider(UUID userId, IdentityProvider provider);
+    Optional<UserIdentityJpaEntity> findFirstByUser_IdAndProviderOrderByCreatedAtDescIdAsc(UUID userId, IdentityProvider provider);
+
+    default Optional<UserIdentityJpaEntity> findByUser_IdAndProvider(UUID userId, IdentityProvider provider) {
+        return findFirstByUser_IdAndProviderOrderByCreatedAtDescIdAsc(userId, provider);
+    }
 
     List<UserIdentityJpaEntity> findByUser_Id(UUID userId);
 
     long countByUser_Id(UUID userId);
 
-    // Не двигаем идентичность провайдера, который у target уже есть: ни на
-    // одном уровне (ни в БД, ни в остальном коде) нет ограничения «максимум
-    // одна идентичность на провайдера у пользователя» — но findByUser_IdAndProvider
-    // возвращает Optional и падает NonUniqueResultException, если это условие
-    // нарушить. Перенос не должен создавать первый такой случай.
+    // При слиянии сохраняем уже подключённый канал получателя.
     @Modifying
     @Query("""
             UPDATE UserIdentityJpaEntity i SET i.user = :to

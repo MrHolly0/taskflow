@@ -58,7 +58,7 @@ public class NotificationDispatcher {
                 return;
             }
             try {
-                dispatchNotification(notification);
+                if (!dispatchNotification(notification)) return;
             } catch (PushSubscriptionGoneException gone) {
                 jdbcTemplate.update("DELETE FROM push_subscriptions WHERE id = ?",
                         UUID.fromString(notification.destination()));
@@ -82,7 +82,10 @@ public class NotificationDispatcher {
         }
     }
 
-    private void dispatchNotification(PendingNotification notification) {
+    private boolean dispatchNotification(PendingNotification notification) {
+        if ("TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
+            return dispatchEngagement(notification);
+        }
         if (!"TASK_REMINDER".equals(notification.payloadType())) {
             throw new NotificationDeliveryException("UNKNOWN_PAYLOAD_TYPE", true, null);
         }
@@ -100,6 +103,33 @@ public class NotificationDispatcher {
             throw new NotificationDeliveryException("INVALID_PAYLOAD", true, null);
         }
         sender.sendTaskReminder(notification.destination(), payload.taskTitle(), payload.deadline(), payload.timezone());
+        return true;
+    }
+
+    private boolean dispatchEngagement(PendingNotification notification) {
+        EngagementPayload payload;
+        try {
+            payload = objectMapper.readValue(notification.payload(), EngagementPayload.class);
+            if (payload.promptId() == null || !"TELEGRAM".equals(notification.channel()))
+                throw new IllegalArgumentException();
+        } catch (Exception invalid) {
+            throw new NotificationDeliveryException("INVALID_ENGAGEMENT_PAYLOAD", true, null);
+        }
+        var gate = poller.checkEngagement(notification, payload.promptId());
+        if (!gate.valid()) {
+            poller.cancelEngagement(notification);
+            return false;
+        }
+        if (gate.deferUntil() != null) {
+            poller.deferEngagement(notification, gate.deferUntil());
+            return false;
+        }
+        var current = new EngagementPayload(payload.promptId(), payload.taskId(), gate.title(), payload.deadline(),
+                gate.timezone(), payload.appUrl());
+        senders.stream().filter(sender -> sender.supports("TELEGRAM")).findFirst()
+                .orElseThrow(() -> new NotificationDeliveryException("UNSUPPORTED_CHANNEL", true, null))
+                .sendEngagement(notification.destination(), notification.payloadType(), current);
+        return true;
     }
 
     private record ReminderPayload(String taskTitle, String deadline, String timezone) {}

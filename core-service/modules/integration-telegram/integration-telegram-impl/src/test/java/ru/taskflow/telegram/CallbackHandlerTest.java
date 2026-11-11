@@ -15,6 +15,7 @@ import ru.taskflow.assistant.api.dto.Proposal;
 import ru.taskflow.assistant.api.dto.ProposedAction;
 import ru.taskflow.assistant.api.exception.ProposalNotFoundException;
 import ru.taskflow.task.api.TaskService;
+import ru.taskflow.notify.api.EngagementService;
 import ru.taskflow.telegram.application.CallbackHandler;
 import ru.taskflow.telegram.application.ProposalMessageRenderer;
 import ru.taskflow.telegram.infrastructure.client.TelegramMessageSender;
@@ -43,6 +44,9 @@ class CallbackHandlerTest {
 
     @Mock
     private TaskService taskService;
+
+    @Mock
+    private EngagementService engagement;
 
     @Mock
     private AssistantService assistantService;
@@ -186,6 +190,25 @@ class CallbackHandlerTest {
 
         verify(assistantService, never()).setActionAccepted(any(), any(), anyInt(), anyBoolean());
         verify(sender).answerCallback(eq("cb1"), anyString());
+    }
+
+    @Test
+    void engagementCallbackUsesAuthenticatedOwnerAndRemovesButtonsAfterAnswer() {
+        UUID user = UUID.randomUUID();
+        UUID prompt = UUID.randomUUID();
+        when(engagement.reply(user, prompt, "done")).thenReturn(new EngagementService.Reply("Готово", true));
+        handler.handle(callback("eng:" + prompt + ":done"), user);
+        verify(engagement).reply(user, prompt, "done");
+        verify(sender).answerCallback("cb1", "Готово");
+        verify(sender).editMessage(100L, 1L, "Готово");
+        verifyNoInteractions(taskService);
+    }
+
+    @Test
+    void malformedEngagementCallbackDoesNotInvokeService() {
+        handler.handle(callback("eng:not-a-token:done"), UUID.randomUUID());
+        verifyNoInteractions(engagement);
+        verify(sender).answerCallback("cb1", "Неизвестная команда");
     }
 
     private static TelegramCallbackQuery callback(String data) {

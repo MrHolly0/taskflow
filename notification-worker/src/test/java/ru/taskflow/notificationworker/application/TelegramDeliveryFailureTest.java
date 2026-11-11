@@ -51,6 +51,46 @@ class TelegramDeliveryFailureTest {
         server.verify();
     }
 
+    @Test
+    void checkinHasBoundedOwnerTokenButtonsAndEscapedTitle() {
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var sender = sender(builder);
+        var token = java.util.UUID.randomUUID();
+        var task = java.util.UUID.randomUUID();
+        server.expect(requestTo("https://api.telegram.org/bottest-token/sendMessage"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.content()
+                        .string(org.hamcrest.Matchers.containsString("a &lt; b &amp; c")))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath(
+                        "$.reply_markup.inline_keyboard[0][0].callback_data").value("eng:" + token + ":done"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath(
+                        "$.reply_markup.inline_keyboard[1][0].callback_data").value("eng:" + token + ":later"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath(
+                        "$.reply_markup.inline_keyboard[2][0].url").value("https://example.invalid/?task=" + task))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+        sender.sendEngagement("12345", "TASK_CHECKIN", new EngagementPayload(token, task, "a < b & c", null,
+                "Europe/Moscow", "https://example.invalid/"));
+        assertThat(("eng:" + token + ":working").getBytes(java.nio.charset.StandardCharsets.UTF_8)).hasSizeLessThanOrEqualTo(64);
+        server.verify();
+    }
+
+    @Test
+    void returnMessageHasOpenAndSeparateUnsubscribeButton() {
+        var builder = RestClient.builder();
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var sender = sender(builder);
+        var token = java.util.UUID.randomUUID();
+        server.expect(requestTo("https://api.telegram.org/bottest-token/sendMessage"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath(
+                        "$.reply_markup.inline_keyboard[0][0].url").value("https://example.invalid"))
+                .andExpect(org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath(
+                        "$.reply_markup.inline_keyboard[1][0].callback_data").value("eng:" + token + ":mute"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess("{\"ok\":true}", MediaType.APPLICATION_JSON));
+        sender.sendEngagement("12345", "RETURN_NUDGE", new EngagementPayload(token, null, null, null,
+                "Europe/Moscow", "https://example.invalid/"));
+        server.verify();
+    }
+
     private TelegramNotificationSender sender(RestClient.Builder builder) {
         var sender = new TelegramNotificationSender(builder.build(), new ObjectMapper());
         ReflectionTestUtils.setField(sender, "botToken", "test-token");
