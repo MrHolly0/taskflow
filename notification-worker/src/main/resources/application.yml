@@ -32,6 +32,7 @@ spring:
             enable: true
 
 app:
+  public-base-url: ${PUBLIC_BASE_URL:}
   branding:
     name: ${APP_NAME:Мунин}
   mail:
@@ -39,6 +40,7 @@ app:
   frontend:
     miniapp-url: ${PUBLIC_BASE_URL:}
   telegram:
+    widgets-enabled: ${TELEGRAM_WIDGETS_ENABLED:false}
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     api-base-url: https://api.telegram.org
   push:

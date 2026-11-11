@@ -177,6 +177,32 @@ class ScheduledNotificationPollerTest {
         jdbcTemplate.update("UPDATE scheduled_notifications SET next_attempt_at = NOW() - INTERVAL '1 second' WHERE id = ?", id);
     }
 
+    @Test
+    void newerWidgetStateIsNotAcknowledgedOrFailedByOlderDelivery() {
+        jdbcTemplate.execute("ALTER TABLE scheduled_notifications ADD COLUMN widget_revision BIGINT");
+        UUID id=insertPending();
+        jdbcTemplate.update("UPDATE scheduled_notifications SET payload_type='WIDGET_SYNC',payload='{\"revision\":1}',widget_revision=1 WHERE id=?",id);
+        var first=poller.claimPending(1).getFirst();
+        jdbcTemplate.update("UPDATE scheduled_notifications SET payload='{\"revision\":2}',widget_revision=2 WHERE id=?",id);
+        poller.markAsSent(first);
+        assertThat(jdbcTemplate.queryForObject("SELECT sent FROM scheduled_notifications WHERE id=?",Boolean.class,id)).isFalse();
+        var second=poller.claimPending(1).getFirst();
+        jdbcTemplate.update("UPDATE scheduled_notifications SET payload='{\"revision\":3}',widget_revision=3 WHERE id=?",id);
+        poller.recordFailure(second,true,Duration.ofHours(1),"TELEGRAM_HTTP_400");
+        assertThat(jdbcTemplate.queryForObject("SELECT failed_at IS NULL FROM scheduled_notifications WHERE id=?",Boolean.class,id)).isTrue();
+        assertThat(jdbcTemplate.queryForObject("SELECT retry_count FROM scheduled_notifications WHERE id=?",Integer.class,id)).isZero();
+        var latest=poller.claimPending(1).getFirst();poller.markAsSent(latest);
+        assertThat(jdbcTemplate.queryForObject("SELECT sent FROM scheduled_notifications WHERE id=?",Boolean.class,id)).isTrue();
+    }
+    @Test
+    void transferredDestinationCannotBeAcknowledgedByOldClaim() {
+        UUID id=insertPending();var old=poller.claimPending(1).getFirst();
+        jdbcTemplate.update("UPDATE scheduled_notifications SET destination='9999' WHERE id=?",id);
+        assertThat(poller.isClaimActive(old)).isFalse();poller.markAsSent(old);
+        poller.recordFailure(old,true,Duration.ZERO,"OLD_DESTINATION");
+        assertThat(jdbcTemplate.queryForObject("SELECT sent OR failed_at IS NOT NULL FROM scheduled_notifications WHERE id=?",Boolean.class,id)).isFalse();
+    }
+
     private UUID insertPending() {
         UUID id = UUID.randomUUID();
         jdbcTemplate.update("""

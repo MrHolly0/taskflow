@@ -60,12 +60,22 @@ public class ScheduledNotificationPoller {
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM scheduled_notifications
                     WHERE id = ? AND lease_token = ? AND lease_until > NOW()
-                      AND sent = false AND failed_at IS NULL)
-                """, Boolean.class, notification.id(), notification.leaseToken()));
+                      AND sent = false AND failed_at IS NULL AND channel=? AND destination=?)
+                """, Boolean.class, notification.id(), notification.leaseToken(),notification.channel(),notification.destination()));
     }
 
     @Transactional
     public void markAsSent(PendingNotification notification) {
+        if ("WIDGET_SYNC".equals(notification.payloadType())) {
+            jdbcTemplate.update("""
+                    UPDATE scheduled_notifications SET sent=(widget_revision=(?::jsonb->>'revision')::bigint),
+                      sent_at=CASE WHEN widget_revision=(?::jsonb->>'revision')::bigint THEN NOW() ELSE NULL END,
+                      next_attempt_at=NOW(),retry_count=CASE WHEN widget_revision=(?::jsonb->>'revision')::bigint THEN retry_count ELSE 0 END,
+                      lease_token=NULL,lease_until=NULL,last_error=NULL
+                    WHERE id=? AND lease_token=? AND NOT sent AND failed_at IS NULL AND channel=? AND destination=?
+                    """,notification.payload(),notification.payload(),notification.payload(),notification.id(),notification.leaseToken(),notification.channel(),notification.destination());
+            return;
+        }
         if (isEngagement(notification)) {
             // Отмена при слиянии учёток берёт журнал перед очередью; сохраняем тот же порядок.
             var locked = jdbcTemplate.query("""
@@ -79,8 +89,8 @@ public class ScheduledNotificationPoller {
         int updated = jdbcTemplate.update("""
                 UPDATE scheduled_notifications SET sent = true, sent_at = NOW(),
                     lease_token = NULL, lease_until = NULL, last_error = NULL
-                WHERE id = ? AND lease_token = ? AND sent = false AND failed_at IS NULL
-                """, notification.id(), notification.leaseToken());
+                WHERE id = ? AND lease_token = ? AND sent = false AND failed_at IS NULL AND channel=? AND destination=?
+                """, notification.id(), notification.leaseToken(),notification.channel(),notification.destination());
         if (updated == 1 && isEngagement(notification)) {
             jdbcTemplate.update("""
                     UPDATE engagement_prompts SET sent_at = NOW()
@@ -159,12 +169,25 @@ public class ScheduledNotificationPoller {
     @Transactional
     public void recordFailure(PendingNotification notification, boolean permanent, Duration delay, String errorCode) {
         boolean failed = permanent || notification.attempt() >= maxAttempts;
+        if ("WIDGET_SYNC".equals(notification.payloadType())) {
+            jdbcTemplate.update("""
+                    UPDATE scheduled_notifications SET
+                      next_attempt_at=CASE WHEN widget_revision=(?::jsonb->>'revision')::bigint THEN NOW()+(?*INTERVAL '1 millisecond') ELSE NOW() END,
+                      failed_at=CASE WHEN widget_revision=(?::jsonb->>'revision')::bigint AND ? THEN NOW() ELSE NULL END,
+                      retry_count=CASE WHEN widget_revision=(?::jsonb->>'revision')::bigint THEN retry_count ELSE 0 END,
+                      last_error=CASE WHEN widget_revision=(?::jsonb->>'revision')::bigint THEN ? ELSE NULL END,
+                      lease_token=NULL,lease_until=NULL
+                    WHERE id=? AND lease_token=? AND NOT sent AND failed_at IS NULL AND channel=? AND destination=?
+                    """,notification.payload(),delay.toMillis(),notification.payload(),failed,notification.payload(),
+                    notification.payload(),errorCode,notification.id(),notification.leaseToken(),notification.channel(),notification.destination());
+            return;
+        }
         jdbcTemplate.update("""
                 UPDATE scheduled_notifications SET next_attempt_at = NOW() + (? * INTERVAL '1 millisecond'),
                     failed_at = CASE WHEN ? THEN NOW() ELSE NULL END,
                     last_error = ?, lease_token = NULL, lease_until = NULL
-                WHERE id = ? AND lease_token = ? AND sent = false AND failed_at IS NULL
+                WHERE id = ? AND lease_token = ? AND sent = false AND failed_at IS NULL AND channel=? AND destination=?
                 """, delay.toMillis(), failed, errorCode,
-                notification.id(), notification.leaseToken());
+                notification.id(), notification.leaseToken(),notification.channel(),notification.destination());
     }
 }

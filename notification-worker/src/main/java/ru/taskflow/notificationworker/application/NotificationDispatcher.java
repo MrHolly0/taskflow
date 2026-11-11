@@ -34,6 +34,9 @@ public class NotificationDispatcher {
     @Value("${app.notification.concurrency:4}")
     private int concurrency;
 
+    @Value("${app.telegram.widgets-enabled:false}")
+    private boolean widgetsEnabled;
+
     @Scheduled(fixedDelayString = "${app.notification.poll-interval-ms:5000}")
     public void processNotifications() {
         int remaining = Math.clamp(batchSize, 1, 500);
@@ -83,6 +86,11 @@ public class NotificationDispatcher {
     }
 
     private boolean dispatchNotification(PendingNotification notification) {
+        if ("WIDGET_SYNC".equals(notification.payloadType())) {
+            senders.stream().filter(sender->sender.supports("TELEGRAM")).findFirst().orElseThrow()
+                    .sendWidgetSync(notification);
+            return true;
+        }
         if ("TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
             return dispatchEngagement(notification);
         }
@@ -102,7 +110,8 @@ public class NotificationDispatcher {
         } catch (Exception invalidPayload) {
             throw new NotificationDeliveryException("INVALID_PAYLOAD", true, null);
         }
-        sender.sendTaskReminder(notification.destination(), payload.taskTitle(), payload.deadline(), payload.timezone());
+        if (widgetsEnabled && "TELEGRAM".equals(notification.channel())) sender.sendTaskReminderCard(notification,payload.taskTitle(),payload.deadline(),payload.timezone());
+        else sender.sendTaskReminder(notification.destination(), payload.taskTitle(), payload.deadline(), payload.timezone());
         return true;
     }
 
@@ -126,9 +135,10 @@ public class NotificationDispatcher {
         }
         var current = new EngagementPayload(payload.promptId(), payload.taskId(), gate.title(), payload.deadline(),
                 gate.timezone(), payload.appUrl());
-        senders.stream().filter(sender -> sender.supports("TELEGRAM")).findFirst()
-                .orElseThrow(() -> new NotificationDeliveryException("UNSUPPORTED_CHANNEL", true, null))
-                .sendEngagement(notification.destination(), notification.payloadType(), current);
+        var sender=senders.stream().filter(candidate -> candidate.supports("TELEGRAM")).findFirst()
+                .orElseThrow(() -> new NotificationDeliveryException("UNSUPPORTED_CHANNEL",true,null));
+        if (widgetsEnabled) sender.sendEngagement(notification,current);
+        else sender.sendEngagement(notification.destination(),notification.payloadType(),current);
         return true;
     }
 

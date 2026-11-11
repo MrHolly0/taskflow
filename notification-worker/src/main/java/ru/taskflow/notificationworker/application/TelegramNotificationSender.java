@@ -13,12 +13,29 @@ import java.util.Map;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class TelegramNotificationSender implements NotificationSender {
 
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
+    private final WidgetDelivery widgets;
+    @org.springframework.beans.factory.annotation.Autowired
+    public TelegramNotificationSender(RestClient client,ObjectMapper mapper,WidgetDelivery widgets) {
+        this.restClient=client;this.objectMapper=mapper;this.widgets=widgets;
+    }
+    public TelegramNotificationSender(RestClient client,ObjectMapper mapper) { this(client,mapper,null); }
+    @Override
+    public void sendTaskReminderCard(ru.taskflow.notificationworker.infrastructure.db.PendingNotification notification,
+            String title,String deadline,String timezone) {
+        if (!widgets.send(notification)) sendTaskReminder(notification.destination(),title,deadline,timezone);
+    }
+    @Override
+    public void sendEngagement(ru.taskflow.notificationworker.infrastructure.db.PendingNotification notification,EngagementPayload payload) {
+        if (!widgets.send(notification)) sendEngagement(notification.destination(),notification.payloadType(),payload);
+    }
+    @Override
+    public void sendWidgetSync(ru.taskflow.notificationworker.infrastructure.db.PendingNotification notification) { widgets.sync(notification); }
+
 
     @Value("${app.telegram.bot-token:}")
     private String botToken;
