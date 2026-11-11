@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getAuthenticatedClient } from '@/lib/authenticated-client';
 
 export function useUserActivity() {
+  const queryClient = useQueryClient();
   useEffect(() => {
     let nextPingAt = 0;
+    let nextRefreshAt = 0;
     let pending = false;
     let disposed = false;
     const report = () => {
@@ -16,15 +19,27 @@ export function useUserActivity() {
         nextPingAt = Date.now() + 60_000;
       }).finally(() => { if (!disposed) pending = false; });
     };
+    const resume = () => {
+      if (document.visibilityState !== 'visible') return;
+      report();
+      if (Date.now() < nextRefreshAt) return;
+      nextRefreshAt = Date.now() + 15_000;
+      // Кнопка в Telegram могла изменить задачу или отключить приглашения, пока страница была в фоне.
+      for (const key of ['tasks', 'groups', 'settings', 'identities']) {
+        void queryClient.invalidateQueries({ queryKey: [key], refetchType: 'active' });
+      }
+    };
     report();
-    document.addEventListener('visibilitychange', report);
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('focus', resume);
     document.addEventListener('pointerdown', report, { passive: true });
     document.addEventListener('keydown', report);
     return () => {
       disposed = true;
-      document.removeEventListener('visibilitychange', report);
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('focus', resume);
       document.removeEventListener('pointerdown', report);
       document.removeEventListener('keydown', report);
     };
-  }, []);
+  }, [queryClient]);
 }
