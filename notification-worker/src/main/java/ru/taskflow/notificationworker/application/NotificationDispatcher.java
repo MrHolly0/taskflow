@@ -91,7 +91,7 @@ public class NotificationDispatcher {
                     .sendWidgetSync(notification);
             return true;
         }
-        if ("TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
+        if ("WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType())) {
             return dispatchEngagement(notification);
         }
         if (!"TASK_REMINDER".equals(notification.payloadType())) {

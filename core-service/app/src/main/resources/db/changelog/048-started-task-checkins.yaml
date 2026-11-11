@@ -1,0 +1,31 @@
+databaseChangeLog:
+  - changeSet:
+      id: 048-started-task-checkins
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE user_settings ALTER COLUMN task_checkins_enabled SET DEFAULT TRUE;
+              ALTER TABLE user_settings ALTER COLUMN return_nudges_enabled SET DEFAULT TRUE;
+              INSERT INTO user_settings(user_id,task_checkins_enabled,return_nudges_enabled,task_checkins_enabled_at,return_nudges_enabled_at)
+                SELECT u.id,true,true,NOW(),NOW() FROM users u
+                WHERE NOT EXISTS(SELECT 1 FROM user_settings s WHERE s.user_id=u.id);
+              UPDATE user_settings SET task_checkins_enabled_at=NOW()
+                WHERE task_checkins_enabled AND task_checkins_enabled_at IS NULL;
+              UPDATE user_settings SET return_nudges_enabled_at=NOW()
+                WHERE return_nudges_enabled AND return_nudges_enabled_at IS NULL;
+              ALTER TABLE engagement_prompts ADD COLUMN started_snapshot TIMESTAMPTZ;
+              ALTER TABLE engagement_prompts ADD COLUMN estimate_snapshot INT;
+              ALTER TABLE engagement_prompts ADD COLUMN due_at TIMESTAMPTZ;
+              ALTER TABLE engagement_prompts DROP CONSTRAINT IF EXISTS engagement_prompts_kind_check;
+              ALTER TABLE engagement_prompts DROP CONSTRAINT IF EXISTS engagement_prompts_check;
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_kind_check
+                CHECK (kind IN ('TASK_CHECKIN','WORK_CHECKIN','RETURN_NUDGE'));
+              ALTER TABLE engagement_prompts ADD CONSTRAINT engagement_subject_check CHECK (
+                (kind='TASK_CHECKIN' AND task_id IS NOT NULL AND deadline_snapshot IS NOT NULL)
+                OR (kind='WORK_CHECKIN' AND task_id IS NOT NULL AND started_snapshot IS NOT NULL AND due_at IS NOT NULL)
+                OR (kind='RETURN_NUDGE' AND task_id IS NULL));
+              CREATE UNIQUE INDEX idx_checkin_work_session ON engagement_prompts(task_id,started_snapshot)
+                WHERE kind='WORK_CHECKIN' AND cancelled_at IS NULL;
+              CREATE INDEX idx_work_checkin_candidates ON tasks(started_at,user_id)
+                WHERE status='IN_PROGRESS' AND is_deleted=false AND started_at IS NOT NULL;

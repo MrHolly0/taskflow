@@ -100,7 +100,7 @@ public class ScheduledNotificationPoller {
     }
 
     private boolean isEngagement(PendingNotification notification) {
-        return "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType());
+        return "WORK_CHECKIN".equals(notification.payloadType()) || "TASK_CHECKIN".equals(notification.payloadType()) || "RETURN_NUDGE".equals(notification.payloadType());
     }
 
     @Transactional(readOnly = true)
@@ -114,13 +114,23 @@ public class ScheduledNotificationPoller {
                       AND i.provider = 'TELEGRAM' AND i.external_id = n.destination)
                     AND CASE WHEN p.kind = 'TASK_CHECKIN' THEN
                       s.task_checkins_enabled AND t.user_id = p.user_id AND NOT t.is_deleted
-                      AND t.status IN ('TODO', 'IN_PROGRESS') AND t.deadline = p.deadline_snapshot
+                      AND (t.status='TODO' OR (t.status='IN_PROGRESS' AND t.started_at IS NULL)) AND t.deadline = p.deadline_snapshot
                       AND t.deadline >= s.task_checkins_enabled_at
                       AND t.deadline BETWEEN NOW() - INTERVAL '24 hours' AND NOW() - INTERVAL '30 minutes'
                       AND (t.planned_date IS NULL OR t.planned_date <= NOW())
                       AND EXISTS (SELECT 1 FROM reminders r WHERE r.task_id = t.id AND r.status = 'PENDING')
                       AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id = t.id AND r.status = 'PENDING'
                         AND r.fire_at BETWEEN NOW() - INTERVAL '30 minutes' AND NOW() + INTERVAL '30 minutes')
+                    WHEN p.kind = 'WORK_CHECKIN' THEN
+                      s.task_checkins_enabled AND t.user_id=p.user_id AND NOT t.is_deleted
+                      AND t.status='IN_PROGRESS' AND t.started_at=p.started_snapshot
+                      AND t.started_at>=s.task_checkins_enabled_at AND t.started_at>=NOW()-INTERVAL '24 hours'
+                      AND t.deadline IS NOT DISTINCT FROM p.deadline_snapshot
+                      AND t.estimate_minutes IS NOT DISTINCT FROM p.estimate_snapshot
+                      AND p.due_at<=NOW() AND (t.planned_date IS NULL OR t.planned_date<=NOW()
+                        OR t.planned_date_set_at IS NULL OR t.planned_date_set_at<=t.started_at)
+                      AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id=t.id AND r.status='PENDING'
+                        AND r.fire_at BETWEEN NOW()-INTERVAL '30 minutes' AND NOW()+INTERVAL '30 minutes')
                     WHEN p.kind = 'RETURN_NUDGE' THEN
                       s.return_nudges_enabled AND GREATEST(u.last_active_at, s.return_nudges_enabled_at)
                         <= p.created_at - INTERVAL '3 days'

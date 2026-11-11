@@ -47,8 +47,8 @@ public class WidgetDelivery {
         var target=rows.getFirst();
         if (!target.cards()) return false;
         boolean reminder="TASK_REMINDER".equals(notification.payloadType());
-        if ((reminder || "TASK_CHECKIN".equals(notification.payloadType())) && target.title()==null) return true;
-        String kind=reminder?"reminder":"TASK_CHECKIN".equals(notification.payloadType())?"checkin":"return";
+        if ((reminder || java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(notification.payloadType())) && target.title()==null) return true;
+        String kind=reminder?"reminder":java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(notification.payloadType())?"checkin":"return";
         String title=kind.equals("return")?"Расскажи о новых делах":WidgetTemplate.clip(target.title(),80);
         var state=new WidgetState(kind,title,kind.equals("return")?List.of():
                 List.of(List.of("Срок",WidgetTemplate.time(target.deadline(),ZoneId.of(target.timezone()),Clock.systemUTC()))));
@@ -80,7 +80,7 @@ public class WidgetDelivery {
                   AND EXISTS (SELECT 1 FROM user_identities i WHERE i.user_id=w.user_id AND i.provider='TELEGRAM'
                     AND i.external_id=n.destination)
                   AND (w.task_id IS NULL OR EXISTS (SELECT 1 FROM tasks t WHERE t.id=w.task_id AND t.user_id=w.user_id))
-                  AND (w.kind<>'PROPOSAL' OR EXISTS (SELECT 1 FROM assistant_proposals p WHERE p.id=w.reference_id AND p.user_id=w.user_id))
+                  AND (w.kind NOT IN ('PROPOSAL','RECEIPT') OR EXISTS (SELECT 1 FROM assistant_proposals p WHERE p.id=w.reference_id AND p.user_id=w.user_id))
                 """,(rs,row)->rs.getObject(1,UUID.class),notification.id(),notification.leaseToken(),payload.contextId());
         if (owners.isEmpty()) return;
         var context=store.find(payload.contextId(),owners.getFirst()).orElseThrow();

@@ -35,10 +35,10 @@ class EngagementGateTest {
                   return_nudges_enabled BOOLEAN DEFAULT true, task_checkins_enabled_at TIMESTAMPTZ, return_nudges_enabled_at TIMESTAMPTZ);
                 CREATE TABLE user_identities(user_id UUID, provider TEXT, external_id TEXT);
                 CREATE TABLE tasks(id UUID PRIMARY KEY, user_id UUID, title TEXT, deadline TIMESTAMPTZ,
-                  planned_date TIMESTAMPTZ, status TEXT DEFAULT 'TODO', is_deleted BOOLEAN DEFAULT false);
+                  planned_date TIMESTAMPTZ, planned_date_set_at TIMESTAMPTZ,started_at TIMESTAMPTZ,estimate_minutes INT,status TEXT DEFAULT 'TODO', is_deleted BOOLEAN DEFAULT false);
                 CREATE TABLE reminders(task_id UUID, status TEXT DEFAULT 'PENDING', fire_at TIMESTAMPTZ);
                 CREATE TABLE engagement_prompts(id UUID PRIMARY KEY, user_id UUID, task_id UUID, kind TEXT,
-                  deadline_snapshot TIMESTAMPTZ, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
+                  deadline_snapshot TIMESTAMPTZ,started_snapshot TIMESTAMPTZ,estimate_snapshot INT,due_at TIMESTAMPTZ, created_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
                   sent_at TIMESTAMPTZ, answered_at TIMESTAMPTZ, cancelled_at TIMESTAMPTZ);
                 CREATE TABLE scheduled_notifications(id UUID PRIMARY KEY, user_id UUID, engagement_prompt_id UUID,
                   channel TEXT, destination TEXT, payload_type TEXT, payload JSONB, fire_at TIMESTAMPTZ,
@@ -61,6 +61,29 @@ class EngagementGateTest {
                 prompt, user, task, now.minusHours(1), now.minusMinutes(1), now.plusDays(7));
         jdbc.update("INSERT INTO scheduled_notifications(id, user_id, engagement_prompt_id, channel, destination, payload_type, payload, fire_at) VALUES (?, ?, ?, 'TELEGRAM', '12345', 'TASK_CHECKIN', '{}'::jsonb, ?)",
                 notification, user, prompt, now.minusMinutes(1));
+    }
+
+    @Test
+    void workWithoutDeadlineIsCheckedAndLateReschedulingInvalidatesIt() {
+        var started=now.minusHours(2);
+        jdbc.update("UPDATE tasks SET status='IN_PROGRESS',deadline=NULL,started_at=?,estimate_minutes=30,planned_date=?,planned_date_set_at=?",
+                started,now.plusDays(2),started.minusHours(1));
+        jdbc.update("UPDATE engagement_prompts SET kind='WORK_CHECKIN',deadline_snapshot=NULL,started_snapshot=?,estimate_snapshot=30,due_at=?",started,now.minusHours(1));
+        jdbc.update("UPDATE scheduled_notifications SET payload_type='WORK_CHECKIN'");
+        var claim=poller.claimPending(1).getFirst();assertThat(poller.checkEngagement(claim,prompt).valid()).isTrue();
+        jdbc.update("UPDATE tasks SET planned_date_set_at=?",started.plusHours(1));
+        assertThat(poller.checkEngagement(claim,prompt).valid()).isFalse();
+    }
+    @Test
+    void changedEstimateOrWorkSessionInvalidatesQueuedQuestion() {
+        var started=now.minusHours(2);
+        jdbc.update("UPDATE tasks SET status='IN_PROGRESS',started_at=?,estimate_minutes=30",started);
+        jdbc.update("UPDATE engagement_prompts SET kind='WORK_CHECKIN',started_snapshot=?,estimate_snapshot=30,due_at=?",started,now.minusHours(1));
+        jdbc.update("UPDATE scheduled_notifications SET payload_type='WORK_CHECKIN'");
+        var claim=poller.claimPending(1).getFirst();assertThat(poller.checkEngagement(claim,prompt).valid()).isTrue();
+        jdbc.update("UPDATE tasks SET estimate_minutes=60");assertThat(poller.checkEngagement(claim,prompt).valid()).isFalse();
+        jdbc.update("UPDATE tasks SET estimate_minutes=30,started_at=?",started.plusMinutes(1));
+        assertThat(poller.checkEngagement(claim,prompt).valid()).isFalse();
     }
 
     @Test

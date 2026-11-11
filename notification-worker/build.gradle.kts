@@ -4,6 +4,7 @@ plugins {
 }
 
 dependencies {
+    implementation(project(":core-service:shared:common"))
     implementation(project(":core-service:shared:telegram-widgets"))
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")

@@ -66,12 +66,31 @@ public class EngagementServiceImpl implements EngagementService {
 
         String offsets = timezoneOffsets(now);
         if ("{}".equals(offsets)) return;
+        String workDue=ru.taskflow.shared.engagement.WorkCheckinSchedule.dueSql("candidate");
+        var work=jdbc.query("SELECT u.id AS user_id,i.external_id,u.timezone,t.id AS task_id,t.title,t.deadline,t.started_at,t.estimate_minutes,t.due_at "
+                +USERS+"""
+                JOIN LATERAL (SELECT candidate.id,candidate.title,candidate.deadline,candidate.started_at,candidate.estimate_minutes,
+                """+workDue+" AS due_at FROM tasks candidate WHERE candidate.user_id=u.id AND NOT candidate.is_deleted "
+                +"AND candidate.status='IN_PROGRESS' AND candidate.started_at>=s.task_checkins_enabled_at "
+                +"AND candidate.started_at>=? - INTERVAL '24 hours' AND (candidate.planned_date IS NULL OR candidate.planned_date<=? OR candidate.planned_date_set_at IS NULL OR candidate.planned_date_set_at<=candidate.started_at) "
+                +"AND "+workDue+"<=? AND NOT EXISTS (SELECT 1 FROM engagement_prompts p WHERE p.task_id=candidate.id "
+                +"AND p.kind='WORK_CHECKIN' AND p.started_snapshot=candidate.started_at AND p.cancelled_at IS NULL) "
+                +"AND NOT EXISTS (SELECT 1 FROM reminders r WHERE r.task_id=candidate.id AND r.status='PENDING' "
+                +"AND r.fire_at BETWEEN ? - INTERVAL '30 minutes' AND ? + INTERVAL '30 minutes') "
+                +"ORDER BY due_at,candidate.id LIMIT 1) t ON true "+AUDIENCE
+                +" AND s.task_checkins_enabled ORDER BY t.due_at,u.id LIMIT 100",
+                (rs,row)->new Candidate(rs.getObject("user_id",UUID.class),rs.getString("external_id"),rs.getString("timezone"),
+                        rs.getObject("task_id",UUID.class),rs.getString("title"),rs.getObject("deadline",OffsetDateTime.class),
+                        rs.getObject("started_at",OffsetDateTime.class),rs.getObject("estimate_minutes",Integer.class),rs.getObject("due_at",OffsetDateTime.class)),
+                offsets,now,now,now,now,now,now,now,now);
+        for(var candidate:work) enqueue(candidate,"WORK_CHECKIN",now);
+
         var checkins = jdbc.query("""
                 SELECT u.id AS user_id, i.external_id, u.timezone, t.id AS task_id, t.title, t.deadline
                 """ + USERS + """
                 JOIN LATERAL (SELECT candidate.id, candidate.title, candidate.deadline FROM tasks candidate
                   WHERE candidate.user_id = u.id AND NOT candidate.is_deleted
-                    AND candidate.status IN ('TODO', 'IN_PROGRESS')
+                    AND (candidate.status='TODO' OR (candidate.status='IN_PROGRESS' AND candidate.started_at IS NULL))
                     AND candidate.deadline >= s.task_checkins_enabled_at
                     AND candidate.deadline >= ? - INTERVAL '24 hours'
                     AND candidate.deadline <= ? - INTERVAL '30 minutes'
@@ -127,12 +146,12 @@ public class EngagementServiceImpl implements EngagementService {
     private void enqueue(Candidate candidate, String kind, OffsetDateTime now) {
         var token = UUID.randomUUID();
         int inserted = jdbc.update("""
-                INSERT INTO engagement_prompts(id, user_id, task_id, kind, deadline_snapshot, created_at, expires_at)
-                SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
+                INSERT INTO engagement_prompts(id, user_id, task_id, kind, deadline_snapshot, created_at, expires_at,started_snapshot,estimate_snapshot,due_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS (
                   SELECT 1 FROM engagement_prompts p WHERE p.user_id = ? AND p.cancelled_at IS NULL
                     AND COALESCE(p.sent_at, p.created_at) > ? - INTERVAL '24 hours')
                 ON CONFLICT DO NOTHING
-                """, token, candidate.userId(), candidate.taskId(), kind, candidate.deadline(), now, now.plusDays(7), candidate.userId(), now);
+                """, token, candidate.userId(), candidate.taskId(), kind, candidate.deadline(), now, now.plusDays(7),candidate.started(),candidate.estimate(),candidate.due(), candidate.userId(), now);
         if (inserted == 0) return;
         Map<String, Object> payload = new HashMap<>();
         payload.put("promptId", token.toString());
@@ -169,10 +188,10 @@ public class EngagementServiceImpl implements EngagementService {
                 SELECT * FROM engagement_prompts WHERE id = ? AND user_id = ? FOR UPDATE
                 """, (rs, row) -> new Prompt(rs.getString("kind"), rs.getObject("deadline_snapshot", OffsetDateTime.class),
                 rs.getObject("expires_at", OffsetDateTime.class), rs.getObject("sent_at", OffsetDateTime.class),
-                rs.getString("answer"), rs.getObject("cancelled_at", OffsetDateTime.class)), promptId, userId);
+                rs.getString("answer"), rs.getObject("cancelled_at", OffsetDateTime.class),rs.getObject("started_snapshot",OffsetDateTime.class)), promptId, userId);
         if (prompts.isEmpty()) return new Reply("Сообщение недоступно", false);
         var prompt = prompts.getFirst();
-        if (prompt.answer() != null) return new Reply(answerText(prompt.answer()), true);
+        if (prompt.answer() != null) return new Reply(answerText(prompt.answer()), true,prompt.answer());
         if (prompt.sentAt() == null) return new Reply("Сообщение ещё недоступно", false);
         var now = OffsetDateTime.now(clock);
         if ("RETURN_NUDGE".equals(prompt.kind()) && "mute".equals(action)) {
@@ -180,14 +199,16 @@ public class EngagementServiceImpl implements EngagementService {
                     null, null, null, null, null, null, null, false));
         } else {
             if (prompt.cancelledAt() != null || !prompt.expiresAt().isAfter(now)
-                    || !"TASK_CHECKIN".equals(prompt.kind()) || "mute".equals(action))
-                return new Reply("Это сообщение уже неактуально. Проверь текущие дела в Мунине.", true);
+                    || !java.util.Set.of("TASK_CHECKIN","WORK_CHECKIN").contains(prompt.kind()) || "mute".equals(action))
+                return new Reply("Сообщение уже неактуально, открой текущие дела в Мунине", true,"stale");
             boolean current = Boolean.TRUE.equals(jdbc.queryForObject("""
                     SELECT EXISTS (SELECT 1 FROM tasks WHERE id = ? AND user_id = ? AND NOT is_deleted
-                      AND status IN ('TODO', 'IN_PROGRESS') AND deadline = ?
-                      AND (planned_date IS NULL OR planned_date <= ?))
-                    """, Boolean.class, taskId, userId, prompt.deadline(), now));
-            if (!current) return new Reply("Задача уже изменена или завершена. Оставил её как есть.", true);
+                      AND status IN ('TODO', 'IN_PROGRESS') AND deadline IS NOT DISTINCT FROM ?
+                      AND (planned_date IS NULL OR planned_date <= ? OR (?='WORK_CHECKIN'
+                        AND (planned_date_set_at IS NULL OR planned_date_set_at<=started_at)))
+                      AND (? <> 'WORK_CHECKIN' OR (status='IN_PROGRESS' AND started_at=?)))
+                    """, Boolean.class, taskId, userId, prompt.deadline(), now,prompt.kind(),prompt.kind(),prompt.started()));
+            if (!current) return new Reply("Задача уже изменена или завершена", true,"stale");
             switch (action) {
                 case "done" -> tasks.complete(userId, taskId);
                 case "working" -> tasks.update(userId, taskId,
@@ -202,7 +223,7 @@ public class EngagementServiceImpl implements EngagementService {
             }
         }
         jdbc.update("UPDATE engagement_prompts SET answered_at = ?, answer = ? WHERE id = ?", now, action, promptId);
-        return new Reply(answerText(action), true);
+        return new Reply(answerText(action), true,action);
     }
 
     private String answerText(String action) {
@@ -216,7 +237,11 @@ public class EngagementServiceImpl implements EngagementService {
     }
 
     private record Candidate(UUID userId, String destination, String timezone, UUID taskId, String title,
-                             OffsetDateTime deadline) {}
+                             OffsetDateTime deadline,OffsetDateTime started,Integer estimate,OffsetDateTime due) {
+        Candidate(UUID userId,String destination,String timezone,UUID taskId,String title,OffsetDateTime deadline) {
+            this(userId,destination,timezone,taskId,title,deadline,null,null,null);
+        }
+    }
     private record Prompt(String kind, OffsetDateTime deadline, OffsetDateTime expiresAt, OffsetDateTime sentAt,
-                          String answer, OffsetDateTime cancelledAt) {}
+                          String answer, OffsetDateTime cancelledAt,OffsetDateTime started) {}
 }

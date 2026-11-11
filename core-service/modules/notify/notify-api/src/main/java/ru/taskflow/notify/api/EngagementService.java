@@ -6,5 +6,7 @@ public interface EngagementService {
     void plan();
     Reply reply(UUID userId, UUID promptId, String action);
 
-    record Reply(String text, boolean terminal) {}
+    record Reply(String text, boolean terminal, String outcome) {
+        public Reply(String text,boolean terminal) { this(text,terminal,null); }
+    }
 }

@@ -65,13 +65,20 @@ public class UserSettingsJpaEntity {
     @Column(name = "voice_input_mode_mobile", length = 16)
     private String voiceInputModeMobile = "SILENCE";
     @Column(name = "task_checkins_enabled", nullable = false)
-    private boolean taskCheckinsEnabled;
+    private boolean taskCheckinsEnabled = true;
 
     @Column(name = "return_nudges_enabled", nullable = false)
-    private boolean returnNudgesEnabled;
+    private boolean returnNudgesEnabled = true;
 
     @Column(name = "task_checkins_enabled_at")
     private OffsetDateTime taskCheckinsEnabledAt;
+
+    @PrePersist
+    void initializeEngagementDates() {
+        var now=OffsetDateTime.now();
+        if (taskCheckinsEnabled && taskCheckinsEnabledAt==null) taskCheckinsEnabledAt=now;
+        if (returnNudgesEnabled && returnNudgesEnabledAt==null) returnNudgesEnabledAt=now;
+    }
 
     @Column(name = "return_nudges_enabled_at")
     private OffsetDateTime returnNudgesEnabledAt;

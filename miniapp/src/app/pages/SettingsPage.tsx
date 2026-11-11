@@ -355,11 +355,11 @@ export function SettingsPage() {
               <div className="min-w-0 space-y-1">
                 <Label htmlFor="task-checkins" className="flex min-h-11 items-center">Спрашивать, как продвигается дело</Label>
                 <p id="task-checkins-hint" className="text-xs text-muted-foreground">
-                  Можем спросить один раз, не раньше чем через 30 минут после срока. Только если дело не завершено и его напоминания включены.
+                  Спросим после времени, отведённого на начатое дело. Без оценки длительности — примерно через час. Если дело не начато, ориентируемся на его срок.
                 </p>
               </div>
               <Switch id="task-checkins" aria-describedby="task-checkins-hint"
-                checked={serverSettings?.taskCheckinsEnabled ?? false}
+                checked={serverSettings?.taskCheckinsEnabled ?? true}
                 onCheckedChange={value => updateSettings.mutate({ taskCheckinsEnabled: value })}
                 disabled={!serverSettings || !hasTelegram || !notificationsEnabled || !notifyTelegram || updateSettings.isPending}
               />
@@ -372,7 +372,7 @@ export function SettingsPage() {
                 </p>
               </div>
               <Switch id="return-nudges" aria-describedby="return-nudges-hint"
-                checked={serverSettings?.returnNudgesEnabled ?? false}
+                checked={serverSettings?.returnNudgesEnabled ?? true}
                 onCheckedChange={value => updateSettings.mutate({ returnNudgesEnabled: value })}
                 disabled={!serverSettings || !hasTelegram || !notificationsEnabled || !notifyTelegram || updateSettings.isPending}
               />

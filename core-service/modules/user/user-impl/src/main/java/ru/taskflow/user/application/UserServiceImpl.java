@@ -58,7 +58,8 @@ public class UserServiceImpl implements UserService {
                     identity.setExternalId(externalId);
                     identity.setVerifiedAt(OffsetDateTime.now());
                     identityRepository.save(identity);
-
+                    var defaults=new UserSettingsJpaEntity();defaults.setUser(savedUser);
+                    settingsRepository.save(defaults);
                     return toDto(savedUser);
                 });
     }
@@ -270,7 +271,7 @@ public class UserServiceImpl implements UserService {
     private UserSettingsDto defaultSettings(String timezone, String displayName) {
         // notifyPush=false — "включён" без разрешения браузера и живой
         // подписки не бывает, а у свежей учётки их ещё нет ни одного.
-        return new UserSettingsDto(true, true, false, false, 60, true, "groq", null, "SILENCE", "SILENCE", timezone, displayName);
+        return new UserSettingsDto(true, true, false, false, 60, true, "groq", null, "SILENCE", "SILENCE", timezone, displayName,true,true);
     }
 
     private UserDto toDto(UserJpaEntity e) {

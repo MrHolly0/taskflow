@@ -84,7 +84,7 @@ public class TelegramNotificationSender implements NotificationSender {
         String prefix = "eng:" + payload.promptId() + ":";
         var rows = new java.util.ArrayList<List<Map<String, String>>>();
         String text;
-        if ("TASK_CHECKIN".equals(kind)) {
+        if ("TASK_CHECKIN".equals(kind) || "WORK_CHECKIN".equals(kind)) {
             text = "Как продвигается дело?\n\n<b>" + escape(payload.taskTitle())
                     + "</b>" + deadlineLine(payload.deadline(), payload.timezone()) + "\n\nПолучилось завершить?";
             rows.add(List.of(Map.of("text", "✅ Готово", "callback_data", prefix + "done"),

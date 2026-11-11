@@ -377,9 +377,10 @@ public class TaskServiceImpl implements TaskService {
             if (request.status() == TaskStatus.DONE && task.getCompletedAt() == null) {
                 task.setCompletedAt(OffsetDateTime.now());
             }
-            if (request.status() == TaskStatus.IN_PROGRESS) {
-                task.setStartedAt(OffsetDateTime.now());
+            if (request.status() == TaskStatus.IN_PROGRESS && (previousStatus != TaskStatus.IN_PROGRESS || task.getStartedAt()==null)) {
+                task.setStartedAt(OffsetDateTime.now(clock));
             }
+            if (request.status() == TaskStatus.TODO) task.setStartedAt(null);
         }
 
         boolean groupRequested = Boolean.TRUE.equals(request.clearGroup()) || request.groupId() != null

@@ -93,3 +93,6 @@ databaseChangeLog:
       file: db/changelog/046-engagement-prompts.yaml
   - include:
       file: db/changelog/047-telegram-widgets.yaml
+
+  - include:
+      file: db/changelog/048-started-task-checkins.yaml
