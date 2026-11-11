@@ -44,7 +44,8 @@ class VoiceMessageHandlerTest {
     @Test
     void handleVoice_createsProposalFromTranscript() {
         var handler = new VoiceMessageHandler(apiClient, sender, assistantService, renderer,
-                new ru.taskflow.telegram.application.TelegramUpdateCheckpoint(null), widgets);
+                new ru.taskflow.telegram.application.TelegramUpdateCheckpoint(null), widgets,
+                new ru.taskflow.telegram.application.TelegramResourceFeedback(sender),new ru.taskflow.shared.resources.ResourcePolicy());
         var userId = UUID.randomUUID();
         var message = new TelegramMessage(
                 1L, new TelegramUser(1L, "u", "Name", null),
@@ -55,8 +56,11 @@ class VoiceMessageHandlerTest {
                 "закрой молоко", null, List.of(), now, now.plusHours(24));
 
         when(apiClient.downloadVoice("file123")).thenReturn(audio);
-        when(assistantService.handleVoice(userId, audio, AssistantChannel.TELEGRAM,
-                ru.taskflow.assistant.api.AssistantEntryPoint.CHAT, null)).thenReturn(proposal);
+        when(assistantService.handleVoiceUpload(eq(userId),any(),eq(AssistantChannel.TELEGRAM),
+                eq(ru.taskflow.assistant.api.AssistantEntryPoint.CHAT),org.mockito.ArgumentMatchers.isNull())).thenAnswer(call->{
+                    org.assertj.core.api.Assertions.assertThat(call.<java.util.function.Supplier<byte[]>>getArgument(1).get()).isEqualTo(audio);
+                    return proposal;
+                });
         when(renderer.render(proposal)).thenReturn("Предлагаю: закрыть молоко");
         when(renderer.keyboard(proposal)).thenReturn(List.of(List.of()));
 

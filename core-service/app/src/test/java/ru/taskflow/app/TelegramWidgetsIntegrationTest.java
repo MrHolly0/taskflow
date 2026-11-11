@@ -44,6 +44,7 @@ class TelegramWidgetsIntegrationTest {
     @Autowired WidgetProposalProjection projection;
     @Autowired AssistantService assistant;
     @Autowired PlatformTransactionManager transactions;
+    @Autowired ru.taskflow.telegram.application.WidgetReceiptProjection receipts;
     UUID owner;
     @BeforeEach void clean() { jdbc.execute("TRUNCATE users CASCADE");owner=users.findOrCreateByTelegram(12345,"widget_test","Тест",null).id(); }
 
@@ -180,6 +181,48 @@ class TelegramWidgetsIntegrationTest {
         assertThat(result.status()).isEqualTo("Сохранено: 1 из 2");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks",Integer.class)).isEqualTo(1);
         assertThat(actions.act(owner,12345,100,key(c,"a"))).isEqualTo(result);
+    }
+
+    @Test void receiptUndoIsBoundToOwnerAndReplayedCreationNeverRunsAgain() {
+        UUID id=proposal(1);
+        var applied=assistant.resolveAutomatically(owner,id);
+        assertThat(applied.applied().appliedCount()).isEqualTo(1);
+        var receipt=receiptCard(id);
+        assertThat(receipt.state().undoAvailable()).isTrue();
+        UUID stranger=users.findOrCreateByTelegram(8888,"other_receipt","Другой",null).id();
+        assertThatThrownBy(()->actions.act(stranger,12345,100,key(receipt,"undo"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(()->actions.act(owner,12345,101,key(receipt,"undo"))).isInstanceOf(IllegalArgumentException.class);
+        var undone=actions.act(owner,12345,100,key(receipt,"undo"));
+        assertThat(undone.heading()).isEqualTo("Действие отменено");
+        assertThat(undone.undoAvailable()).isFalse();
+        assertThat(undone.taskId()).isNull();
+        assertThat(actions.act(owner,12345,100,key(receipt,"undo"))).isEqualTo(undone);
+        assertThat(assistant.resolveAutomatically(owner,id).applied().outcomes().getFirst().undone()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE NOT is_deleted",Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks",Integer.class)).isEqualTo(1);
+    }
+
+    @Test void receiptPagingUndoesOnlyTheSelectedCreation() {
+        UUID id=proposal(2);assistant.resolveAutomatically(owner,id);
+        var receipt=receiptCard(id);
+        var second=actions.act(owner,12345,100,key(receipt,"pg1"));
+        assertThat(second.title()).isEqualTo("Провести пару 1");
+        actions.act(owner,12345,100,second.key()+":undo");
+        assertThat(jdbc.queryForList("SELECT title FROM tasks WHERE NOT is_deleted",String.class)).containsExactly("Провести пару 0");
+    }
+
+    @Test void receiptUndoRejectsLaterEditsWithoutReplacingCurrentData() {
+        UUID id=proposal(1);var result=assistant.resolveAutomatically(owner,id);
+        var receipt=receiptCard(id);UUID task=result.applied().outcomes().getFirst().taskId();
+        tasks.update(owner,task,new UpdateTaskRequest("Уже исправлено",null,null,null,null,null,null,null,null));
+        assertThatThrownBy(()->actions.act(owner,12345,100,key(receipt,"undo"))).hasMessageContaining("уже изменилась");
+        assertThat(tasks.findById(owner,task).title()).isEqualTo("Уже исправлено");
+        assertThat(store.find(receipt.id(),owner).orElseThrow().revision()).isZero();
+    }
+
+    private WidgetContext receiptCard(UUID proposal) {
+        var context=store.reserve(owner,"RECEIPT",proposal,null,null,12345,receipts.render(owner,proposal,0));
+        store.bind(context.id(),100,"WIDGET");return store.find(context.id(),owner).orElseThrow();
     }
 
     private WidgetContext reminder() {

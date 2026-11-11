@@ -3,6 +3,8 @@ import { isAxiosError } from 'axios';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { toast, useSonner } from 'sonner';
 import { IconCheck, IconCalendar, IconBell, IconPencil, IconTrash, IconX, IconAlertTriangle } from '@tabler/icons-react';
+import { AssistantResultCard } from '@/app/components/AssistantResultCard';
+import { useUndoAssistantAction } from '@/lib/hooks/useAssistant';
 import type { ApplyResult, Proposal } from '@/lib/hooks/useAssistant';
 import { taskDetailQuery, useDeleteTask } from '@/lib/hooks/useTasks';
 import { useSettings } from '@/lib/hooks/useSettings';
@@ -80,6 +82,7 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const visibleIds = activeIds.slice(0, visibleCount);
   const tasks = useQueries({ queries: visibleIds.map(taskDetailQuery) });
   const remove = useDeleteTask();
+  const undo=useUndoAssistantAction();
   const queryClient = useQueryClient();
   const inspect = useTaskUi(state => state.inspectTask);
   const { timezone, isReady, error: timezoneError, refetch: reloadTimezone } = useUserTimezone();
@@ -87,7 +90,7 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const { toasts } = useSonner();
   const behind = toasts.length > 0 && toasts[0].id !== id;
   const dismiss = useCallback(() => { toast.dismiss(id); }, [id]);
-  useReceiptLifetime(dismiss, hovered || focused || held || behind || dialogOpen || !isReady || remove.isPending || Boolean(failure)
+  useReceiptLifetime(dismiss, hovered || focused || held || behind || dialogOpen || !isReady || (remove.isPending||undo.isPending) || Boolean(failure)
     || tasks.some(task => task.isPending || task.isError));
   const errors = result.outcomes.filter(outcome => !outcome.success);
   const otherCount = result.outcomes.filter(outcome => outcome.success && !allIds.includes(outcome.taskId ?? '')).length;
@@ -98,6 +101,13 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   };
   const cancel = (taskId: string) => {
     setFailure(null);
+    const operation=result.outcomes.find(outcome=>outcome.taskId===taskId)?.undoId;
+    if(operation) {
+      undo.mutate(operation,{onSuccess:()=>finishCancellation(taskId),onError:error=> {
+        const message=isAxiosError(error)&&typeof error.response?.data?.detail==='string'?error.response.data.detail:'Не получилось отменить, открой задачу для проверки';
+        setFailure({taskId,message});
+      }});return;
+    }
     remove.mutate(taskId, {
       onSuccess: () => finishCancellation(taskId),
       onError: error => {
@@ -136,8 +146,8 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
             </>}
           {failure?.taskId === taskId && <p className="receipt-error" role="alert">{failure.message}</p>}
           <div className="receipt-actions">
-            <button type="button" disabled={remove.isPending} onClick={() => { dismiss(); inspect(taskId); }}><IconPencil />Исправить</button>
-            <button type="button" disabled={remove.isPending} onClick={() => cancel(taskId)}><IconTrash />{remove.isPending && remove.variables === taskId ? 'Отменяем…' : 'Отменить создание'}</button>
+            <button type="button" disabled={remove.isPending||undo.isPending} onClick={() => { dismiss(); inspect(taskId); }}><IconPencil />Исправить</button>
+            <button type="button" disabled={remove.isPending||undo.isPending} onClick={() => cancel(taskId)}><IconTrash />{remove.isPending && remove.variables === taskId ? 'Отменяем…' : 'Отменить создание'}</button>
           </div>
         </section>;
       })}
@@ -158,6 +168,10 @@ export function dismissTaskReceipt() {
 
 export function showTaskReceipt(result: ApplyResult, proposal: Proposal) {
   dismissTaskReceipt();
+  if(result.outcomes.some(item=>item.undoId) && (!createdTaskIds(result,proposal).length || result.outcomes.some(item=>item.undone))) {
+    latestReceipt=toast.custom(id=> <AssistantResultCard result={result} proposal={proposal} onDismiss={()=>toast.dismiss(id)} />, {duration:20000,className:'task-receipt-toast'});
+    return;
+  }
   if (!createdTaskIds(result, proposal).length) {
     const errors = result.outcomes.filter(outcome => !outcome.success);
     const applied = result.outcomes.filter(outcome => outcome.success).map(outcome => outcome.summary);

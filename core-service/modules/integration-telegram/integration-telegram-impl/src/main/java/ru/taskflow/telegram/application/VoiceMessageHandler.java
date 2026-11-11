@@ -31,12 +31,23 @@ public class VoiceMessageHandler {
     private final ProposalMessageRenderer renderer;
     private final TelegramUpdateCheckpoint checkpoint;
     private final TelegramWidgetGateway widgets;
+    private final TelegramResourceFeedback resources;
+    private final ru.taskflow.shared.resources.ResourcePolicy policy;
 
     public void handle(TelegramMessage message, UUID userId) {
         String fileId = message.voice().fileId();
-        Proposal proposal = checkpoint.once("proposal", Proposal.class,
-                () -> assistantService.handleVoice(userId, apiClient.downloadVoice(fileId),
-                        AssistantChannel.TELEGRAM, AssistantEntryPoint.CHAT, checkpoint.requestKey()));
+        if(message.voice().duration()>policy.getMaxAudioSeconds()) {
+            sender.sendMessage(message.chat().id(),"Голосовое длиннее двух минут, раздели его на несколько сообщений");return;
+        }
+        Proposal proposal=resources.run(message.chat().id(),()->checkpoint.once("proposal",Proposal.class,
+                ()->assistantService.handleVoiceUpload(userId,()->apiClient.downloadVoice(fileId),
+                        AssistantChannel.TELEGRAM,AssistantEntryPoint.CHAT,checkpoint.requestKey())));
+        if(proposal==null) return;
+        if(proposal.id()!=null && message.chat().id()==message.from().id()) {
+            var resolved=checkpoint.once("auto-apply",ru.taskflow.assistant.api.dto.AssistantResult.class,
+                    ()->assistantService.resolveAutomatically(userId,proposal.id()));
+            if(resolved!=null && resolved.applied()!=null && widgets.sendApplied(userId,message.chat().id(),resolved.proposal(),resolved.applied())) return;
+        }
 
         if (widgets.sendProposal(userId,message.chat().id(),proposal)) return;
         String text = renderer.render(proposal);

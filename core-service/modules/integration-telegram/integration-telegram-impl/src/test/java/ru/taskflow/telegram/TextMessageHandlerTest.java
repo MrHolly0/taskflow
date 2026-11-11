@@ -33,6 +33,11 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TextMessageHandlerTest {
+    @Mock ru.taskflow.telegram.application.TelegramResourceFeedback resources;
+    @org.junit.jupiter.api.BeforeEach void permitResource() {
+        org.mockito.Mockito.lenient().when(resources.run(org.mockito.ArgumentMatchers.anyLong(),org.mockito.ArgumentMatchers.any()))
+          .thenAnswer(call->call.<java.util.function.Supplier<Object>>getArgument(1).get());
+    }
     @org.mockito.Mock
     ru.taskflow.telegram.application.TelegramWidgetGateway widgets;
 

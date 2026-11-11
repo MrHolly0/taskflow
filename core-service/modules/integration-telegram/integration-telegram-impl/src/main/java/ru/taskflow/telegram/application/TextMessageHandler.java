@@ -34,6 +34,7 @@ public class TextMessageHandler {
     private final TelegramMessageSender sender;
     private final TelegramUpdateCheckpoint checkpoint;
     private final TelegramWidgetGateway widgets;
+    private final TelegramResourceFeedback resources;
 
     public void handle(TelegramMessage message, UUID userId) {
         MessageDecision decision = checkpoint.once("decision", MessageDecision.class, () -> {
@@ -46,9 +47,14 @@ public class TextMessageHandler {
             resolveFastPath(userId, decision.proposalId(), decision.accepted(), message.chat().id());
             return;
         }
-        Proposal proposal = checkpoint.once("proposal", Proposal.class,
-                () -> assistantService.handleText(userId, message.text(), AssistantChannel.TELEGRAM,
-                        AssistantEntryPoint.CHAT, checkpoint.requestKey()));
+        Proposal proposal=resources.run(message.chat().id(),()->checkpoint.once("proposal",Proposal.class,
+                ()->assistantService.handleText(userId,message.text(),AssistantChannel.TELEGRAM,AssistantEntryPoint.CHAT,checkpoint.requestKey())));
+        if(proposal==null) return;
+        if(proposal.id()!=null && message.chat().id()==message.from().id()) {
+            var resolved=checkpoint.once("auto-apply",ru.taskflow.assistant.api.dto.AssistantResult.class,
+                    ()->assistantService.resolveAutomatically(userId,proposal.id()));
+            if(resolved!=null && resolved.applied()!=null && widgets.sendApplied(userId,message.chat().id(),resolved.proposal(),resolved.applied())) return;
+        }
         send(userId,message.chat().id(), proposal);
     }
 

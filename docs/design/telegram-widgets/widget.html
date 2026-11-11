@@ -17,6 +17,7 @@ h1{font-size:24px;line-height:1.15;letter-spacing:-.7px;margin:22px 0 14px;font-
 <script>
 var W=window.TelegramWidget,d=null,busy=false;
 var modes={
+ receipt:{kind:'Готово',heading:'Записал',intro:'',buttons:[['Отменить','undo',0]],note:''},
  reminder:{kind:'Напоминание',heading:'Время для этого дела',intro:'Один следующий шаг — и ты уже в процессе!',buttons:[['Взять в работу','working',1],['Через час','later',0]],note:'Срок задачи при переносе напоминания не меняется'},
  checkin:{kind:'Как успехи?',heading:'Получилось завершить?',intro:'Если планы изменились — это нормально',buttons:[['Готово','done',1],['Ещё в работе','working',0],['Напомнить через час','later',0,1]],note:''},
  return:{kind:'Как твои дела?',heading:'Разберём новые дела?',intro:'Можно рассказать словами — текстом или голосом',buttons:[['Не напоминать об этом','mute',0]],note:''},
@@ -32,8 +33,10 @@ function render(next){
  el('rows').textContent='';(Array.isArray(d.rows)?d.rows:[]).slice(0,3).forEach(function(pair){var row=document.createElement('div'),label=document.createElement('span'),value=document.createElement('strong');row.className='row';label.textContent=pair[0];value.textContent=pair[1];row.appendChild(label);row.appendChild(value);el('rows').appendChild(row)});
  el('actions').textContent='';el('status').className='status';
  if(d.terminal){show(d.status||'Готово');return}
+ if(d.kind==='receipt'&&d.total>1){nav('←','pg'+(d.page-1),d.page<=0);nav((d.page+1)+' из '+d.total,'noop',true);nav('→','pg'+(d.page+1),d.page>=d.total-1)}
  if(d.kind==='proposal'&&d.total){if(d.total>1)nav('←','pg'+(d.page-1),d.page<=0);nav((d.accepted?'✓ ':'')+(d.page+1)+' из '+d.total,d.accepted?'sel0':'sel1',false);if(d.total>1)nav('→','pg'+(d.page+1),d.page>=d.total-1)}
- m.buttons.forEach(function(action){var b=document.createElement('button');b.textContent=d.kind==='proposal'&&d.total&&action[1]==='a'?'Применить: '+d.selected:d.kind==='proposal'&&d.total&&action[1]==='r'?'Отклонить':action[0];b.className=(action[2]?'primary':'')+(action[3]?' wide':'');b.disabled=busy||!d.key||(d.kind==='proposal'&&action[1]==='a'&&d.selected===0);b.addEventListener('click',function(){act(d.key+':'+action[1])});el('actions').appendChild(b)});
+ m.buttons.forEach(function(action){if(d.kind==='receipt'&&!d.undoAvailable)return;var b=document.createElement('button');b.textContent=d.kind==='proposal'&&d.total&&action[1]==='a'?'Применить: '+d.selected:d.kind==='proposal'&&d.total&&action[1]==='r'?'Отклонить':action[0];b.className=(action[2]?'primary':'')+(action[3]?' wide':'');b.disabled=busy||!d.key||(d.kind==='proposal'&&action[1]==='a'&&d.selected===0);b.addEventListener('click',function(){act(d.key+':'+action[1])});el('actions').appendChild(b)});
+ if(d.kind==='receipt'&&d.status)show(d.status,false);
 }
 function nav(label,code,disabled){var b=document.createElement('button');b.textContent=label;b.disabled=busy||disabled;b.addEventListener('click',function(){act(d.key+':'+code)});el('paging').appendChild(b)}
 function act(code){

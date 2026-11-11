@@ -26,10 +26,13 @@ public class WidgetActions {
     private final WidgetProposalProjection projection;
     private final UserService users;
     private final Clock clock;
+    private final WidgetReceiptProjection receipts;
+    private final ru.taskflow.task.api.TaskOperationService operations;
     public WidgetActions(WidgetStore store,JdbcTemplate jdbc,TaskService tasks,AssistantService assistant,
-            EngagementService engagement,WidgetProposalProjection projection,UserService users,Clock clock) {
+            EngagementService engagement,WidgetProposalProjection projection,UserService users,Clock clock,WidgetReceiptProjection receipts,
+            ru.taskflow.task.api.TaskOperationService operations) {
         this.store=store;this.jdbc=jdbc;this.tasks=tasks;this.assistant=assistant;
-        this.engagement=engagement;this.projection=projection;this.users=users;this.clock=clock;
+        this.engagement=engagement;this.projection=projection;this.users=users;this.clock=clock;this.receipts=receipts;this.operations=operations;
     }
     @Transactional(timeout=10)
     public WidgetState act(UUID userId,long chatId,long messageId,String data) {
@@ -44,8 +47,9 @@ public class WidgetActions {
         if (preview.chatId()!=chatId || !Objects.equals(preview.messageId(),messageId))
             throw new IllegalArgumentException("Карточка недоступна");
         // Порядок совпадает с изменением задачи и ответом на проверку результата.
-        if (preview.taskId()!=null) jdbc.query("SELECT id FROM tasks WHERE id=? AND user_id=? FOR UPDATE",
-                (rs,row)->rs.getObject(1,UUID.class),preview.taskId(),userId);
+        UUID lockedTask=preview.kind().equals("RECEIPT")?receipts.taskId(userId,preview.referenceId(),preview.page()):preview.taskId();
+        if (lockedTask!=null) jdbc.query("SELECT id FROM tasks WHERE id=? AND user_id=? FOR UPDATE",
+                (rs,row)->rs.getObject(1,UUID.class),lockedTask,userId);
         var context=store.lock(token.id(),userId).orElseThrow();
         if (context.state().terminal()) return context.state();
         if (context.expiresAt().isBefore(OffsetDateTime.now(clock)))
@@ -53,6 +57,17 @@ public class WidgetActions {
         requireDeadline(deadline);
         if (context.revision()!=token.revision()) { store.enqueueSync(context); return context.state(); }
         if (token.action().equals("details")) return store.save(context,context.state(),context.page(),true).state();
+        if(context.kind().equals("RECEIPT")) {
+            int page=context.page();
+            if(token.action().matches("pg[0-9]{1,4}")) {
+                page=Integer.parseInt(token.action().substring(2));receipts.current(userId,context.referenceId(),page);
+            } else if(token.action().equals("undo")) {
+                var outcome=receipts.current(userId,context.referenceId(),page);
+                if(outcome.undoId()==null) throw new IllegalArgumentException("Отмена недоступна");
+                operations.undo(userId,outcome.undoId());
+            } else throw new IllegalArgumentException("Неизвестное действие");
+            return save(context,receipts.render(userId,context.referenceId(),page),page);
+        }
         if (context.kind().equals("PROPOSAL")) return proposal(context,token.action(),deadline);
         if (!List.of("done","working","later","mute").contains(token.action())) throw new IllegalArgumentException("Неизвестное действие");
         if (context.kind().equals("ENGAGEMENT")) {
@@ -61,7 +76,12 @@ public class WidgetActions {
             requireDeadline(deadline);
             var reply=engagement.reply(userId,context.referenceId(),action);
             if (!reply.terminal()) throw new IllegalArgumentException(clean(reply.text()));
-            return save(context,context.state().finish("Вот что получилось",clean(reply.text())),context.page());
+            String heading=switch(java.util.Objects.toString(reply.outcome(),"")) {
+                case "done" -> ru.taskflow.shared.engagement.CompletionFeedback.forOperation(context.referenceId()); case "working" -> "Продолжаем";
+                case "later" -> "Напомню позже"; case "mute" -> "Приглашения выключены";
+                case "stale" -> "Задача уже изменилась"; default -> "Ответ принят";
+            };
+            return save(context,context.state().finish(heading,clean(reply.text())),context.page());
         }
         if (token.action().equals("mute")) throw new IllegalArgumentException("Неизвестное действие");
         var current=jdbc.query("""

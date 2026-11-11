@@ -47,3 +47,19 @@ const returning=await runWidget(html,{context:{canQuery:true,chatType:'private'}
  probes:[`document.querySelectorAll('button').length`,`document.getElementById('note').textContent`]});
 assert.equal(returning.probes[0],'1');assert.equal(returning.probes[1],'');assert.equal(returning.requests.length,0);assert.deepEqual(returning.diags,[]);passed++;
 console.log('TOTAL including production states',passed,'sandbox cases passed');
+
+const receipt={kind:'receipt',key:paged.key,revision:0,title:'Провести пару',heading:'Одним делом меньше!',
+ rows:[],page:0,total:2,undoAvailable:true,taskId:'12345678-1234-1234-1234-123456789012'};
+for(const theme of ['light','dark']) {
+ const opts={theme,context:{canQuery:true,chatType:'private'},data:{chatData:JSON.stringify(receipt),publicData:null}};
+ const initial=await runWidget(html,{...opts,probes:[`document.getElementById('heading').textContent`,`document.getElementById('actions').textContent`,`document.getElementById('paging').textContent`]});
+ assert.equal(initial.probes[0],receipt.heading);assert.match(initial.probes[1],/Отменить/);assert.match(initial.probes[2],/1 из 2/);
+ assert.equal(initial.requests.length,0);assert.deepEqual(initial.diags,[]);passed++;
+ const undo=initial.renderOps.find(op=>op.op==='el'&&op.tag==='button').id;
+ const undone={...receipt,key:receipt.key.replace(':0',':1'),revision:1,heading:'Действие отменено',undoAvailable:false,taskId:null};
+ const changed=await runWidget(html,{...opts,events:[{type:'click',targetId:undo,gesture:1}],onRequest:()=>({result:JSON.stringify({ok:true,state:undone})}),
+ probes:[`document.getElementById('heading').textContent`,`document.getElementById('actions').textContent`]});
+ assert.equal(changed.requests.length,1);assert.equal(changed.requests[0].verdict,'foreground');
+ assert.equal(changed.probes[0],'Действие отменено');assert.doesNotMatch(changed.probes[1],/Отменить/);assert.deepEqual(changed.diags,[]);passed++;
+}
+console.log('TOTAL including receipts',passed,'sandbox cases passed');

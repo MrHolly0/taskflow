@@ -34,6 +34,9 @@ export interface ActionOutcome {
   success: boolean;
   error?: string;
   taskId?: string;
+  undoId?: string;
+  undoExpiresAt?: string;
+  undone?: boolean;
 }
 
 export interface ApplyResult {
@@ -49,6 +52,7 @@ export interface QuickResult {
 }
 
 export const useSendAssistantMessage = () => {
+  const queryClient=useQueryClient();
   const requestKey = useRef<{ text?: string; file?: File; key: string } | null>(null);
   return useMutation({
     mutationFn: async ({ text, file }: { text?: string; file?: File }) => {
@@ -58,13 +62,19 @@ export const useSendAssistantMessage = () => {
       const formData = new FormData();
       if (text) formData.append('text', text);
       if (file) formData.append('file', file);
-      const response = await getClient().post<Proposal>('/assistant/messages', formData, {
+      const response = await getClient().post<QuickResult>('/assistant/turn', formData, {
         headers: { 'Content-Type': 'multipart/form-data', 'Idempotency-Key': requestKey.current.key },
         timeout: 190000,
       });
       return response.data;
     },
-    onSuccess: () => { requestKey.current = null; },
+    onSuccess: result => {
+      requestKey.current=null;
+      if(result.applied) {
+        void queryClient.invalidateQueries({queryKey:['tasks']});
+        void queryClient.invalidateQueries({queryKey:['groups']});
+      }
+    },
   });
 };
 
@@ -79,7 +89,7 @@ export const useQuickAdd = () => {
       const formData = new FormData();
       if (text) formData.append('text', text);
       if (file) formData.append('file', file);
-      const response = await getClient().post<QuickResult>('/assistant/quick', formData, {
+      const response = await getClient().post<QuickResult>('/assistant/capture', formData, {
         headers: { 'Content-Type': 'multipart/form-data', 'Idempotency-Key': requestKey.current.key },
         timeout: 190000,
       });
@@ -160,6 +170,20 @@ export const useRejectProposal = () => {
   return useMutation({
     mutationFn: async (proposalId: string) => {
       await getClient().post(`/assistant/proposals/${proposalId}/reject`);
+    },
+  });
+};
+
+export const useUndoAssistantAction=()=> {
+  const queryClient=useQueryClient();
+  return useMutation({
+    mutationFn:async(id:string)=> {
+      const response=await getClient().post<{taskId:string;kind:string;undone:boolean}>(`/assistant/operations/${id}/undo`);
+      return response.data;
+    },
+    onSuccess:()=> {
+      void queryClient.invalidateQueries({queryKey:['tasks']});
+      void queryClient.invalidateQueries({queryKey:['groups']});
     },
   });
 };

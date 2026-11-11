@@ -22,6 +22,7 @@ import { TaskDetailModal } from '@/app/components/TaskDetailModal';
 import { toast } from 'sonner';
 import { useEffectiveVoiceMode } from '@/lib/hooks/useVoiceMode';
 import { useVoiceRecording } from '@/lib/hooks/useVoiceRecording';
+import { AssistantResultCard } from '@/app/components/AssistantResultCard';
 import { ProposalCard } from '@/app/components/ProposalCard';
 import { VoiceRecorderTrigger } from '@/app/components/VoiceRecorderTrigger';
 import { VoiceRecordingBar } from '@/app/components/VoiceRecordingBar';
@@ -35,7 +36,7 @@ type Entry =
   | { kind: 'user'; text: string }
   | { kind: 'pending'; localId: string }
   | { kind: 'proposal'; proposal: Proposal; localId: string; error?: string }
-  | { kind: 'applied'; result: ApplyResult; localId: string }
+  | { kind: 'applied'; result: ApplyResult; proposal: Proposal; localId: string }
   | { kind: 'rejected'; localId: string }
   | { kind: 'error'; message: string; localId: string };
 
@@ -123,8 +124,8 @@ export function AssistantPage() {
     setInput('');
 
     sendMessage.mutate(payload, {
-      onSuccess: (proposal) => {
-        replaceEntry(localId, { kind: 'proposal', proposal, localId });
+      onSuccess: ({proposal,applied}) => {
+        replaceEntry(localId,applied?{kind:'applied',result:applied,proposal,localId}:{kind:'proposal',proposal,localId});
       },
       onError: (error) => {
         replaceEntry(localId, { kind: 'error', message: errorMessage(error), localId });
@@ -182,7 +183,7 @@ export function AssistantPage() {
     if (!proposal.id) return;
     applyProposal.mutate(proposal.id, {
       onSuccess: (result) => {
-        replaceEntry(localId, { kind: 'applied', result, localId });
+        replaceEntry(localId, { kind: 'applied', result, proposal, localId });
         // Б1: галочка «настойчиво» из карточки предложения применяется
         // здесь, отдельным вызовом, а не как часть самого действия — модель
         // это поле не видит, оно ставится только что созданной задаче,
@@ -209,7 +210,7 @@ export function AssistantPage() {
     <div className="munin-assistant">
       <header className="munin-chat-heading">
         <h1>Разберём твои дела.</h1>
-        <p>Расскажи своими словами. Изменения подтверждаешь ты.</p>
+        <p>Расскажи своими словами, Мунин разберётся с делами</p>
       </header>
 
       <div
@@ -226,7 +227,7 @@ export function AssistantPage() {
       >
         {entries.length === 0 && (
           <div className="munin-chat-intro">
-            <p>Можно добавить дела, перенести планы или рассказать, что уже готово. Мунин предложит изменения, а ты проверишь их перед применением.</p>
+            <p>Можно добавить дела или рассказать, что уже готово. Если что-то не так, действие можно отменить</p>
             <section className="assistant-recommendations" aria-label="Рекомендации по твоим задачам">
               {recommendations.length > 0 && <h2>Что можно сделать сейчас</h2>}
               {recommendations.map(item => <article key={item.task.id}>
@@ -287,7 +288,7 @@ export function AssistantPage() {
               )}
 
               {entry.kind === 'applied' && (
-                <ApplyResultCard result={entry.result} />
+                <AssistantResultCard result={entry.result} proposal={entry.proposal} className="munin-chat-result" />
               )}
 
               {entry.kind === 'proposal' && entry.error && <p className="text-sm text-destructive" role="alert">{entry.error}</p>}
@@ -352,38 +353,5 @@ export function AssistantPage() {
       <TaskDetailModal task={recommendedTask ? candidates.data?.content.find(task => task.id === recommendedTask.id) ?? recommendedTask : null}
         initialSection={recommendedSection} open={Boolean(recommendedTask)} onClose={() => setRecommendedTask(null)} />
     </div>
-  );
-}
-
-function statusLabel(status: string): string | null {
-  switch (status) {
-    case 'EXPIRED':
-      return 'Предложение просрочено — прошло больше суток, ничего не применено.';
-    case 'FAILED':
-      return null; // отрисовывается отдельно, через clarification
-    default:
-      return null;
-  }
-}
-
-function ApplyResultCard({ result }: { result: ApplyResult }) {
-  const expiredLabel = statusLabel(result.status);
-  const failures = result.outcomes.filter((o) => !o.success);
-
-  return (
-    <Card className="max-w-[85%] px-4 py-3 text-sm space-y-1.5">
-      <p className="font-medium">
-        {expiredLabel ?? `Применено ${result.appliedCount} из ${result.totalCount}.`}
-      </p>
-      {failures.length > 0 && (
-        <ul className="space-y-1 text-muted-foreground">
-          {failures.map((f) => (
-            <li key={f.ordinal} className="break-words">
-              {f.summary} — {f.error}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Card>
   );
 }

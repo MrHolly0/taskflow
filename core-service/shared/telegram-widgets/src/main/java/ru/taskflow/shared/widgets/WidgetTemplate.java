@@ -27,9 +27,9 @@ public final class WidgetTemplate {
     }
     public static String caption(WidgetState state) {
         StringBuilder text = new StringBuilder();
-        if (state.terminal() && state.heading()!=null) text.append("✓ ").append(state.heading()).append("\n");
+        if (state.heading()!=null) text.append("✓ ").append(state.heading()).append("\n");
         if (state.total()!=null) text.append("Действие ").append(state.page()+1).append(" из ").append(state.total())
-                .append(" · выбрано ").append(state.selected()).append("\n");
+                 .append(state.selected()==null?"":" · выбрано "+state.selected()).append("\n");
         text.append(state.title());
         for (var row : state.rows()) text.append('\n').append(row.get(0)).append(": ").append(row.get(1));
         if (state.warning()!=null) text.append("\n").append(state.warning());

@@ -222,7 +222,7 @@ export function QuickInputModal({ open, onClose }: QuickInputModalProps) {
                       className="resize-none min-h-[100px] text-base"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Ассистент применит сразу, если это только новые задачи — иначе спросит подтверждения
+                      Добавь новое дело или расскажи, что уже готово
                     </p>
                   </div>
                   <div

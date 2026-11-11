@@ -1,0 +1,19 @@
+
+.assistant-result-card{padding:18px;gap:16px;max-width:100%;min-width:0}
+.assistant-result-card h2{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:600;line-height:1.35;margin:0}
+.assistant-result-card h2 svg{width:20px;height:20px;flex-shrink:0}
+.assistant-result-card h3{font-size:16px;line-height:1.4;font-weight:550;margin:0 0 12px;overflow-wrap:anywhere}
+.assistant-result-card section+section{border-top:1px solid var(--border);padding-top:16px}
+.assistant-result-card dl{display:grid;gap:8px;margin:0 0 14px;font-size:14px}
+.assistant-result-card dl>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 20px}
+.assistant-result-card dt{color:var(--muted-foreground)}
+.assistant-result-card dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.assistant-result-actions{display:flex;flex-wrap:wrap;gap:8px}
+.assistant-result-actions button{min-height:44px}
+.munin-chat-result{max-width:85%;align-self:flex-start}
+@media(max-width:600px){.munin-chat-result{max-width:100%}.assistant-result-card{padding:16px}.assistant-result-actions button{flex:1}}
+
+.assistant-result-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.assistant-result-close{display:grid;place-items:center;flex-shrink:0;min-width:44px;min-height:44px;margin:-10px -10px -8px 0;border-radius:12px;color:var(--muted-foreground)}
+.assistant-result-close:hover{background:var(--secondary);color:var(--foreground)}
+.assistant-result-close svg{width:18px;height:18px}

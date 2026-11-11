@@ -21,12 +21,35 @@ public class TelegramWidgetGateway {
     private final ObjectMapper mapper;
     private final boolean enabled;
     private final String appUrl;
+    private final WidgetReceiptProjection receipts;
     public TelegramWidgetGateway(WidgetStore store, WidgetApi api, WidgetProposalProjection projection,
             UserService users, AssistantService assistant, ObjectMapper mapper,
             @Value("${app.telegram.widgets-enabled:false}") boolean enabled,
-            @Value("${app.public-base-url:}") String appUrl) {
+            @Value("${app.public-base-url:}") String appUrl,WidgetReceiptProjection receipts) {
         this.store=store;this.api=api;this.projection=projection;this.users=users;
-        this.assistant=assistant;this.mapper=mapper;this.enabled=enabled;this.appUrl=appUrl;
+        this.assistant=assistant;this.mapper=mapper;this.enabled=enabled;this.appUrl=appUrl;this.receipts=receipts;
+    }
+    public boolean sendApplied(UUID userId,long chatId,Proposal proposal,ru.taskflow.assistant.api.dto.ApplyResult result) {
+        if(chatId<=0 || proposal.id()==null) return false;
+        var state=receipts.render(userId,proposal.id(),0);
+        var context=store.reserve(userId,"RECEIPT",proposal.id(),null,null,chatId,state);
+        if(context.messageId()!=null) return true;
+        boolean card=enabled && users.getSettings(userId).telegramWidgetsEnabled();
+        long message;
+        String transport="WIDGET";
+        if(card) {
+            try { message=api.send(context,appUrl); }
+            catch(RestClientResponseException e) {
+                if(!WidgetApi.unsupported(e)) throw e;
+                card=false;message=0;
+            }
+        } else message=0;
+        if(!card) {
+            context=new WidgetContext(context.id(),context.userId(),context.kind(),context.referenceId(),null,null,
+                    context.chatId(),null,"TEXT",context.expiresAt(),context.revision(),context.page(),true,context.state());
+            message=api.sendText(context,appUrl);transport="TEXT";
+        }
+        store.bind(context.id(),message,transport);return true;
     }
     public boolean sendProposal(UUID userId,long chatId,Proposal proposal) {
         if (!enabled || chatId<=0 || !proposal.hasActions() || proposal.hasClarification() || proposal.hasRejections()
