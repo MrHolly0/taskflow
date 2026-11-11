@@ -24,7 +24,7 @@ public final class WidgetApi {
     public long send(WidgetContext context, String appUrl) {
         var body = Map.of("chat_id",context.chatId(),"html",WidgetTemplate.html(),
                 "chat_data",WidgetTemplate.encode(mapper,context.state()),"allow_queries",true,
-                "caption",WidgetTemplate.caption(context.state()),"reply_markup",WidgetKeyboard.of(context,appUrl));
+                "caption",caption(context),"reply_markup",WidgetKeyboard.of(context,appUrl));
         return post("sendWidget",body).path("result").path("message_id").asLong();
     }
     public long sendText(WidgetContext context, String appUrl) {
@@ -40,8 +40,11 @@ public final class WidgetApi {
             edit("editMessageWidgetData",Map.of("chat_id",context.chatId(),"message_id",context.messageId(),
                     "chat_data",WidgetTemplate.encode(mapper,context.state())));
             edit("editMessageCaption",Map.of("chat_id",context.chatId(),"message_id",context.messageId(),
-                    "caption",WidgetTemplate.caption(context.state()),"reply_markup",keyboard));
+                    "caption",caption(context),"reply_markup",keyboard));
         }
+    }
+    private String caption(WidgetContext context) {
+        return context.expanded()?WidgetTemplate.caption(context.state()):context.state().title();
     }
     public void answer(String queryId, WidgetState state) {
         String data = "{\"ok\":true,\"state\":" + WidgetTemplate.encode(mapper,state) + "}";

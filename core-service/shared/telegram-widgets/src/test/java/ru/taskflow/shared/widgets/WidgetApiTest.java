@@ -29,7 +29,7 @@ class WidgetApiTest {
         var c=context(false,"WIDGET");
         server.expect(requestTo("https://example.test/botTOKEN/sendWidget"))
                 .andExpect(jsonPath("$.allow_queries").value(true)).andExpect(jsonPath("$.public_data").doesNotExist())
-                .andExpect(jsonPath("$.caption").value("<b>Задача & данные</b>\nСрок: Сегодня, 14:20"))
+                .andExpect(jsonPath("$.caption").value("<b>Задача & данные</b>"))
                 .andExpect(jsonPath("$.parse_mode").doesNotExist())
                 .andExpect(jsonPath("$.reply_markup.inline_keyboard[0][0].text").value("Подробнее"))
                 .andRespond(withSuccess("{\"ok\":true,\"result\":{\"message_id\":567}}",MediaType.APPLICATION_JSON));
