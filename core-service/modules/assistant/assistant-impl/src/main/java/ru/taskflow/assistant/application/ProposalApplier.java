@@ -43,8 +43,10 @@ public class ProposalApplier {
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
     private final ProposalActionTransaction actionTransaction;
+    private final ru.taskflow.task.api.TaskOperationService operations;
 
-    public ApplyResult apply(UUID userId, ProposalJpaEntity proposal) {
+    public ApplyResult apply(UUID userId, ProposalJpaEntity proposal) { return apply(userId,proposal,false); }
+    public ApplyResult apply(UUID userId, ProposalJpaEntity proposal,boolean reversible) {
         List<ProposalActionJpaEntity> accepted = proposal.getActions().stream()
                 .filter(ProposalActionJpaEntity::isAccepted)
                 .sorted(Comparator.comparingInt(ProposalActionJpaEntity::getOrdinal))
@@ -57,10 +59,12 @@ public class ProposalApplier {
         int appliedCount = 0;
 
         for (ProposalActionJpaEntity action : accepted) {
-            if (applyOne(userId, proposal, action)) {
+            if (applyOne(userId, proposal, action,reversible)) {
                 appliedCount++;
+                var receipt = operations.find(userId, action.getId());
                 outcomes.add(new ActionOutcome(action.getOrdinal(), action.getSummary(), true, null,
-                        action.getAppliedTaskId()));
+                        action.getAppliedTaskId(), receipt.map(r -> r.id()).orElse(null),
+                        receipt.map(r -> r.expiresAt()).orElse(null), receipt.map(r -> r.undone()).orElse(false)));
             } else {
                 outcomes.add(new ActionOutcome(action.getOrdinal(), action.getSummary(), false, action.getApplyError()));
             }
@@ -73,7 +77,7 @@ public class ProposalApplier {
         return new ApplyResult(status, appliedCount, accepted.size(), outcomes);
     }
 
-    private boolean applyOne(UUID userId, ProposalJpaEntity proposal, ProposalActionJpaEntity action) {
+    private boolean applyOne(UUID userId, ProposalJpaEntity proposal, ProposalActionJpaEntity action,boolean reversible) {
         if (action.getAppliedTaskId() != null) {
             return true;
         }
@@ -85,7 +89,7 @@ public class ProposalApplier {
                 if (!validation.valid()) {
                     throw new ActionApplyException(validation.error());
                 }
-                return dispatch(userId, proposal, type, validation.targetTaskId(), payload);
+                return dispatch(userId, proposal, type, validation.targetTaskId(), payload,reversible?action.getId():null);
             });
             action.setAppliedTaskId(appliedTaskId);
             action.setApplyError(null);
@@ -129,11 +133,12 @@ public class ProposalApplier {
     }
 
     private UUID dispatch(UUID userId, ProposalJpaEntity proposal, AssistantActionType type,
-                           UUID targetTaskId, Map<String, Object> payload) {
+                           UUID targetTaskId, Map<String, Object> payload,UUID operation) {
         return switch (type) {
-            case CREATE -> createTask(userId, proposal, payload);
+            case CREATE -> createTask(userId, proposal, payload,operation);
             case COMPLETE -> {
-                taskService.complete(userId, targetTaskId);
+                if(operation!=null) operations.complete(userId,targetTaskId,operation);
+                else taskService.complete(userId, targetTaskId);
                 yield targetTaskId;
             }
             case RESCHEDULE -> {
@@ -181,7 +186,7 @@ public class ProposalApplier {
         };
     }
 
-    private UUID createTask(UUID userId, ProposalJpaEntity proposal, Map<String, Object> payload) {
+    private UUID createTask(UUID userId, ProposalJpaEntity proposal, Map<String, Object> payload,UUID operation) {
         // День работы независим от дедлайна. Он приходит из явной просьбы
         // пользователя или правки в карточке подтверждения.
         CreateTaskRequest request = new CreateTaskRequest(
@@ -200,7 +205,7 @@ public class ProposalApplier {
                 payload.get("reminder_at") != null || Boolean.TRUE.equals(payload.get("no_reminder_needed")),
                 parseDeadline(payload.get("reminder_at"))
         );
-        TaskResponse created = taskService.createQuick(userId, request);
+        TaskResponse created = operation==null?taskService.createQuick(userId, request):operations.create(userId,request,operation);
         return created.id();
     }
 

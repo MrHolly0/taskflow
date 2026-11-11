@@ -96,3 +96,6 @@ databaseChangeLog:
 
   - include:
       file: db/changelog/048-started-task-checkins.yaml
+
+  - include:
+      file: db/changelog/049-reversible-task-actions.yaml

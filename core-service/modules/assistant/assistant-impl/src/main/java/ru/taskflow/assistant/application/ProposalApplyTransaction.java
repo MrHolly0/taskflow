@@ -19,7 +19,7 @@ public class ProposalApplyTransaction {
     // У подтверждения две транзакции: оставляем соединения для вложенных действий.
     private final Semaphore concurrentApplies = new Semaphore(2);
 
-    public ApplyResult execute(Supplier<ApplyResult> operation) {
+    public <T> T execute(Supplier<T> operation) {
         if (!concurrentApplies.tryAcquire()) {
             throw new RateLimitExceededException("Предыдущие изменения ещё сохраняются, попробуй через несколько секунд");
         }

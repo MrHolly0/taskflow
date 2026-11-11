@@ -82,6 +82,8 @@ public class AssistantServiceImpl implements AssistantService {
     private final ObjectMapper objectMapper;
     private final AssistantRequestStore requestStore;
     private final ProposalApplyTransaction applyTransaction;
+    private final AutomaticActionPolicy automaticPolicy;
+    private final ru.taskflow.task.api.TaskOperationService operations;
 
     @Override
     public Proposal handleText(UUID userId, String text, AssistantChannel channel, AssistantEntryPoint entryPoint,
@@ -377,7 +379,33 @@ public class AssistantServiceImpl implements AssistantService {
         });
     }
 
-    private ApplyResult applyLocked(UUID userId, UUID proposalId) {
+    @Override
+    public ru.taskflow.assistant.api.dto.AssistantResult resolveAutomatically(UUID userId,UUID proposalId) {
+        return applyTransaction.execute(()-> {
+            var entity=proposalRepository.findForUpdate(proposalId,userId).orElseThrow(()->new ProposalNotFoundException(proposalId));
+            var proposal=proposalMapper.toDto(entity);
+            if(proposal.status()==ProposalStatus.APPLIED || proposal.status()==ProposalStatus.PARTIALLY_APPLIED || proposal.status()==ProposalStatus.FAILED)
+                return new ru.taskflow.assistant.api.dto.AssistantResult(proposal,resolvedResult(entity));
+            if(!automaticPolicy.eligible(proposal)) return new ru.taskflow.assistant.api.dto.AssistantResult(proposal,null);
+            if(proposal.actions().getFirst().type()==AssistantActionType.COMPLETE) {
+                try {
+                    var task=taskService.findById(userId,proposal.actions().getFirst().targetTaskId());
+                    if(task.recurrence()!=null || task.status()==ru.taskflow.task.api.TaskStatus.DONE || task.status()==ru.taskflow.task.api.TaskStatus.CANCELLED)
+                        return new ru.taskflow.assistant.api.dto.AssistantResult(proposal,null);
+                } catch(ru.taskflow.shared.exception.NotFoundException e) { return new ru.taskflow.assistant.api.dto.AssistantResult(proposal,null); }
+            }
+            var applied=applyLocked(userId,proposalId,true);
+            return new ru.taskflow.assistant.api.dto.AssistantResult(proposalMapper.toDto(entity),applied);
+        });
+    }
+
+    @Override @Transactional(readOnly=true)
+    public ApplyResult result(UUID userId,UUID proposalId) {
+        var entity=proposalRepository.findByIdAndUserId(proposalId,userId).orElseThrow(()->new ProposalNotFoundException(proposalId));
+        return resolvedResult(entity);
+    }
+    private ApplyResult applyLocked(UUID userId, UUID proposalId) { return applyLocked(userId,proposalId,false); }
+    private ApplyResult applyLocked(UUID userId, UUID proposalId,boolean reversible) {
         ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));
 
@@ -407,16 +435,20 @@ public class AssistantServiceImpl implements AssistantService {
             return new ApplyResult(ProposalStatus.EXPIRED, 0, acceptedCount(entity), List.of());
         }
 
-        ApplyResult result = proposalApplier.apply(userId, entity);
+        ApplyResult result = reversible?proposalApplier.apply(userId,entity,true):proposalApplier.apply(userId, entity);
         proposalRepository.save(entity);
         return result;
     }
 
     private ApplyResult resolvedResult(ProposalJpaEntity entity) {
         var outcomes = entity.getActions().stream().filter(ProposalActionJpaEntity::isAccepted)
-                .map(action -> new ru.taskflow.assistant.api.dto.ActionOutcome(action.getOrdinal(),
-                        action.getSummary(), action.getAppliedTaskId() != null, action.getApplyError(),
-                        action.getAppliedTaskId())).toList();
+                .map(action -> {
+                    var receipt = operations.find(entity.getUserId(), action.getId());
+                    return new ru.taskflow.assistant.api.dto.ActionOutcome(action.getOrdinal(), action.getSummary(),
+                            action.getAppliedTaskId() != null, action.getApplyError(), action.getAppliedTaskId(),
+                            receipt.map(r -> r.id()).orElse(null), receipt.map(r -> r.expiresAt()).orElse(null),
+                            receipt.map(r -> r.undone()).orElse(false));
+                }).toList();
         return new ApplyResult(ProposalStatus.valueOf(entity.getStatus()),
                 (int) outcomes.stream().filter(ru.taskflow.assistant.api.dto.ActionOutcome::success).count(),
                 outcomes.size(), outcomes);

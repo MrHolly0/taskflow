@@ -50,7 +50,7 @@ import java.util.UUID;
 public class AssistantController {
 
     private final AssistantService assistantService;
-    private final QuickAddPolicy quickAddPolicy;
+    private final ru.taskflow.task.api.TaskOperationService operations;
 
     @PostMapping(value = "/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
@@ -67,9 +67,7 @@ public class AssistantController {
     @PostMapping(value = "/quick", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(summary = "Быстрое добавление", description = """
-            Текст или аудио -> предложение, применённое сразу, если оно состоит \
-            только из создания новых задач. Иначе — предложение на подтверждение, \
-            applied == null.""")
+            Текст или аудио -> создание новых задач. Остальные изменения возвращаются на подтверждение.""")
     public QuickResult quick(
             @RequestParam(value = "text", required = false) String text,
             @RequestParam(value = "file", required = false) MultipartFile file,
@@ -77,11 +75,40 @@ public class AssistantController {
             @RequestHeader(value = "Idempotency-Key", required = false) String requestKey
     ) throws IOException {
         Proposal proposal = resolveProposal(user.userId(), text, file, AssistantEntryPoint.QUICK_ADD, requestKey);
-        if (!quickAddPolicy.shouldAutoApply(proposal)) {
-            return new QuickResult(proposal, null);
-        }
-        ApplyResult applied = assistantService.apply(user.userId(), proposal.id());
-        return new QuickResult(proposal, applied);
+        if (proposal.status() == ru.taskflow.assistant.api.ProposalStatus.PENDING
+                && proposal.hasActions() && !proposal.hasClarification() && !proposal.hasRejections()
+                && !proposal.exclusive() && (proposal.ambiguityReason() == null || proposal.ambiguityReason().isBlank())
+                && proposal.actions().stream().allMatch(action -> action.accepted()
+                    && action.type() == ru.taskflow.assistant.api.AssistantActionType.CREATE))
+            return new QuickResult(proposal,assistantService.apply(user.userId(),proposal.id()));
+        return new QuickResult(proposal,null);
+    }
+
+    @PostMapping(value="/capture",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public QuickResult capture(@RequestParam(value="text",required=false) String text,
+            @RequestParam(value="file",required=false) MultipartFile file,
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestHeader(value="Idempotency-Key",required=false) String requestKey) throws IOException {
+        return resolveAutomatically(user.userId(),resolveProposal(user.userId(),text,file,AssistantEntryPoint.QUICK_ADD,requestKey));
+    }
+
+    @PostMapping(value="/turn",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    @ResponseStatus(HttpStatus.CREATED)
+    public QuickResult turn(@RequestParam(value="text",required=false) String text,
+            @RequestParam(value="file",required=false) MultipartFile file,
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestHeader(value="Idempotency-Key",required=false) String requestKey) throws IOException {
+        return resolveAutomatically(user.userId(),resolveProposal(user.userId(),text,file,AssistantEntryPoint.CHAT,requestKey));
+    }
+    private QuickResult resolveAutomatically(UUID user,Proposal proposal) {
+        if(proposal.id()==null) return new QuickResult(proposal,null);
+        var result=assistantService.resolveAutomatically(user,proposal.id());
+        return new QuickResult(result.proposal(),result.applied());
+    }
+    @PostMapping("/operations/{id}/undo")
+    public ru.taskflow.task.api.dto.TaskUndoResult undo(@PathVariable UUID id,@AuthenticationPrincipal AuthenticatedUser user) {
+        return operations.undo(user.userId(),id);
     }
 
     // Файл в приоритете над текстом, если пришли оба — клиент не должен

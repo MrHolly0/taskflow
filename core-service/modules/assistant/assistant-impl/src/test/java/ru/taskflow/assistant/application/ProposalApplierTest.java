@@ -56,7 +56,7 @@ class ProposalApplierTest {
 
     @BeforeEach
     void setUp() {
-        applier = new ProposalApplier(actionValidator, taskService, auditService, objectMapper, actionTransaction);
+        applier = new ProposalApplier(actionValidator, taskService, auditService, objectMapper, actionTransaction,org.mockito.Mockito.mock(ru.taskflow.task.api.TaskOperationService.class));
         org.mockito.Mockito.lenient().when(actionTransaction.execute(any(), any()))
                 .thenAnswer(invocation -> invocation.<java.util.function.Supplier<UUID>>getArgument(1).get());
     }

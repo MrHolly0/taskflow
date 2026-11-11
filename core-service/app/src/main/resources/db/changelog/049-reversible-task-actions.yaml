@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 049-reversible-task-actions
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              CREATE TABLE task_operations (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id),
+                task_id UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                kind VARCHAR(12) NOT NULL CHECK (kind IN ('CREATE','COMPLETE')),
+                before_state JSONB,
+                after_state JSONB NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                undone_at TIMESTAMPTZ
+              );
+              CREATE INDEX idx_task_operations_user ON task_operations(user_id,created_at DESC);
+              ALTER TABLE telegram_widget_contexts DROP CONSTRAINT telegram_widget_contexts_kind_check;
+              ALTER TABLE telegram_widget_contexts ADD CONSTRAINT telegram_widget_kind_check
+                CHECK (kind IN ('REMINDER','ENGAGEMENT','PROPOSAL','RECEIPT'));

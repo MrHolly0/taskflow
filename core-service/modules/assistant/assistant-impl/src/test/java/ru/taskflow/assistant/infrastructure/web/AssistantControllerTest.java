@@ -57,7 +57,7 @@ class AssistantControllerTest {
 
     @BeforeEach
     void setUp() {
-        var controller = new AssistantController(assistantService, quickAddPolicy);
+        var controller = new AssistantController(assistantService,org.mockito.Mockito.mock(ru.taskflow.task.api.TaskOperationService.class));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
@@ -203,6 +203,25 @@ class AssistantControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.applied").doesNotExist());
 
+        verify(assistantService, never()).apply(any(), any());
+    }
+
+    @Test
+    void quickKeepsIncompleteOrAmbiguousCreateForConfirmation() throws Exception {
+        var action = new ProposedAction(1, AssistantActionType.CREATE, null, Map.of(), "Купить хлеб", true);
+        for (int variant = 0; variant < 4; variant++) {
+            var value = new Proposal(UUID.randomUUID(), "CODE1234", userId, ProposalStatus.PENDING,
+                    "купи хлеб", null,
+                    List.of(variant == 3 ? new ProposedAction(1, AssistantActionType.CREATE, null, Map.of(), "Купить хлеб", false) : action),
+                    OffsetDateTime.now(), OffsetDateTime.now().plusHours(24), variant == 0,
+                    variant == 1 ? "Нужно уточнить" : null, variant == 2 ? List.of("Вторая часть не разобрана") : List.of(),
+                    0, 0, 0, 0, 0, 1);
+            when(assistantService.handleText(userId, "купи хлеб", AssistantChannel.WEB, AssistantEntryPoint.QUICK_ADD))
+                    .thenReturn(value);
+            mockMvc.perform(multipart("/api/v1/assistant/quick").param("text", "купи хлеб"))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.applied").doesNotExist());
+        }
         verify(assistantService, never()).apply(any(), any());
     }
 

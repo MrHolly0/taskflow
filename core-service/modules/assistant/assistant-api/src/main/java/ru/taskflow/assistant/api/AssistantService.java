@@ -30,6 +30,9 @@ public interface AssistantService {
     Proposal handleVoiceUpload(UUID userId, java.util.function.Supplier<byte[]> audio,
                                AssistantChannel channel, AssistantEntryPoint entryPoint, String requestKey);
 
+    ru.taskflow.assistant.api.dto.AssistantResult resolveAutomatically(UUID userId, UUID proposalId);
+    ApplyResult result(UUID userId,UUID proposalId);
+
     Proposal findById(UUID userId, UUID proposalId);
 
     Proposal findByShortCode(UUID userId, String shortCode);

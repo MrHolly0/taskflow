@@ -82,9 +82,9 @@ class AssistantServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new AssistantServiceImpl(agentLoop, nlpGatewayService, proposalFactory, proposalMapper,
-                proposalRepository, proposalApplier, userService, taskService, auditService, clock, objectMapper, requestStore, applyTransaction);
+                proposalRepository, proposalApplier, userService, taskService, auditService, clock, objectMapper, requestStore, applyTransaction,new AutomaticActionPolicy(),org.mockito.Mockito.mock(ru.taskflow.task.api.TaskOperationService.class));
         org.mockito.Mockito.lenient().when(applyTransaction.execute(any()))
-                .thenAnswer(invocation -> invocation.<java.util.function.Supplier<ApplyResult>>getArgument(0).get());
+                .thenAnswer(invocation -> invocation.<java.util.function.Supplier<?>>getArgument(0).get());
     }
 
     private AgentOutcome emptyWindowOutcome(List<ru.taskflow.assistant.api.dto.ProposedAction> actions,
