@@ -100,6 +100,7 @@ app:
     secret-key: ${UCALLER_SECRET_KEY:}
     callback-secret: ${UCALLER_CALLBACK_SECRET:}
   telegram:
+    widgets-enabled: ${TELEGRAM_WIDGETS_ENABLED:false}
     login-always-visible: ${TELEGRAM_LOGIN_ALWAYS_VISIBLE:false}
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     auth-date-max-age: ${TELEGRAM_AUTH_MAX_AGE:86400}

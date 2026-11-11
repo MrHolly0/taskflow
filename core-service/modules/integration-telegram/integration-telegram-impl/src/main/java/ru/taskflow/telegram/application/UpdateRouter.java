@@ -26,6 +26,7 @@ public class UpdateRouter {
     private final TextMessageHandler textHandler;
     private final VoiceMessageHandler voiceHandler;
     private final CallbackHandler callbackHandler;
+    private final WidgetQueryHandler widgetHandler;
 
     /**
      * Маршрутизирует входящее обновление от Telegram.
@@ -36,11 +37,13 @@ public class UpdateRouter {
      * @param update обновление от Telegram Bot API
      */
     public void route(TelegramUpdate update) {
+        if (update.widgetQuery()!=null) { widgetHandler.handle(update.widgetQuery()); return; }
         TelegramCallbackQuery callback = update.callbackQuery();
         if (callback != null) {
             UUID userId = resolveUser(callback.from()).id();
             userService.recordActivity(userId);
-            callbackHandler.handle(callback, userId);
+            if (callback.data()!=null && callback.data().startsWith("w:")) widgetHandler.handleCallback(callback,userId);
+            else callbackHandler.handle(callback, userId);
             return;
         }
 

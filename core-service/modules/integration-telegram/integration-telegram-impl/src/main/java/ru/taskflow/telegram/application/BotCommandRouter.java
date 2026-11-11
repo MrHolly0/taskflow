@@ -26,6 +26,7 @@ public class BotCommandRouter {
 
     private final TaskService taskService;
     private final TelegramMessageSender sender;
+    private final ru.taskflow.user.api.UserService users;
 
     @Value("${app.telegram.miniapp-url:}")
     private String miniappUrl = "";
@@ -40,6 +41,11 @@ public class BotCommandRouter {
         switch (command) {
             case "/start" -> sendWelcome(chatId, message.from().firstName());
             case "/help" -> sendHelp(chatId);
+            case "/plain", "/cards" -> {
+                boolean cards=command.equals("/cards");
+                users.updateSettings(userId,new ru.taskflow.user.api.dto.UpdateSettingsRequest(null,null,null,null,null,null,null,null,null,null,null,null,null,null,cards));
+                sender.sendMessage(chatId,cards?"Новые сообщения будут с карточками":"Новые сообщения будут с обычными кнопками");
+            }
             case "/today", "/week" -> sendTaskList(chatId, userId);
             default -> sendHelp(chatId);
         }
@@ -67,6 +73,8 @@ public class BotCommandRouter {
                 Команды:
                 /today — список активных задач
                 /help — это сообщение
+                /plain — обычные сообщения вместо карточек
+                /cards — включить карточки
 
                 Как создавать задачи:
                 📝 Напишите текст: "Купить хлеба до вечера"

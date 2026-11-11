@@ -33,6 +33,9 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TextMessageHandlerTest {
+    @org.mockito.Mock
+    ru.taskflow.telegram.application.TelegramWidgetGateway widgets;
+
 
     @Mock
     private AssistantService assistantService;

@@ -91,3 +91,5 @@ databaseChangeLog:
       file: db/changelog/045-assistant-request-lease.yaml
   - include:
       file: db/changelog/046-engagement-prompts.yaml
+  - include:
+      file: db/changelog/047-telegram-widgets.yaml

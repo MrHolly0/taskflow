@@ -11,6 +11,7 @@ export interface UserSettings {
   notifyPush: boolean;
   taskCheckinsEnabled: boolean;
   returnNudgesEnabled: boolean;
+  telegramWidgetsEnabled: boolean;
   defaultReminderMinutes: number;
   urgentExtraReminder: boolean;
   preferredLlm: string;
@@ -29,6 +30,7 @@ interface UpdateSettingsRequest {
   notifyPush?: boolean;
   taskCheckinsEnabled?: boolean;
   returnNudgesEnabled?: boolean;
+  telegramWidgetsEnabled?: boolean;
   defaultReminderMinutes?: number;
   urgentExtraReminder?: boolean;
   preferredLlm?: string;

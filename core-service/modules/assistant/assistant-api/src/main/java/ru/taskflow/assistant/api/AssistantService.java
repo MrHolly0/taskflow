@@ -69,6 +69,8 @@ public interface AssistantService {
 
     ApplyResult apply(UUID userId, UUID proposalId);
 
+    ApplyResult apply(UUID userId, UUID proposalId, java.util.List<ru.taskflow.assistant.api.dto.ProposedAction> expectedActions);
+
     void reject(UUID userId, UUID proposalId);
 
     int transferOwnership(UUID from, UUID to);

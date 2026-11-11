@@ -30,6 +30,7 @@ public class VoiceMessageHandler {
     private final AssistantService assistantService;
     private final ProposalMessageRenderer renderer;
     private final TelegramUpdateCheckpoint checkpoint;
+    private final TelegramWidgetGateway widgets;
 
     public void handle(TelegramMessage message, UUID userId) {
         String fileId = message.voice().fileId();
@@ -37,6 +38,7 @@ public class VoiceMessageHandler {
                 () -> assistantService.handleVoice(userId, apiClient.downloadVoice(fileId),
                         AssistantChannel.TELEGRAM, AssistantEntryPoint.CHAT, checkpoint.requestKey()));
 
+        if (widgets.sendProposal(userId,message.chat().id(),proposal)) return;
         String text = renderer.render(proposal);
         List<List<TelegramMessageSender.InlineButton>> keyboard = renderer.keyboard(proposal);
         if (keyboard.isEmpty()) {

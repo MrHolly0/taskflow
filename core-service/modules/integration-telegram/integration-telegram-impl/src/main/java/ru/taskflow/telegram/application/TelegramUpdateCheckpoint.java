@@ -21,6 +21,11 @@ public class TelegramUpdateCheckpoint {
         }
     }
 
+    public java.time.Instant widgetDeadline() {
+        Long id=activeUpdate.get();
+        return id==null?java.time.Instant.now().plusSeconds(10):inbox.widgetDeadline(id);
+    }
+
     public String requestKey() {
         Long updateId = activeUpdate.get();
         return updateId == null ? null : "tg:update:" + updateId;

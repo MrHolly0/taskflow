@@ -13,6 +13,9 @@ import java.time.OffsetDateTime;
 @Setter
 public class UserSettingsJpaEntity {
 
+    @Column(name = "telegram_widgets_enabled", nullable = false)
+    private boolean telegramWidgetsEnabled = true;
+
     @Id
     private UUID userId;
 

@@ -1,4 +1,5 @@
 dependencies {
+    implementation(project(":core-service:shared:telegram-widgets"))
     implementation(project(":core-service:modules:notify:notify-api"))
     implementation(project(":core-service:modules:user:user-api"))
     implementation(project(":core-service:modules:task:task-api"))

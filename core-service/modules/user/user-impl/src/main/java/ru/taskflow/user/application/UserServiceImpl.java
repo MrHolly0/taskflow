@@ -142,6 +142,7 @@ public class UserServiceImpl implements UserService {
             if (request.returnNudgesEnabled() && !settings.isReturnNudgesEnabled()) settings.setReturnNudgesEnabledAt(OffsetDateTime.now());
             settings.setReturnNudgesEnabled(request.returnNudgesEnabled());
         }
+        if (request.telegramWidgetsEnabled() != null) settings.setTelegramWidgetsEnabled(request.telegramWidgetsEnabled());
         settingsRepository.save(settings);
 
         if (request.timezone() != null || request.displayName() != null) {
@@ -261,7 +262,8 @@ public class UserServiceImpl implements UserService {
                 timezone,
                 displayName,
                 e.isTaskCheckinsEnabled(),
-                e.isReturnNudgesEnabled()
+                e.isReturnNudgesEnabled(),
+                e.isTelegramWidgetsEnabled()
         );
     }
 

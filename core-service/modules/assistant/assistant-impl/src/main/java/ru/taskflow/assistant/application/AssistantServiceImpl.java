@@ -366,6 +366,17 @@ public class AssistantServiceImpl implements AssistantService {
         return applyTransaction.execute(() -> applyLocked(userId, proposalId));
     }
 
+    @Override
+    public ApplyResult apply(UUID userId, UUID proposalId, java.util.List<ru.taskflow.assistant.api.dto.ProposedAction> expectedActions) {
+        return applyTransaction.execute(() -> {
+            var entity = proposalRepository.findForUpdate(proposalId, userId)
+                    .orElseThrow(() -> new ProposalNotFoundException(proposalId));
+            if ("PENDING".equals(entity.getStatus()) && !proposalMapper.toDto(entity).actions().equals(expectedActions))
+                throw new ru.taskflow.shared.exception.ValidationException("Разбор изменился — проверь его ещё раз");
+            return applyLocked(userId, proposalId);
+        });
+    }
+
     private ApplyResult applyLocked(UUID userId, UUID proposalId) {
         ProposalJpaEntity entity = proposalRepository.findForUpdate(proposalId, userId)
                 .orElseThrow(() -> new ProposalNotFoundException(proposalId));

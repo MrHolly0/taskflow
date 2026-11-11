@@ -1,0 +1,35 @@
+databaseChangeLog:
+  - changeSet:
+      id: 047-telegram-widgets
+      author: taskflow
+      changes:
+        - sql:
+            sql: |
+              ALTER TABLE user_settings ADD COLUMN telegram_widgets_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+              CREATE TABLE telegram_widget_contexts (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES users(id),
+                kind VARCHAR(16) NOT NULL CHECK (kind IN ('REMINDER','ENGAGEMENT','PROPOSAL')),
+                reference_id UUID NOT NULL,
+                task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+                deadline_snapshot TIMESTAMPTZ,
+                chat_id BIGINT NOT NULL,
+                message_id BIGINT,
+                transport VARCHAR(8) CHECK (transport IN ('WIDGET','TEXT')),
+                state JSONB NOT NULL CHECK (octet_length(state::text)<=2048),
+                revision BIGINT NOT NULL DEFAULT 0,
+                page INT NOT NULL DEFAULT 0,
+                expanded BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                UNIQUE(user_id,kind,reference_id,chat_id)
+              );
+              CREATE INDEX idx_widget_expiration ON telegram_widget_contexts(expires_at);
+              CREATE INDEX idx_widget_proposal ON telegram_widget_contexts(user_id,reference_id) WHERE kind='PROPOSAL';
+              ALTER TABLE telegram_update_inbox ADD COLUMN widget_query BOOLEAN NOT NULL DEFAULT FALSE;
+              CREATE INDEX idx_widget_inbox_ready ON telegram_update_inbox(next_attempt_at,update_id)
+                WHERE widget_query=true AND status IN ('PENDING','PROCESSING');
+              ALTER TABLE scheduled_notifications ADD COLUMN widget_context_id UUID REFERENCES telegram_widget_contexts(id) ON DELETE CASCADE;
+              ALTER TABLE scheduled_notifications ADD COLUMN widget_revision BIGINT;
+              CREATE UNIQUE INDEX idx_widget_sync_pending ON scheduled_notifications(widget_context_id)
+                WHERE payload_type='WIDGET_SYNC' AND sent=false AND failed_at IS NULL;

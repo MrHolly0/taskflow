@@ -59,6 +59,7 @@ class TelegramUpdateInboxIntegrationTest {
     @BeforeEach
     void reset() {
         jdbc.execute("TRUNCATE telegram_update_inbox");
+        jdbc.execute("ALTER TABLE telegram_update_inbox ADD COLUMN IF NOT EXISTS widget_query BOOLEAN NOT NULL DEFAULT FALSE");
         inbox = new TelegramUpdateInbox(jdbc, new ObjectMapper().findAndRegisterModules(), 3);
     }
 
@@ -183,6 +184,24 @@ class TelegramUpdateInboxIntegrationTest {
         jdbc.update("UPDATE telegram_update_inbox SET status = 'FAILED', received_at = NOW() - INTERVAL '31 days' WHERE update_id = 2");
         inbox.prune();
         assertThat(jdbc.queryForList("SELECT update_id FROM telegram_update_inbox", Long.class)).containsExactly(3L);
+    }
+
+    @Test
+    void widgetDoesNotWaitBehindVoiceAndExpiredQueriesNeverRun() {
+        enqueue(1,10);
+        var voice=inbox.claim().orElseThrow();
+        var mapper=new ObjectMapper();
+        var query=new ru.taskflow.telegram.infrastructure.client.dto.TelegramWidgetQuery("query",new TelegramUser(10L,"u","Имя",null),
+                new ru.taskflow.telegram.infrastructure.client.dto.TelegramWidgetQuery.Chat(10L,"private"),100L,
+                mapper.valueToTree(java.util.Map.of("type","data")),"w:"+UUID.randomUUID()+":0:done");
+        tx.executeWithoutResult(status->inbox.enqueue(new TelegramUpdate(2,null,null,query)));
+        assertThat(inbox.claim()).isEmpty();
+        var widget=inbox.claimWidget().orElseThrow();assertThat(widget.id()).isEqualTo(2);
+        inbox.complete(widget);inbox.complete(voice);
+        tx.executeWithoutResult(status->inbox.enqueue(new TelegramUpdate(3,null,null,query)));
+        jdbc.update("UPDATE telegram_update_inbox SET received_at=NOW()-INTERVAL '20 seconds' WHERE update_id=3");
+        assertThat(inbox.claimWidget()).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT status FROM telegram_update_inbox WHERE update_id=3",String.class)).isEqualTo("FAILED");
     }
 
     private void enqueue(long id, long sender) {

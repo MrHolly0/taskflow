@@ -330,6 +330,20 @@ export function SettingsPage() {
             )}
           </div>
 
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor="telegram-cards" className="flex min-h-11 items-center">Карточки в Telegram</Label>
+              <p id="telegram-cards-hint" className="text-xs text-muted-foreground">
+                Интерактивные напоминания и разбор голосовых в новых версиях Telegram
+              </p>
+            </div>
+            <Switch id="telegram-cards" aria-describedby="telegram-cards-hint"
+              checked={serverSettings?.telegramWidgetsEnabled ?? true}
+              onCheckedChange={value => updateSettings.mutate({ telegramWidgetsEnabled: value })}
+              disabled={!serverSettings || !hasTelegram || updateSettings.isPending}
+            />
+          </div>
+
           <div className="flex flex-col gap-4 rounded-2xl border border-border p-4">
             <div>
               <h3 className="text-sm font-medium">Мягкая поддержка в Telegram</h3>

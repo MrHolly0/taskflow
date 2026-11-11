@@ -44,9 +44,9 @@ public class TelegramUpdateInbox {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "очередь сообщений заполнена");
         }
         jdbc.update("""
-                INSERT INTO telegram_update_inbox (update_id, sender_id, payload)
-                VALUES (?, ?, ?::jsonb) ON CONFLICT (update_id) DO NOTHING
-                """, update.updateId(), senderId(update), json(update));
+                INSERT INTO telegram_update_inbox (update_id, sender_id, payload, widget_query)
+                VALUES (?, ?, ?::jsonb, ?) ON CONFLICT (update_id) DO NOTHING
+                """, update.updateId(), senderId(update), json(update), update.widgetQuery()!=null);
     }
 
     public Optional<ClaimedUpdate> claim() {
@@ -65,11 +65,11 @@ public class TelegramUpdateInbox {
         return jdbc.query("""
                 WITH candidate AS (
                     SELECT i.update_id FROM telegram_update_inbox i
-                    WHERE i.attempts < ? AND ((i.status = 'PENDING' AND i.next_attempt_at <= NOW())
+                    WHERE NOT i.widget_query AND i.attempts < ? AND ((i.status = 'PENDING' AND i.next_attempt_at <= NOW())
                         OR (i.status = 'PROCESSING' AND i.lease_until < NOW()))
                     AND NOT EXISTS (
                         SELECT 1 FROM telegram_update_inbox earlier
-                        WHERE earlier.sender_id = i.sender_id AND earlier.update_id < i.update_id
+                        WHERE NOT earlier.widget_query AND earlier.sender_id = i.sender_id AND earlier.update_id < i.update_id
                             AND earlier.status IN ('PENDING', 'PROCESSING')
                     )
                     ORDER BY i.update_id LIMIT 1 FOR UPDATE SKIP LOCKED
@@ -82,6 +82,35 @@ public class TelegramUpdateInbox {
                 """, (rs, row) -> new ClaimedUpdate(rs.getLong("update_id"),
                 read(rs.getString("payload"), TelegramUpdate.class), token, rs.getInt("attempts")), MAX_ATTEMPTS, token)
                 .stream().findFirst();
+    }
+
+    public Optional<ClaimedUpdate> claimWidget() {
+        jdbc.update("""
+                UPDATE telegram_update_inbox SET status='FAILED',last_error='WIDGET_QUERY_EXPIRED',
+                  lease_token=NULL,lease_until=NULL
+                WHERE widget_query AND status IN ('PENDING','PROCESSING') AND received_at < NOW()-INTERVAL '12 seconds'
+                  AND (lease_until IS NULL OR lease_until<=NOW())
+                """);
+        UUID token=UUID.randomUUID();
+        return jdbc.query("""
+                WITH candidate AS (
+                  SELECT i.update_id FROM telegram_update_inbox i
+                  WHERE i.widget_query AND i.status='PENDING' AND i.next_attempt_at<=NOW()
+                    AND i.received_at>NOW()-INTERVAL '12 seconds'
+                    AND NOT EXISTS (SELECT 1 FROM telegram_update_inbox e WHERE e.widget_query
+                      AND e.sender_id=i.sender_id AND e.update_id<i.update_id AND e.status IN ('PENDING','PROCESSING'))
+                  ORDER BY i.update_id LIMIT 1 FOR UPDATE SKIP LOCKED)
+                UPDATE telegram_update_inbox i SET status='PROCESSING',lease_token=?,
+                  lease_until=NOW()+INTERVAL '30 seconds',attempts=attempts+1
+                FROM candidate c WHERE c.update_id=i.update_id
+                RETURNING i.update_id,i.payload::text,i.attempts
+                """,(rs,row)->new ClaimedUpdate(rs.getLong("update_id"),read(rs.getString("payload"),TelegramUpdate.class),
+                token,rs.getInt("attempts")),token).stream().findFirst();
+    }
+
+    public java.time.Instant widgetDeadline(long updateId) {
+        return jdbc.queryForObject("SELECT received_at+INTERVAL '10 seconds' FROM telegram_update_inbox WHERE update_id=? AND widget_query",
+                (rs,row)->rs.getObject(1,java.time.OffsetDateTime.class).toInstant(),updateId);
     }
 
     public boolean renew(ClaimedUpdate update) {
@@ -133,6 +162,7 @@ public class TelegramUpdateInbox {
     }
 
     private long senderId(TelegramUpdate update) {
+        if (update.widgetQuery()!=null && update.widgetQuery().from()!=null) return update.widgetQuery().from().id();
         if (update.callbackQuery() != null && update.callbackQuery().from() != null) {
             return update.callbackQuery().from().id();
         }

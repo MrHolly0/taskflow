@@ -33,6 +33,7 @@ public class TextMessageHandler {
     private final ProposalMessageRenderer renderer;
     private final TelegramMessageSender sender;
     private final TelegramUpdateCheckpoint checkpoint;
+    private final TelegramWidgetGateway widgets;
 
     public void handle(TelegramMessage message, UUID userId) {
         MessageDecision decision = checkpoint.once("decision", MessageDecision.class, () -> {
@@ -48,7 +49,7 @@ public class TextMessageHandler {
         Proposal proposal = checkpoint.once("proposal", Proposal.class,
                 () -> assistantService.handleText(userId, message.text(), AssistantChannel.TELEGRAM,
                         AssistantEntryPoint.CHAT, checkpoint.requestKey()));
-        send(message.chat().id(), proposal);
+        send(userId,message.chat().id(), proposal);
     }
 
     public record MessageDecision(UUID proposalId, Boolean accepted) {}
@@ -57,14 +58,17 @@ public class TextMessageHandler {
         if (accepted) {
             ApplyResult result = checkpoint.once("apply", ApplyResult.class,
                     () -> assistantService.apply(userId, proposalId));
+            widgets.refreshProposal(userId,proposalId);
             sender.sendMessage(chatId, renderer.renderApplyResult(result));
         } else {
             assistantService.reject(userId, proposalId);
+            widgets.refreshProposal(userId,proposalId);
             sender.sendMessage(chatId, "Предложение отклонено.");
         }
     }
 
-    private void send(long chatId, Proposal proposal) {
+    private void send(UUID userId,long chatId, Proposal proposal) {
+        if (widgets.sendProposal(userId,chatId,proposal)) return;
         String text = renderer.render(proposal);
         List<List<TelegramMessageSender.InlineButton>> keyboard = renderer.keyboard(proposal);
         if (keyboard.isEmpty()) {
