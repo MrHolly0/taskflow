@@ -176,17 +176,33 @@ public class PlanningSession {
             if (!action.path("ambiguous_reason").asText().isBlank()) { calendarFields.add("ambiguous");calendarFields.add("ambiguous"); }
             for (String field : List.of("deadline","new_deadline","reminder_at",DEADLINE_TIME))
                 if(action.hasNonNull(field))calendarFields.add(field);
+            if(action.path("reminder_ats").isArray()&&!action.path("reminder_ats").isEmpty())calendarFields.add("reminder_ats");
         }
         var day = calendarFields.size() == 1 ? RelativeDayPolicy.uniqueOffset(sourceWithoutQuotes()) : OptionalInt.empty();
+        var weekday=steps.size()==1&&calendarFields.size()==1&&Set.of("deadline","new_deadline",DEADLINE_TIME).contains(calendarFields.getFirst())
+                &&!steps.get(0).path("action").hasNonNull("planned_date")?
+                WeekdayPolicy.nextWeek(sourceWithoutQuotes(),now.atZoneSameInstant(zone).toLocalDate()):Optional.<java.time.LocalDate>empty();
+        if(steps.size()==1&&calendarFields.size()>1&&!steps.get(0).path("action").hasNonNull("planned_date")) {
+            var expected=WeekdayPolicy.nextWeek(sourceWithoutQuotes(),now.atZoneSameInstant(zone).toLocalDate());
+            var raw=steps.get(0).path("action");
+            for(String field:List.of("deadline","new_deadline")) if(expected.isPresent()&&raw.hasNonNull(field)) {
+                try {
+                    if(!OffsetDateTime.parse(raw.path(field).asText()).atZoneSameInstant(zone).toLocalDate().equals(expected.get()))
+                        throw new PlanningException("INVALID_ACTION","Названный день следующей календарной недели — "+expected.get()+". Исправь срок и связанные напоминания. Для «за день до этого» используй reminder_before_deadline_minutes:1440 вместо самостоятельного расчёта даты.");
+                } catch(java.time.format.DateTimeParseException ignored) { }
+            }
+        }
         var actions = json.createArrayNode();
         for (JsonNode step : steps) {
             fields(step, Set.of("select", "action"));
             JsonNode action = step.get("action");
             validateJsonAction(action);
             if (day.isPresent()) action = resolveCalendarDay(action,calendarFields.getFirst(),day.getAsInt());
+            if(weekday.isPresent()) action=resolveCalendarDay(action,calendarFields.getFirst(),(int)java.time.temporal.ChronoUnit.DAYS.between(now.atZoneSameInstant(zone).toLocalDate(),weekday.get()));
+            if(steps.size()==1) CreateDetailsPolicy.validate(action,sourceWithoutQuotes());
             if (action.has("task_ref")) throw new PlanningException("SELECT_REQUIRED");
             if ("create".equals(action.path("type").asText())) {
-                if (step.has("select")) throw new PlanningException("CREATE_WITH_SELECTOR");
+                if (step.has("select")) throw new PlanningException("CREATE_WITH_SELECTOR","У create не должно быть select: это новая задача. Убери select, сохрани все параметры нового дела.");
                 actions.add(resolveReminder(action, null));
             } else {
                 if (!step.has("select")) throw new PlanningException("SELECT_REQUIRED");

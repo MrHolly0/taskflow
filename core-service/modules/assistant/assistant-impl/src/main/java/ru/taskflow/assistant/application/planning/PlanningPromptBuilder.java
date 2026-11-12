@@ -29,6 +29,14 @@ public class PlanningPromptBuilder {
             У каждого create выбирай подходящую разрешённую группу по смыслу, когда соответствие однозначно:
             курсовая, доклад по предмету, экзамен относятся к существующей группе «Учёба»/«Обучение».
             Если подходят несколько групп или подходящей нет, оставь без группы; новых групп не создавай.
+
+            Подробности нового дела:
+            Title — короткое название действия или события. Явно сообщённые адрес, корпус, аудитория,
+            кабинет, ссылка, участники и условия встречи сохраняй в description; не выбрасывай их при сокращении title.
+            У встречи или консультации место не оставляй только в title: адрес и аудитория нужны в description.
+            Не повторяй название вместо описания и не придумывай отсутствующие подробности.
+            Например, «встреча с куратором на Университетской 10 в аудитории 205»:
+            title «Встреча с куратором», description «Университетская, 10, аудитория 205».
             """;
     private final ObjectMapper json;
     private final Clock clock;
@@ -194,6 +202,7 @@ public class PlanningPromptBuilder {
 
                 Поля action по типу:
                 create: title обязательно; description,priority,deadline,planned_date,group,tags,reminder_at,reminder_ats,reminder_after_minutes,reminder_before_deadline_minutes при необходимости.
+                У create нет select: это новое дело. select нужен только для действия над существующей задачей.
                 complete/cancel: без полей изменений. reschedule: new_deadline либо new_deadline_time обязательно.
                 update: только реально изменённые title,description,priority,group.
                 remind: reminder_at ИЛИ reminder_before_deadline_minutes. Не добавляй другие изменения.
@@ -248,9 +257,14 @@ public class PlanningPromptBuilder {
     private String calendarHints(ZoneId zone) {
         LocalDate today = LocalDate.now(clock.withZone(zone));
         LocalDate nextMonday = today.with(TemporalAdjusters.next(DayOfWeek.MONDAY));
-        return "\nКалендарные опоры: сегодня " + today + "; через неделю " + today.plusDays(7)
+        String weekdays=java.util.Arrays.stream(DayOfWeek.values()).map(day ->
+                day.getDisplayName(java.time.format.TextStyle.FULL,java.util.Locale.of("ru"))+"="+nextMonday.plusDays(day.getValue()-1))
+                .collect(java.util.stream.Collectors.joining(", "));
+        return "\nКалендарные опоры: сегодня " + today + " ("+today.getDayOfWeek().getDisplayName(java.time.format.TextStyle.FULL,java.util.Locale.of("ru"))+"); через неделю " + today.plusDays(7)
                 + "; следующая календарная неделя с " + nextMonday + " по " + nextMonday.plusDays(6)
-                + ". Это справочные границы, не команда назначить сроки всем задачам.\n";
+                + ". Дни следующей недели: " + weekdays
+                + ". «На следующей неделе во вторник» означает вторник этой календарной недели, не сегодня плюс неделю и ещё несколько дней."
+                + " Это справочные границы, не команда назначить сроки всем задачам.\n";
     }
 
     private String encode(Object value) {

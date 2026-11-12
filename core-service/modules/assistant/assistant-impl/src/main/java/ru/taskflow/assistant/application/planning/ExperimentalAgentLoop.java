@@ -77,7 +77,7 @@ public class ExperimentalAgentLoop {
                 PlanningException issue = e instanceof PlanningException p ? p : new PlanningException("INVALID_PLAN");
                 boolean repairable = Set.of("EXPECTED_SINGLE_TOOL", "INVALID_PLAN", "PROGRAM_ERROR", "TARGET_REQUIRED",
                         "SELECT_REQUIRED", "EXPECTED_OBJECT", "UNKNOWN_FIELD", "NOT_FOUND").contains(issue.getMessage())
-                        || mode == PlanningMode.BATCH_PLAN && Set.of("ACTION_VALIDATION", "UNISSUED_REFERENCE", "INVALID_ACTION").contains(issue.getMessage());
+                        || mode == PlanningMode.BATCH_PLAN && Set.of("ACTION_VALIDATION", "UNISSUED_REFERENCE", "INVALID_ACTION", "CREATE_WITH_SELECTOR").contains(issue.getMessage());
                 if (attempt == 0 && repairable) {
                     String retrieval = "";
                     if (mode == PlanningMode.BATCH_PLAN) {
