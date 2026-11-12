@@ -397,10 +397,21 @@ public class AssistantServiceImpl implements AssistantService {
         return applyTransaction.execute(() -> {
             var entity = proposalRepository.findForUpdate(proposalId, userId)
                     .orElseThrow(() -> new ProposalNotFoundException(proposalId));
-            if ("PENDING".equals(entity.getStatus()) && !proposalMapper.toDto(entity).actions().equals(expectedActions))
+            if ("PENDING".equals(entity.getStatus()) && !sameActionSnapshot(proposalMapper.toDto(entity).actions(),expectedActions))
                 throw new ru.taskflow.shared.exception.ValidationException("Разбор изменился — проверь его ещё раз");
             return applyLocked(userId, proposalId);
         });
+    }
+
+    private boolean sameActionSnapshot(java.util.List<ru.taskflow.assistant.api.dto.ProposedAction> current,
+            java.util.List<ru.taskflow.assistant.api.dto.ProposedAction> expected) {
+        if(expected==null || current.size()!=expected.size()) return false;
+        for(int i=0;i<current.size();i++) {
+            var left=current.get(i);var right=expected.get(i);
+            if(right==null || left.ordinal()!=right.ordinal() || left.type()!=right.type() || left.accepted()!=right.accepted()
+                    || !java.util.Objects.equals(left.targetTaskId(),right.targetTaskId()) || !java.util.Objects.equals(left.payload(),right.payload())) return false;
+        }
+        return true;
     }
 
     @Override
@@ -461,7 +472,16 @@ public class AssistantServiceImpl implements AssistantService {
 
         ApplyResult result = reversible?proposalApplier.apply(userId,entity,true):proposalApplier.apply(userId, entity);
         proposalRepository.save(entity);
-        return result;
+        return localizeResult(entity,result);
+    }
+
+    private ApplyResult localizeResult(ProposalJpaEntity entity,ApplyResult result) {
+        var summaries=proposalMapper.toDto(entity).actions().stream().collect(java.util.stream.Collectors.toMap(
+                ru.taskflow.assistant.api.dto.ProposedAction::ordinal,ru.taskflow.assistant.api.dto.ProposedAction::summary));
+        var outcomes=result.outcomes().stream().map(outcome->new ru.taskflow.assistant.api.dto.ActionOutcome(
+                outcome.ordinal(),summaries.getOrDefault(outcome.ordinal(),outcome.summary()),outcome.success(),outcome.error(),
+                outcome.taskId(),outcome.undoId(),outcome.undoExpiresAt(),outcome.undone())).toList();
+        return new ApplyResult(result.status(),result.appliedCount(),result.totalCount(),outcomes);
     }
 
     private ApplyResult resolvedResult(ProposalJpaEntity entity) {
@@ -473,9 +493,9 @@ public class AssistantServiceImpl implements AssistantService {
                             receipt.map(r -> r.id()).orElse(null), receipt.map(r -> r.expiresAt()).orElse(null),
                             receipt.map(r -> r.undone()).orElse(false));
                 }).toList();
-        return new ApplyResult(ProposalStatus.valueOf(entity.getStatus()),
+        return localizeResult(entity,new ApplyResult(ProposalStatus.valueOf(entity.getStatus()),
                 (int) outcomes.stream().filter(ru.taskflow.assistant.api.dto.ActionOutcome::success).count(),
-                outcomes.size(), outcomes);
+                outcomes.size(), outcomes));
     }
 
     @Override

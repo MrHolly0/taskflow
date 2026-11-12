@@ -1,0 +1,7 @@
+.task-result-description{display:grid;gap:4px;margin:0 0 14px;min-width:0;font-size:14px;line-height:1.5}
+.task-result-description p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.task-result-description .task-result-description-label{font-size:13px;color:var(--muted-foreground)}
+.task-result-description-clamped{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.task-result-description button{justify-self:start;min-height:44px;text-align:left;font-size:13px;text-decoration:underline;text-underline-offset:3px;border-radius:6px}
+.task-result-description button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+@media(max-width:600px){.task-result-description{font-size:16px}.task-result-description .task-result-description-label,.task-result-description button{font-size:14px}}

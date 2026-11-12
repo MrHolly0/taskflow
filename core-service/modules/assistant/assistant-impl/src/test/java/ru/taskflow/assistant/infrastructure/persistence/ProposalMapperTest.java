@@ -1,6 +1,7 @@
 package ru.taskflow.assistant.infrastructure.persistence;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import ru.taskflow.assistant.api.AssistantActionType;
 import ru.taskflow.assistant.api.ProposalStatus;
 
@@ -11,7 +12,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ProposalMapperTest {
 
-    private final ProposalMapper mapper = new ProposalMapper(new com.fasterxml.jackson.databind.ObjectMapper());
+    private final ru.taskflow.user.api.UserService users=org.mockito.Mockito.mock(ru.taskflow.user.api.UserService.class);
+    private final ProposalMapper mapper = new ProposalMapper(new com.fasterxml.jackson.databind.ObjectMapper(),users,new ru.taskflow.assistant.application.SummaryRenderer());
+    @BeforeEach void timezone(){org.mockito.Mockito.when(users.getTimezone(org.mockito.ArgumentMatchers.any())).thenReturn(java.time.ZoneId.of("Europe/Moscow"));}
 
     @Test
     void toDto_copiesEveryScalarField() {

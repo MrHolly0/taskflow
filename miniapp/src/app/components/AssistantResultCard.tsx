@@ -1,6 +1,6 @@
 import '@/styles/assistant-result.css';
 import { completionFeedback } from '@/lib/completion-feedback';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { IconCheck, IconPencil, IconArrowBackUp, IconX } from '@tabler/icons-react';
@@ -11,8 +11,9 @@ import { useTaskUi } from '@/lib/task-ui';
 import { cn, formatReminderTime } from '@/lib/utils';
 import { Card } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
+import { TaskResultDescription } from '@/app/components/TaskResultDescription';
 
-export function AssistantResultCard({result,proposal,className,onDismiss}:{result:ApplyResult;proposal:Proposal;className?:string;onDismiss?:()=>void}) {
+export function AssistantResultCard({result,proposal,className,onDismiss,onContentReady}:{result:ApplyResult;proposal:Proposal;className?:string;onDismiss?:()=>void;onContentReady?:()=>void}) {
   const successful=result.outcomes.filter(item=>item.success);
   const [undone,setUndone]=useState<string[]>([]);
   const details=useQueries({queries:successful.map(item=>{
@@ -24,6 +25,8 @@ export function AssistantResultCard({result,proposal,className,onDismiss}:{resul
   const undo=useUndoAssistantAction();
   const inspect=useTaskUi(state=>state.inspectTask);
   const {timezone,isReady}=useUserTimezone();
+  const ready=isReady&&details.every(query=>query.isFetched);
+  useEffect(()=>{if(ready) onContentReady?.();},[ready,onContentReady]);
   const completion=successful.length===1 && proposal.actions.find(action=>action.ordinal===successful[0].ordinal)?.type==='COMPLETE';
   const creation=successful.length>0 && successful.every(item=>proposal.actions.find(action=>action.ordinal===item.ordinal)?.type==='CREATE');
   const allUndone=successful.length>0&&successful.every(item=>item.undone||Boolean(item.undoId&&undone.includes(item.undoId)));
@@ -43,6 +46,7 @@ export function AssistantResultCard({result,proposal,className,onDismiss}:{resul
       const canUndo=outcome.undoId && !reverted && (!outcome.undoExpiresAt || Date.parse(outcome.undoExpiresAt)>Date.now());
       return <section key={outcome.ordinal}>
         <h3>{title}</h3>
+        {!reverted && <TaskResultDescription description={task?.description} title={title}/>}
         {reverted?<p role="status">{action?.type==='CREATE'?'Создание отменено':'Предыдущий статус возвращён'}</p>
           :action?.type==='CREATE' && task && isReady?<dl>
             <div><dt>Срок</dt><dd>{task.deadline?formatReminderTime(task.deadline,timezone):'Без срока'}</dd></div>

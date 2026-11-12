@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTaskUi } from '@/lib/task-ui';
 import { IconSend, IconAlertTriangle } from '@tabler/icons-react';
@@ -89,6 +89,10 @@ export function AssistantPage() {
   const inputField = useRef<HTMLTextAreaElement>(null);
   const previousCount = useRef(0);
   const followReplies = useRef(true);
+  const followLoadedResult=useCallback(()=>{
+    const log=conversation.current;
+    if(log&&followReplies.current) log.scrollTop=log.scrollHeight;
+  },[]);
   const reduceMotion = useReducedMotion();
   const lastKind = entries[entries.length - 1]?.kind;
 
@@ -288,7 +292,7 @@ export function AssistantPage() {
               )}
 
               {entry.kind === 'applied' && (
-                <AssistantResultCard result={entry.result} proposal={entry.proposal} className="munin-chat-result" />
+                <AssistantResultCard result={entry.result} proposal={entry.proposal} className="munin-chat-result" onContentReady={i===entries.length-1?followLoadedResult:undefined}/>
               )}
 
               {entry.kind === 'proposal' && entry.error && <p className="text-sm text-destructive" role="alert">{entry.error}</p>}

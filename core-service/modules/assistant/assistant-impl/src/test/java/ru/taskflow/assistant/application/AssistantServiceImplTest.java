@@ -558,6 +558,11 @@ class AssistantServiceImplTest {
         UUID proposalId = UUID.randomUUID();
         ProposalJpaEntity entity = proposal(ProposalStatus.APPLIED, now.plusHours(24), action(1, true));
         when(proposalRepository.findForUpdate(proposalId, userId)).thenReturn(Optional.of(entity));
+        when(proposalMapper.toDto(entity)).thenReturn(new Proposal(proposalId, "CODE1234", userId,
+                ProposalStatus.APPLIED, "закрой задачу", null,
+                List.of(new ru.taskflow.assistant.api.dto.ProposedAction(1,
+                        ru.taskflow.assistant.api.AssistantActionType.COMPLETE, null,
+                        java.util.Map.of(), "действие 1", true)), now, now.plusHours(24)));
 
         assertThat(service.apply(userId, proposalId).status()).isEqualTo(ProposalStatus.APPLIED);
         verify(proposalApplier, never()).apply(any(), any());

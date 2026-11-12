@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import ru.taskflow.assistant.api.AssistantActionType;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,18 @@ public class SummaryRenderer {
                     + " → " + formatDeadline(payload.get("reminder_at"));
         };
         return truncate(body);
+    }
+
+    public String localize(AssistantActionType type,String summary,Map<String,Object> payload,ZoneId zone) {
+        String field=switch(type) {case CREATE -> "deadline";case RESCHEDULE -> "new_deadline";case REMIND -> "reminder_at";default -> null;};
+        if(field==null || payload.get(field)==null || summary==null) return summary;
+        String separator=type==AssistantActionType.CREATE?" · до ":" → ";
+        int boundary=summary.lastIndexOf(separator);
+        if(boundary<0) return summary;
+        try {
+            String time=OffsetDateTime.parse(payload.get(field).toString()).atZoneSameInstant(zone).format(DEADLINE_FORMAT);
+            return truncate(summary.substring(0,boundary)+separator+time);
+        } catch(java.time.format.DateTimeParseException invalid) {return summary;}
     }
 
     private String changedFields(Map<String, Object> payload) {

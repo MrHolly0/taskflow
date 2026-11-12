@@ -7,6 +7,7 @@ import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { DateField } from '@/app/components/DateField';
+import { TaskResultDescription } from '@/app/components/TaskResultDescription';
 import { cn, formatReminderTime, formatPlannedDate } from '@/lib/utils';
 
 // Час по умолчанию для дня исполнения — пользователю незачем указывать
@@ -330,6 +331,7 @@ export function ProposalCard({
                 {action.summary}
               </span>
             </label>
+            {action.type==='CREATE' && typeof action.payload.description==='string' && <div className="ml-6 mt-2"><TaskResultDescription description={action.payload.description} title={typeof action.payload.title==='string'?action.payload.title:undefined}/></div>}
             {action.type === 'CREATE' && typeof action.payload.group === 'string' && <p className="ml-6 mt-1 text-sm text-muted-foreground">Группа: {action.payload.group}</p>}
             {action.payload.deadline_time_inferred === true && <p className="ml-6 mt-1 text-sm text-muted-foreground">Срок до конца дня: точное время не указано.</p>}
             {action.type === 'CREATE' && action.accepted && (

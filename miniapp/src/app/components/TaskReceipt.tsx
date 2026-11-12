@@ -4,6 +4,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { toast, useSonner } from 'sonner';
 import { IconCheck, IconCalendar, IconBell, IconPencil, IconTrash, IconX, IconAlertTriangle } from '@tabler/icons-react';
 import { AssistantResultCard } from '@/app/components/AssistantResultCard';
+import { TaskResultDescription } from '@/app/components/TaskResultDescription';
 import { useUndoAssistantAction } from '@/lib/hooks/useAssistant';
 import type { ApplyResult, Proposal } from '@/lib/hooks/useAssistant';
 import { taskDetailQuery, useDeleteTask } from '@/lib/hooks/useTasks';
@@ -49,6 +50,7 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const allIds = createdTaskIds(result, proposal);
   const [cancelled, setCancelled] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(3);
+  const [expandedDescriptions,setExpandedDescriptions]=useState<string[]>([]);
   const [hovered, setHovered] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   useEffect(() => {
@@ -91,7 +93,7 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
   const behind = toasts.length > 0 && toasts[0].id !== id;
   const dismiss = useCallback(() => { toast.dismiss(id); }, [id]);
   useReceiptLifetime(dismiss, hovered || focused || held || behind || dialogOpen || !isReady || (remove.isPending||undo.isPending) || Boolean(failure)
-    || tasks.some(task => task.isPending || task.isError));
+    || expandedDescriptions.some(taskId=>activeIds.includes(taskId)) || tasks.some(task => task.isPending || task.isError));
   const errors = result.outcomes.filter(outcome => !outcome.success);
   const otherCount = result.outcomes.filter(outcome => outcome.success && !allIds.includes(outcome.taskId ?? '')).length;
   const finishCancellation = (taskId: string) => {
@@ -136,6 +138,8 @@ function TaskReceipt({ id, result, proposal }: { id: string | number; result: Ap
           {query.isError ? <div className="receipt-load-error"><p>Задача создана, но не удалось прочитать её параметры.</p><button onClick={() => void query.refetch()}>Повторить проверку</button></div>
             : !task || !isReady ? <p className="receipt-loading">Проверяем сохранённые даты…</p> : <>
               <h3>{task.title}</h3>
+              <TaskResultDescription description={task.description} title={task.title} onExpandedChange={expanded=>setExpandedDescriptions(previous=>
+                expanded?[...previous.filter(id=>id!==taskId),taskId]:previous.filter(id=>id!==taskId))}/>
               <dl className="receipt-facts">
                 <div><IconCalendar aria-hidden="true" /><dt>Срок</dt><dd>{task.deadline ? formatReminderTime(task.deadline, timezone) : 'Без срока'}</dd></div>
                 <div><IconBell aria-hidden="true" /><dt>{reminders.length>1?'Напоминания':'Напоминание'}</dt><dd>{reminders.length ? reminders.map(reminder => <span key={reminder.id}>{formatReminderTime(reminder.fireAt, timezone)}{Date.parse(reminder.fireAt) < Date.now() && ' · время прошло'}</span>) : 'Не назначено'}</dd></div>

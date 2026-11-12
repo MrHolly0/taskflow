@@ -23,6 +23,8 @@ import java.util.Map;
 public class ProposalMapper {
 
     private final ObjectMapper objectMapper;
+    private final ru.taskflow.user.api.UserService users;
+    private final ru.taskflow.assistant.application.SummaryRenderer summaries;
 
     /**
      * firstPassLatencyMs/secondPassLatencyMs здесь всегда 0: в сущности нет
@@ -68,19 +70,22 @@ public class ProposalMapper {
     }
 
     private List<ProposedAction> toActions(ProposalJpaEntity entity) {
+        var zone=entity.getActions().isEmpty()?java.time.ZoneOffset.UTC:users.getTimezone(entity.getUserId());
         return entity.getActions().stream()
                 .sorted(Comparator.comparingInt(ProposalActionJpaEntity::getOrdinal))
-                .map(this::toAction)
+                .map(action->toAction(action,zone))
                 .toList();
     }
 
-    private ProposedAction toAction(ProposalActionJpaEntity a) {
+    private ProposedAction toAction(ProposalActionJpaEntity a,java.time.ZoneId zone) {
+        var type=AssistantActionType.valueOf(a.getType());
+        var payload=readPayload(a.getPayload());
         return new ProposedAction(
                 a.getOrdinal(),
-                AssistantActionType.valueOf(a.getType()),
+                type,
                 a.getTargetTaskId(),
-                readPayload(a.getPayload()),
-                a.getSummary(),
+                payload,
+                summaries.localize(type,a.getSummary(),payload,zone),
                 a.isAccepted()
         );
     }

@@ -76,4 +76,38 @@ class MeetingPlanningIntegrationTest {
         assertThat(proposal.actions().getFirst().type()).isEqualTo(AssistantActionType.CREATE);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,user)).isZero();
     }
+    @Test void repeatingTheMeetingShowsTheSameReminderInTheUsersTimezoneAndDoesNotDuplicateIt() {
+        when(model.callWithTools(any())).thenReturn(response(complete));
+        var created=assistant.handleText(user,SOURCE,AssistantChannel.TELEGRAM);
+        var result=assistant.resolveAutomatically(user,created.id()).applied();
+        var taskId=result.outcomes().getFirst().taskId();
+        when(model.callWithTools(any())).thenReturn(response("""
+                {"steps":[{"select":{"query":"куратором"},"action":{"type":"remind","reminder_at":"2026-11-16T11:00Z"}}]}
+                """));
+        var repeated=assistant.handleText(user,SOURCE,AssistantChannel.WEB);
+        assertThat(repeated.actions()).singleElement().satisfies(action->{
+            assertThat(action.type()).isEqualTo(AssistantActionType.REMIND);
+            assertThat(action.targetTaskId()).isEqualTo(taskId);
+            assertThat(action.summary()).endsWith("16.11 14:00");
+            assertThat(OffsetDateTime.parse(action.payload().get("reminder_at").toString()).toInstant())
+                    .isEqualTo(OffsetDateTime.parse("2026-11-16T14:00+03:00").toInstant());
+        });
+        jdbc.update("UPDATE assistant_proposal_actions SET summary='Напомнить — Встреча с куратором → 16.11 11:00' WHERE proposal_id=?",repeated.id());
+        assertThat(assistant.findById(user,repeated.id()).actions().getFirst().summary()).endsWith("16.11 14:00");
+        var action=repeated.actions().getFirst();
+        var changedPayload=new java.util.HashMap<>(action.payload());changedPayload.put("reminder_at","2026-11-16T12:00Z");
+        var changed=new ru.taskflow.assistant.api.dto.ProposedAction(action.ordinal(),action.type(),action.targetTaskId(),changedPayload,action.summary(),action.accepted());
+        assertThatThrownBy(()->assistant.apply(user,repeated.id(),List.of(changed))).hasMessageContaining("Разбор изменился");
+        var oldDisplay=new ru.taskflow.assistant.api.dto.ProposedAction(action.ordinal(),action.type(),action.targetTaskId(),action.payload(),
+                "Напомнить — Встреча с куратором → 16.11 11:00",action.accepted());
+        var applied=assistant.apply(user,repeated.id(),List.of(oldDisplay));
+        assertThat(applied.appliedCount()).isEqualTo(1);
+        assertThat(applied.outcomes().getFirst().summary()).endsWith("16.11 14:00");
+        assertThat(assistant.result(user,repeated.id()).outcomes().getFirst().summary()).endsWith("16.11 14:00");
+        assertThat(assistant.apply(user,repeated.id())).isEqualTo(applied);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM tasks WHERE user_id=?",Integer.class,user)).isEqualTo(1);
+        assertThat(tasks.getReminders(user,taskId)).filteredOn(r->r.status().equals("PENDING")).hasSize(1);
+        users.updateSettings(user,new ru.taskflow.user.api.dto.UpdateSettingsRequest(null,null,null,null,null,null,null,null,null,null,"Asia/Tokyo",null));
+        assertThat(assistant.result(user,repeated.id()).outcomes().getFirst().summary()).endsWith("16.11 20:00");
+    }
 }
